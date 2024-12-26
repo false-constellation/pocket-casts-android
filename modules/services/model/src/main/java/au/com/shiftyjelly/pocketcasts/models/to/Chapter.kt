@@ -24,9 +24,18 @@ data class Chapter(
         return duration in startTime..<endTime || duration > startTime && endTime <= Duration.ZERO
     }
 
-    fun remainingTime(playbackPosition: Duration): String {
+    fun remainingTime(
+        playbackPosition: Duration,
+        playbackSpeed: Double,
+        adjustRemainingTimeDuration: Boolean,
+    ): String {
         val progress = calculateProgress(playbackPosition)
-        val remaining = duration * (1.0 - progress)
+        val baseDuration = duration * (1.0 - progress)
+        val remaining = if (adjustRemainingTimeDuration) {
+            baseDuration / playbackSpeed
+        } else {
+            baseDuration
+        }
         return if (remaining.inWholeMilliseconds >= 59500) {
             "${(remaining.inWholeSeconds / 60.0).roundToInt()}m"
         } else {
@@ -34,9 +43,9 @@ data class Chapter(
         }
     }
 
-    fun calculateProgress(playbackPosition: Duration): Float = if (playbackPosition == Duration.ZERO || playbackPosition !in this) {
-        0f
-    } else {
-        (playbackPosition - startTime).inWholeMilliseconds.toFloat() / duration.inWholeMilliseconds.toFloat()
+    fun calculateProgress(playbackPosition: Duration): Float = when {
+        playbackPosition == Duration.ZERO || playbackPosition !in this -> 0f
+        duration.inWholeMilliseconds == 0L -> 0f
+        else -> (playbackPosition - startTime).inWholeMilliseconds.toFloat() / duration.inWholeMilliseconds
     }
 }

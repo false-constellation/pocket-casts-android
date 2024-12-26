@@ -11,14 +11,14 @@ interface FragmentHostListener {
     fun replaceFragment(fragment: Fragment)
     fun showBottomSheet(fragment: Fragment)
     fun bottomSheetClosePressed(fragment: Fragment)
-    fun openPlayer(source: String? = null)
+    fun openPlayer()
     fun closePlayer()
     fun showModal(fragment: Fragment)
     fun closeModal(fragment: Fragment)
     fun openTab(tabId: Int)
     fun closeToRoot()
     fun closePodcastsToRoot()
-    fun openPodcastPage(uuid: String)
+    fun openPodcastPage(uuid: String, sourceView: String? = null)
     fun openCloudFiles()
     fun snackBarView(): View
     fun showAccountUpgradeNow(autoSelectPlus: Boolean)
@@ -31,7 +31,9 @@ interface FragmentHostListener {
         source: EpisodeViewSource,
         podcastUuid: String?,
         forceDark: Boolean,
-        timestamp: Duration? = null,
+        autoPlay: Boolean,
+        startTimestamp: Duration? = null,
+        endTimestamp: Duration? = null,
     )
     fun lockPlayerBottomSheet(locked: Boolean)
     fun updateSystemColors()

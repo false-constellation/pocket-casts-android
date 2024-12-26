@@ -7,7 +7,6 @@ import au.com.shiftyjelly.pocketcasts.analytics.AppLifecycleAnalytics
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.UserSetting
 import au.com.shiftyjelly.pocketcasts.utils.AppPlatform
-import au.com.shiftyjelly.pocketcasts.utils.PackageUtil
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.providers.DefaultReleaseFeatureProvider
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.providers.FirebaseRemoteFeatureProvider
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.providers.PreferencesFeatureProvider
@@ -42,7 +41,7 @@ class AppLifecycleObserverTest {
 
     @Mock private lateinit var useUpNextDarkThemeSetting: UserSetting<Boolean>
 
-    @Mock private lateinit var packageUtil: PackageUtil
+    @Mock private lateinit var autoDownloadOnFollowPodcastSetting: UserSetting<Boolean>
 
     @Mock private lateinit var appLifecycleAnalytics: AppLifecycleAnalytics
 
@@ -63,6 +62,7 @@ class AppLifecycleObserverTest {
     @Before
     fun setUp() {
         whenever(settings.autoPlayNextEpisodeOnEmpty).thenReturn(autoPlayNextEpisodeSetting)
+        whenever(settings.autoDownloadOnFollowPodcast).thenReturn(autoDownloadOnFollowPodcastSetting)
         whenever(settings.useDarkUpNextTheme).thenReturn(useUpNextDarkThemeSetting)
 
         whenever(appLifecycleOwner.lifecycle).thenReturn(appLifecycle)
@@ -74,7 +74,7 @@ class AppLifecycleObserverTest {
             preferencesFeatureProvider = preferencesFeatureProvider,
             defaultReleaseFeatureProvider = defaultReleaseFeatureProvider,
             firebaseRemoteFeatureProvider = firebaseRemoteFeatureProvider,
-            packageUtil = packageUtil,
+            versionCode = VERSION_CODE_AFTER_SECOND_INSTALL,
             settings = settings,
             networkConnectionWatcher = networkConnectionWatcher,
             applicationScope = CoroutineScope(Dispatchers.Default),
@@ -94,6 +94,7 @@ class AppLifecycleObserverTest {
 
         verify(appLifecycleAnalytics).onNewApplicationInstall()
         verify(autoPlayNextEpisodeSetting).set(true, updateModifiedAt = false)
+        verify(autoDownloadOnFollowPodcastSetting).set(true, updateModifiedAt = false)
         verify(useUpNextDarkThemeSetting).set(false, updateModifiedAt = false)
 
         verify(appLifecycleAnalytics, never()).onApplicationUpgrade(any())
@@ -111,6 +112,7 @@ class AppLifecycleObserverTest {
         verify(appLifecycleAnalytics).onNewApplicationInstall()
 
         verify(autoPlayNextEpisodeSetting, never()).set(any(), any(), any(), any())
+        verify(autoDownloadOnFollowPodcastSetting, never()).set(any(), any(), any(), any())
         verify(useUpNextDarkThemeSetting).set(false, updateModifiedAt = false)
         verify(appLifecycleAnalytics, never()).onApplicationUpgrade(any())
     }
@@ -127,6 +129,7 @@ class AppLifecycleObserverTest {
         verify(appLifecycleAnalytics).onNewApplicationInstall()
 
         verify(autoPlayNextEpisodeSetting, never()).set(any(), any(), any(), any())
+        verify(autoDownloadOnFollowPodcastSetting, never()).set(any(), any(), any(), any())
         verify(useUpNextDarkThemeSetting).set(false, updateModifiedAt = false)
         verify(appLifecycleAnalytics, never()).onApplicationUpgrade(any())
     }
@@ -136,7 +139,6 @@ class AppLifecycleObserverTest {
     @Test
     fun handlesUpgrade() {
         whenever(settings.getMigratedVersionCode()).thenReturn(VERSION_CODE_AFTER_FIRST_INSTALL)
-        whenever(packageUtil.getVersionCode(context)).thenReturn(VERSION_CODE_AFTER_SECOND_INSTALL)
 
         appLifecycleObserver.setup()
 
@@ -144,6 +146,7 @@ class AppLifecycleObserverTest {
 
         verify(appLifecycleAnalytics, never()).onNewApplicationInstall()
         verify(autoPlayNextEpisodeSetting, never()).set(any(), any(), any(), any())
+        verify(autoDownloadOnFollowPodcastSetting, never()).set(any(), any(), any(), any())
         verify(useUpNextDarkThemeSetting, never()).set(any(), any(), any(), any())
     }
 }

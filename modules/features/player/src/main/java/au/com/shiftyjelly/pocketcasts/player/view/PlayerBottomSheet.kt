@@ -11,13 +11,14 @@ import android.widget.FrameLayout
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.view.doOnLayout
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.player.R
 import au.com.shiftyjelly.pocketcasts.player.databinding.ViewPlayerBottomSheetBinding
 import au.com.shiftyjelly.pocketcasts.player.helper.BottomSheetAnimation
 import au.com.shiftyjelly.pocketcasts.player.helper.BottomSheetAnimation.Companion.SCALE
 import au.com.shiftyjelly.pocketcasts.player.helper.BottomSheetAnimation.Companion.SCALE_NORMAL
 import au.com.shiftyjelly.pocketcasts.player.helper.BottomSheetAnimation.Companion.TRANSLATE_Y
+import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackState
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
@@ -36,7 +37,9 @@ import kotlinx.coroutines.Dispatchers
 @AndroidEntryPoint
 class PlayerBottomSheet @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : FrameLayout(context, attrs), CoroutineScope {
 
-    @Inject lateinit var analyticsTracker: AnalyticsTrackerWrapper
+    @Inject lateinit var analyticsTracker: AnalyticsTracker
+
+    @Inject lateinit var settings: Settings
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Main
 
@@ -57,6 +60,7 @@ class PlayerBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
         set(value) { sheetBehavior?.isDraggable = value }
 
     init {
+        settings.updatePlayerOrUpNextBottomSheetState(BottomSheetBehavior.STATE_COLLAPSED)
         elevation = 8.dpToPx(context).toFloat()
 
         binding.miniPlayer.clickListener = object : MiniPlayer.OnMiniPlayerClicked {
@@ -176,18 +180,6 @@ class PlayerBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
             closeInterpolator = OvershootInterpolator(),
             disabled = false,
         )
-        val playButtonScale = BottomSheetAnimation(
-            viewId = R.id.largePlayButton,
-            rootView = rootView,
-            effect = SCALE,
-            slideOffsetFrom = 0.6f,
-            slideOffsetTo = 0.9f,
-            valueFrom = 0.6f,
-            valueTo = SCALE_NORMAL,
-            openStartDelay = 200,
-            openInterpolator = OvershootInterpolator(),
-            disabled = false,
-        )
         val backgroundScale = BottomSheetAnimation(
             viewId = R.id.container,
             rootView = rootView,
@@ -208,7 +200,7 @@ class PlayerBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
             valueTo = 0f,
             disabled = false,
         )
-        animations = arrayOf(miniPlayButtonScale, playButtonScale, backgroundScale, playerTranslateY)
+        animations = arrayOf(miniPlayButtonScale, backgroundScale, playerTranslateY)
 
         return object : BottomSheetBehavior.BottomSheetCallback() {
             override fun onSlide(bottomSheet: View, slideOffset: Float) {
@@ -219,6 +211,7 @@ class PlayerBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
             }
 
             override fun onStateChanged(bottomSheet: View, newState: Int) {
+                settings.updatePlayerOrUpNextBottomSheetState(newState)
                 when (newState) {
                     BottomSheetBehavior.STATE_COLLAPSED -> onCollapsed()
                     BottomSheetBehavior.STATE_DRAGGING -> onDragging()

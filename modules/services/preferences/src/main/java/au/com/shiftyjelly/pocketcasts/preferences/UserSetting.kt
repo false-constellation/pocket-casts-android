@@ -2,6 +2,8 @@ package au.com.shiftyjelly.pocketcasts.preferences
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import java.time.Clock
 import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,19 +22,9 @@ abstract class UserSetting<T>(
         Instant.parse(getModifiedAtServerString())
     }.getOrNull()
 
-    /**
-     * Returns the value to sync. If sync is not needed or the modification timestamp is unknown
-     * it provides [Instant.EPOCH] plus one millisecond as the modification timestamp.
-     */
-    fun <U> getSyncSetting(f: (T, Instant) -> U): U {
-        return f(value, modifiedAt ?: fallbackTimestamp)
-    }
-
     // Returns the value to sync if sync is needed. Returns null if sync is not needed.
-    @Deprecated("This can be removed when Feature.SETTINGS_SYNC flag is removed")
-    fun getSyncValue(): T? {
-        val needsSync = getModifiedAtServerString() != null
-        return if (needsSync) value else null
+    fun getSyncValue(lastSyncTime: Instant): T? {
+        return modifiedAt?.let { if (it >= lastSyncTime) value else null }
     }
 
     // These are lazy because (1) the class needs to initialize before calling get() and
@@ -71,7 +63,7 @@ abstract class UserSetting<T>(
         }
     }
 
-    class BoolPref(
+    open class BoolPref(
         sharedPrefKey: String,
         private val defaultValue: Boolean,
         sharedPrefs: SharedPreferences,
@@ -272,6 +264,20 @@ abstract class UserSetting<T>(
         },
     )
 
+    // This returns shared pref value only if CACHE_ENTIRE_PLAYING_EPISODE feature flag is enabled, otherwise returns always false
+    class CacheEntirePlayingEpisodePref(
+        sharedPrefKey: String,
+        private val defaultValue: Boolean,
+        sharedPrefs: SharedPreferences,
+    ) : BoolPref(sharedPrefKey, defaultValue, sharedPrefs) {
+
+        override fun get() = if (FeatureFlag.isEnabled(Feature.CACHE_ENTIRE_PLAYING_EPISODE)) {
+            sharedPrefs.getBoolean(sharedPrefKey, defaultValue)
+        } else {
+            false
+        }
+    }
+
     // This manual mock is needed to avoid problems when accessing a lazily initialized UserSetting::flow
     // from a mocked Settings class
     class Mock<T>(
@@ -286,10 +292,10 @@ abstract class UserSetting<T>(
         override fun set(value: T, updateModifiedAt: Boolean, commit: Boolean, clock: Clock) = Unit
     }
 
-    private companion object {
-        // We use EPOCH +1 millisecond as a default timestamp for updates because initial values of when app is installed are null.
+    companion object {
+        // We use EPOCH +1 second as a default timestamp for updates because initial values of when app is installed are null.
         // This means that if a user syncs settings that were set before we started tracking timestamps
         // they would not update on a new device because we update settings only if the local timestamp is before remote timestamp.
-        val fallbackTimestamp: Instant = Instant.EPOCH.plusMillis(1)
+        val DefaultFallbackTimestamp: Instant = Instant.EPOCH.plusSeconds(1)
     }
 }

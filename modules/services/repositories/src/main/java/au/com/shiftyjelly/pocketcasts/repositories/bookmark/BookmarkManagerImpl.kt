@@ -1,15 +1,17 @@
 package au.com.shiftyjelly.pocketcasts.repositories.bookmark
 
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.models.db.AppDatabase
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
+import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.type.SyncStatus
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeDefault
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeForPodcast
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeForProfile
+import java.time.Instant
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -23,7 +25,7 @@ import kotlinx.coroutines.flow.flowOf
 
 class BookmarkManagerImpl @Inject constructor(
     appDatabase: AppDatabase,
-    private val analyticsTracker: AnalyticsTrackerWrapper,
+    private val analyticsTracker: AnalyticsTracker,
 ) : BookmarkManager, CoroutineScope {
 
     override val coroutineContext: CoroutineContext
@@ -41,29 +43,36 @@ class BookmarkManagerImpl @Inject constructor(
         timeSecs: Int,
         title: String,
         creationSource: BookmarkManager.CreationSource,
+        addedAt: Instant,
     ): Bookmark {
         // Prevent adding more than one bookmark at the same place
         val existingBookmark = findByEpisodeTime(episode = episode, timeSecs = timeSecs)
         if (existingBookmark != null) {
             return existingBookmark
         }
-        val modifiedAt = System.currentTimeMillis()
+        val addedAtMs = addedAt.toEpochMilli()
         val bookmark = Bookmark(
             uuid = UUID.randomUUID().toString(),
             episodeUuid = episode.uuid,
             podcastUuid = episode.podcastOrSubstituteUuid,
             timeSecs = timeSecs,
-            createdAt = Date(),
+            createdAt = Date.from(addedAt),
             title = title,
-            titleModified = modifiedAt,
+            titleModified = addedAtMs,
             deleted = false,
-            deletedModified = modifiedAt,
+            deletedModified = addedAtMs,
             syncStatus = SyncStatus.NOT_SYNCED,
         )
         bookmarkDao.insert(bookmark)
+        val podcastUuid = if (episode is PodcastEpisode) episode.podcastOrSubstituteUuid else "user_file"
         analyticsTracker.track(
             AnalyticsEvent.BOOKMARK_CREATED,
-            mapOf("source" to creationSource.analyticsValue),
+            mapOf(
+                "source" to creationSource.analyticsValue,
+                "time" to addedAtMs,
+                "episode_uuid" to episode.uuid,
+                "podcast_uuid" to podcastUuid,
+            ),
         )
         return bookmark
     }
@@ -199,8 +208,8 @@ class BookmarkManagerImpl @Inject constructor(
     /**
      * Find all bookmarks that need to be synced.
      */
-    override fun findBookmarksToSync(): List<Bookmark> {
-        return bookmarkDao.findNotSynced()
+    override fun findBookmarksToSyncBlocking(): List<Bookmark> {
+        return bookmarkDao.findNotSyncedBlocking()
     }
 
     /**

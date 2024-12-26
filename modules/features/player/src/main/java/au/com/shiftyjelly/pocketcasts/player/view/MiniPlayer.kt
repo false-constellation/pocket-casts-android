@@ -55,8 +55,8 @@ class MiniPlayer @JvmOverloads constructor(context: Context, attrs: AttributeSet
 
     init {
         // open full screen player on click
-        binding.root.setOnClickListener { openPlayer() }
-        binding.root.setOnLongClickListener {
+        binding.miniPlayerCardView.setOnClickListener { openPlayer() }
+        binding.miniPlayerCardView.setOnLongClickListener {
             clickListener?.onLongClick()
             true
         }
@@ -67,6 +67,11 @@ class MiniPlayer @JvmOverloads constructor(context: Context, attrs: AttributeSet
         binding.skipForward.setOnClickListener { skipForwardClicked() }
         // open Up Next
         binding.upNextButton.setOnClickListener { openUpNext() }
+
+        binding.miniPlayerCardView.elevation = resources.getDimension(R.dimen.mini_player_elevation)
+        binding.miniPlayerCardView.radius = resources.getDimension(R.dimen.mini_player_corner_radius)
+        val margin = resources.getDimension(R.dimen.mini_player_margin).toInt()
+        (binding.miniPlayerCardView.layoutParams as MarginLayoutParams).setMargins(margin, 0, margin, margin)
 
         setOnClickListener {
             if (Util.isTalkbackOn(context)) {
@@ -79,7 +84,9 @@ class MiniPlayer @JvmOverloads constructor(context: Context, attrs: AttributeSet
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
-        updatePlayButton(isPlaying = playing, animate = false)
+        if (changed) {
+            updatePlayButton(isPlaying = playing, animate = false)
+        }
     }
 
     override fun onSaveInstanceState(): Parcelable {
@@ -211,7 +218,7 @@ class MiniPlayer @JvmOverloads constructor(context: Context, attrs: AttributeSet
         button.contentDescription = if (isPlaying) stringPause else stringPlay
     }
 
-    private var lastLoadedBaseEpisode: BaseEpisode? = null
+    private var lastLoadedBaseEpisodeId: String? = null
     private var lastUseEpisodeArtwork: Boolean? = null
 
     private fun loadEpisodeArtwork(
@@ -219,11 +226,11 @@ class MiniPlayer @JvmOverloads constructor(context: Context, attrs: AttributeSet
         useEpisodeArtwork: Boolean,
         imageView: ImageView,
     ): Disposable? {
-        if (lastLoadedBaseEpisode == baseEpisode && lastUseEpisodeArtwork == useEpisodeArtwork) {
+        if (lastLoadedBaseEpisodeId == baseEpisode.uuid && lastUseEpisodeArtwork == useEpisodeArtwork) {
             return null
         }
 
-        lastLoadedBaseEpisode = baseEpisode
+        lastLoadedBaseEpisodeId = baseEpisode.uuid
         lastUseEpisodeArtwork = useEpisodeArtwork
         return imageRequestFactory.create(baseEpisode, useEpisodeArtwork).loadInto(imageView)
     }

@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.text.Html
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
@@ -53,6 +54,8 @@ import au.com.shiftyjelly.pocketcasts.podcasts.view.podcast.adapter.TabsViewHold
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastRatingsViewModel
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastViewModel.PodcastTab
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
+import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration
+import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration.Element
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
 import au.com.shiftyjelly.pocketcasts.repositories.images.loadInto
@@ -62,9 +65,12 @@ import au.com.shiftyjelly.pocketcasts.ui.extensions.themed
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
 import au.com.shiftyjelly.pocketcasts.utils.extensions.dpToPx
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.views.extensions.hide
 import au.com.shiftyjelly.pocketcasts.views.extensions.show
 import au.com.shiftyjelly.pocketcasts.views.extensions.toggleVisibility
+import au.com.shiftyjelly.pocketcasts.views.extensions.trimPadding
 import au.com.shiftyjelly.pocketcasts.views.helper.AnimatorUtil
 import au.com.shiftyjelly.pocketcasts.views.helper.SwipeButtonLayoutFactory
 import au.com.shiftyjelly.pocketcasts.views.helper.toCircle
@@ -225,13 +231,18 @@ class PodcastAdapter(
             VIEW_TYPE_NO_BOOKMARK -> NoBookmarkViewHolder(ComposeView(parent.context), theme, onHeadsetSettingsClicked)
             else -> EpisodeViewHolder(
                 binding = AdapterEpisodeBinding.inflate(inflater, parent, false),
-                viewMode = EpisodeViewHolder.ViewMode.NoArtwork,
+                viewMode = if (settings.artworkConfiguration.value.useEpisodeArtwork(ArtworkConfiguration.Element.Podcasts)) {
+                    EpisodeViewHolder.ViewMode.Artwork
+                } else {
+                    EpisodeViewHolder.ViewMode.NoArtwork
+                },
                 downloadProgressUpdates = downloadManager.progressUpdateRelay,
                 playbackStateUpdates = playbackManager.playbackStateRelay,
                 upNextChangesObservable = upNextQueue.changesObservable,
                 imageRequestFactory = imageRequestFactory.smallSize(),
                 settings = settings,
                 swipeButtonLayoutFactory = swipeButtonLayoutFactory,
+                artworkContext = ArtworkConfiguration.Element.Podcasts,
             )
         }
     }
@@ -268,7 +279,7 @@ class PodcastAdapter(
         }
 
         val imageView = holder.binding.top.artwork
-        // stopping the artwork flickering when Glide reloads the image
+        // stopping the artwork flickering when the image is reloaded
         if (imageView.drawable == null || holder.lastImagePodcastUuid == null || holder.lastImagePodcastUuid != podcast.uuid) {
             holder.lastImagePodcastUuid = podcast.uuid
             imageRequestFactory.create(podcast).loadInto(imageView)
@@ -295,7 +306,17 @@ class PodcastAdapter(
         with(holder.binding.bottom.nextText) {
             text = podcast.displayableNextEpisodeDate(context)
         }
-        holder.binding.bottom.description.text = podcast.podcastDescription
+        holder.binding.bottom.description.text =
+            if (FeatureFlag.isEnabled(Feature.PODCAST_HTML_DESCRIPTION) && podcast.podcastHtmlDescription.isNotEmpty()) {
+                // keep the extra line break from paragraphs as it looks better
+                Html.fromHtml(
+                    podcast.podcastHtmlDescription,
+                    Html.FROM_HTML_MODE_COMPACT and
+                        Html.FROM_HTML_SEPARATOR_LINE_BREAK_PARAGRAPH.inv(),
+                ).trimPadding()
+            } else {
+                podcast.podcastDescription
+            }
         holder.binding.bottom.description.setLinkTextColor(tintColor)
         holder.binding.bottom.description.readMore(3)
         holder.binding.bottom.authorText.text = podcast.author
@@ -325,9 +346,13 @@ class PodcastAdapter(
         holder.binding.top.subscribedButton.toCircle(true)
         holder.binding.top.header.setBackgroundColor(ThemeColor.podcastUi03(theme.activeTheme, podcast.backgroundColor))
         holder.binding.top.folders.setImageResource(
-            if (podcast.folderUuid != null) R.drawable.ic_folder_check else IR.drawable.ic_folder,
+            when {
+                !isPlusOrPatronUser -> IR.drawable.ic_folder_plus
+                podcast.folderUuid != null -> IR.drawable.ic_folder_check
+                else -> IR.drawable.ic_folder
+            },
         )
-        holder.binding.top.folders.isVisible = podcast.isSubscribed && isPlusOrPatronUser
+        holder.binding.top.folders.isVisible = podcast.isSubscribed
         with(holder.binding.top.notifications) {
             val notificationsIconText =
                 context.getString(if (podcast.isShowNotifications) LR.string.podcast_notifications_on else LR.string.podcast_notifications_off)
@@ -484,7 +509,7 @@ class PodcastAdapter(
                     episodeCount = episodeCount,
                     archivedCount = archivedCount,
                     searchTerm = searchTerm,
-                    episodeLimit = if (podcast.overrideGlobalArchive) podcast.autoArchiveEpisodeLimit else null,
+                    episodeLimit = podcast.autoArchiveEpisodeLimit?.value,
                 ),
             )
             addAll(episodesPlusLimit)
@@ -573,7 +598,7 @@ class PodcastAdapter(
                                         bookmark,
                                     )
                                 },
-                                useEpisodeArtwork = settings.useEpisodeArtwork.value,
+                                useEpisodeArtwork = settings.artworkConfiguration.value.useEpisodeArtwork(Element.Bookmarks),
                             )
                         },
                     )

@@ -5,6 +5,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.cash.turbine.test
 import au.com.shiftyjelly.pocketcasts.models.db.dao.ChapterDao
+import au.com.shiftyjelly.pocketcasts.models.di.ModelModule
+import au.com.shiftyjelly.pocketcasts.models.di.addTypeConverters
+import com.squareup.moshi.Moshi
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -21,7 +24,9 @@ class ChapterDaoTest {
     @Before
     fun setupDb() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        testDb = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        testDb = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .addTypeConverters(ModelModule.provideRoomConverters(Moshi.Builder().build()))
+            .build()
         chapterDao = testDb.chapterDao()
     }
 
@@ -44,7 +49,7 @@ class ChapterDaoTest {
     }
 
     @Test
-    fun replaceTheSameChapter() = runBlocking {
+    fun doNotInsertTheSameChapterTwice() = runBlocking {
         val chapter = Chapter(
             episodeUuid = "episode-id",
             startTimeMs = 0L,
@@ -98,11 +103,12 @@ class ChapterDaoTest {
     }
 
     @Test
-    fun replaceAllChapters() = runBlocking {
+    fun replaceAllEmbeddedChapters() = runBlocking {
         val chapters1 = List(10) { index ->
             Chapter(
                 episodeUuid = "episode-id",
                 startTimeMs = 0L + index,
+                isEmbedded = true,
             )
         }
         chapterDao.replaceAllChapters("episode-id", chapters1)
@@ -111,6 +117,7 @@ class ChapterDaoTest {
             Chapter(
                 episodeUuid = "episode-id",
                 startTimeMs = 0L + index,
+                isEmbedded = true,
             )
         }
         chapterDao.replaceAllChapters("episode-id", chapters2)
@@ -120,7 +127,72 @@ class ChapterDaoTest {
     }
 
     @Test
-    fun replaceAllChaptersIfExistingCountIsSmaller() = runBlocking {
+    fun doNotReplaceEmptyEmbeddedChapters() = runBlocking {
+        val chapters = List(10) { index ->
+            Chapter(
+                episodeUuid = "episode-id",
+                startTimeMs = 0L + index,
+                isEmbedded = true,
+            )
+        }
+        chapterDao.replaceAllChapters("episode-id", chapters)
+
+        chapterDao.replaceAllChapters("episode-id", emptyList())
+
+        val result = chapterDao.findAll()
+        assertEquals(chapters, result)
+    }
+
+    @Test
+    fun replaceNotEmbeddedWithEmbeddedChapters() = runBlocking {
+        val chapters1 = List(10) { index ->
+            Chapter(
+                episodeUuid = "episode-id",
+                startTimeMs = 0L + index,
+                isEmbedded = false,
+            )
+        }
+        chapterDao.replaceAllChapters("episode-id", chapters1)
+
+        val chapters2 = List(5) { index ->
+            Chapter(
+                episodeUuid = "episode-id",
+                startTimeMs = 0L + index,
+                isEmbedded = true,
+            )
+        }
+        chapterDao.replaceAllChapters("episode-id", chapters2)
+
+        val result = chapterDao.findAll()
+        assertEquals(chapters2, result)
+    }
+
+    @Test
+    fun doNotReplaceEmbeddedWithNotEmbeddedChapters() = runBlocking {
+        val chapters1 = List(5) { index ->
+            Chapter(
+                episodeUuid = "episode-id",
+                startTimeMs = 0L + index,
+                isEmbedded = true,
+            )
+        }
+        chapterDao.replaceAllChapters("episode-id", chapters1)
+
+        val chapters2 = List(10) { index ->
+            Chapter(
+                episodeUuid = "episode-id",
+                startTimeMs = 0L + index,
+                isEmbedded = false,
+            )
+        }
+        chapterDao.replaceAllChapters("episode-id", chapters2)
+
+        val result = chapterDao.findAll()
+        assertEquals(chapters1, result)
+    }
+
+    @Test
+    fun replaceNotEmbeddedChaptersIfExistingCountIsSmaller() = runBlocking {
         val chapters1 = List(5) { index ->
             Chapter(
                 title = "$index-0",
@@ -137,14 +209,14 @@ class ChapterDaoTest {
                 startTimeMs = 0L + index,
             )
         }
-        chapterDao.replaceAllChaptersIfMoreIsPassed("episode-id", chapters2)
+        chapterDao.replaceAllChapters("episode-id", chapters2)
 
         val result = chapterDao.findAll()
         assertEquals(chapters2, result)
     }
 
     @Test
-    fun doNotReplaceAllChaptersIfExistingCountIsEqual() = runBlocking {
+    fun replaceNotEmbeddedChaptersIfExistingCountIsEqual() = runBlocking {
         val chapters1 = List(5) { index ->
             Chapter(
                 title = "$index-0",
@@ -161,14 +233,14 @@ class ChapterDaoTest {
                 startTimeMs = 0L + index,
             )
         }
-        chapterDao.replaceAllChaptersIfMoreIsPassed("episode-id", chapters2)
+        chapterDao.replaceAllChapters("episode-id", chapters2)
 
         val result = chapterDao.findAll()
-        assertEquals(chapters1, result)
+        assertEquals(chapters2, result)
     }
 
     @Test
-    fun doNotReplaceAllChaptersIfExistingCountIsLarger() = runBlocking {
+    fun doNotReplaceNotEmbeddedChaptersIfExistingCountIsLarger() = runBlocking {
         val chapters1 = List(6) { index ->
             Chapter(
                 title = "$index-0",
@@ -185,7 +257,7 @@ class ChapterDaoTest {
                 startTimeMs = 0L + index,
             )
         }
-        chapterDao.replaceAllChaptersIfMoreIsPassed("episode-id", chapters2)
+        chapterDao.replaceAllChapters("episode-id", chapters2)
 
         val result = chapterDao.findAll()
         assertEquals(chapters1, result)

@@ -1,6 +1,5 @@
 package au.com.shiftyjelly.pocketcasts.repositories.playback
 
-import android.app.SearchManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -17,6 +16,7 @@ import android.view.KeyEvent
 import androidx.annotation.DrawableRes
 import androidx.core.content.IntentCompat
 import androidx.core.os.bundleOf
+import androidx.media.utils.MediaConstants.PLAYBACK_STATE_EXTRAS_KEY_MEDIA_ID
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.EpisodeAnalytics
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
@@ -33,7 +33,6 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.auto.AutoMediaId
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
-import au.com.shiftyjelly.pocketcasts.repositories.widget.WidgetManager
 import au.com.shiftyjelly.pocketcasts.utils.Optional
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.extensions.getLaunchActivityPendingIntent
@@ -73,7 +72,6 @@ class MediaSessionManager(
     val podcastManager: PodcastManager,
     val episodeManager: EpisodeManager,
     val playlistManager: PlaylistManager,
-    val widgetManager: WidgetManager,
     val settings: Settings,
     val context: Context,
     val episodeAnalytics: EpisodeAnalytics,
@@ -171,13 +169,14 @@ class MediaSessionManager(
         val upNextQueueChanges = playbackManager.upNextQueue.getChangesFlowWithLiveCurrentEpisode(episodeManager, podcastManager)
             .distinctUntilChanged { stateOne, stateTwo ->
                 UpNextQueue.State.isEqualWithEpisodeCompare(stateOne, stateTwo) { episodeOne, episodeTwo ->
-                    episodeOne.uuid == episodeTwo.uuid && episodeOne.duration == episodeTwo.duration
+                    episodeOne.uuid == episodeTwo.uuid &&
+                        episodeOne.duration == episodeTwo.duration &&
+                        episodeOne.isStarred == episodeTwo.isStarred
                 }
             }
-        val useEpisodeArtworkChanges = settings.useEpisodeArtwork.flow
 
-        combine(upNextQueueChanges, useEpisodeArtworkChanges) { queueState, useEpisodeArtwork -> queueState to useEpisodeArtwork }
-            .onEach { (queueState, useEpisodeArtwork) -> updateUpNext(queueState, useEpisodeArtwork) }
+        combine(upNextQueueChanges, settings.artworkConfiguration.flow) { queueState, artworkConfiguration -> queueState to artworkConfiguration }
+            .onEach { (queueState, artworkConfiguration) -> updateUpNext(queueState, artworkConfiguration.useEpisodeArtwork) }
             .catch { Timber.e(it) }
             .launchIn(this)
     }
@@ -251,7 +250,12 @@ class MediaSessionManager(
         val stateBuilder = PlaybackStateCompat.Builder()
             .setState(state, playbackState.positionMs.toLong(), currentSpeed.toFloat(), SystemClock.elapsedRealtime())
             .setActions(getSupportedActions(playbackState))
-            .setExtras(bundleOf(EXTRA_TRANSIENT to playbackState.transientLoss))
+            .setExtras(
+                bundleOf(
+                    PLAYBACK_STATE_EXTRAS_KEY_MEDIA_ID to currentEpisode.uuid,
+                    EXTRA_TRANSIENT to playbackState.transientLoss,
+                ),
+            )
 
         // Do not add custom actions on Wear OS because there is a bug in Wear 3.5 that causes
         // this to make the Wear OS media notification stop working. This bug was fixed
@@ -306,9 +310,9 @@ class MediaSessionManager(
 
                 val items = upNext.queue.map { episode ->
                     val podcastUuid = if (episode is PodcastEpisode) episode.podcastUuid else null
-                    val podcast = podcastUuid?.let { podcastManager.findPodcastByUuid(it) }
+                    val podcast = podcastUuid?.let { podcastManager.findPodcastByUuidBlocking(it) }
                     val podcastTitle = episode.displaySubtitle(podcast)
-                    val localUri = AutoConverter.getBitmapUriForPodcast(podcast, episode, context, settings.useEpisodeArtwork.value)
+                    val localUri = AutoConverter.getPodcastArtworkUri(podcast, episode, context, settings.artworkConfiguration.value.useEpisodeArtwork)
                     val description = MediaDescriptionCompat.Builder()
                         .setDescription(episode.episodeDescription)
                         .setTitle(episode.title)
@@ -351,7 +355,7 @@ class MediaSessionManager(
                     if (state.isEmpty) {
                         Observable.just(Optional.empty())
                     } else {
-                        episodeManager.observeEpisodeByUuidRx(state.episodeUuid)
+                        episodeManager.findEpisodeByUuidRxFlowable(state.episodeUuid)
                             .distinctUntilChanged(BaseEpisode.isMediaSessionEqual)
                             .map { Optional.of(it) }
                             // if the episode is deleted from the database while playing catch the error and just return an empty state
@@ -388,7 +392,7 @@ class MediaSessionManager(
         }
 
         val podcastUuid = if (episode is PodcastEpisode) episode.podcastUuid else null
-        val podcast = podcastUuid?.let { podcastManager.findPodcastByUuid(it) }
+        val podcast = podcastUuid?.let { podcastManager.findPodcastByUuidBlocking(it) }
 
         val podcastTitle = episode.displaySubtitle(podcast)
         val safeCharacterPodcastTitle = podcastTitle.replace("%", "pct")
@@ -399,23 +403,33 @@ class MediaSessionManager(
             .putString(MediaMetadataCompat.METADATA_KEY_GENRE, "Podcast")
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, episode.title)
 
+        if (episode is PodcastEpisode) {
+            nowPlayingBuilder.putRating(MediaMetadataCompat.METADATA_KEY_RATING, RatingCompat.newHeartRating(episode.isStarred))
+        }
+
         if (podcast != null && podcast.author.isNotEmpty()) {
             nowPlayingBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM, podcast.author)
         }
 
-        val nowPlaying = nowPlayingBuilder.build()
         Timber.i("MediaSession metadata. Episode: ${episode.uuid} ${episode.title} Duration: ${episode.durationMs.toLong()}")
-        mediaSession.setMetadata(nowPlaying)
 
         if (settings.showArtworkOnLockScreen.value) {
-            val bitmapUri = AutoConverter.getBitmapUriForPodcast(podcast, episode, context, useEpisodeArtwork)?.toString()
+            val bitmapUri = AutoConverter.getPodcastArtworkUri(podcast, episode, context, useEpisodeArtwork)?.toString()
             nowPlayingBuilder = nowPlayingBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, bitmapUri)
             if (Util.isAutomotive(context)) nowPlayingBuilder = nowPlayingBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, bitmapUri)
 
-            val nowPlayingWithArtwork = nowPlayingBuilder.build()
+            // Send the bitmap, as some devices don't support URLs, such as a Tesla.
+            // Don't do this for Wear OS or Automotive to reduce the amount memory used.
+            if (!Util.isWearOs(context) && !Util.isAutomotive(context)) {
+                AutoConverter.getPodcastArtworkBitmap(episode, context, useEpisodeArtwork)?.let { bitmap ->
+                    nowPlayingBuilder = nowPlayingBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
+                }
+            }
             Timber.i("MediaSession metadata. With artwork.")
-            mediaSession.setMetadata(nowPlayingWithArtwork)
         }
+
+        val nowPlaying = nowPlayingBuilder.build()
+        mediaSession.setMetadata(nowPlaying)
     }
 
     private fun addCustomActions(stateBuilder: PlaybackStateCompat.Builder, currentEpisode: BaseEpisode, playbackState: PlaybackState) {
@@ -459,6 +473,26 @@ class MediaSessionManager(
                             in 2.75..<2.85 -> IR.drawable.auto_2_8
                             in 2.85..<2.95 -> IR.drawable.auto_2_9
                             in 2.95..<3.05 -> IR.drawable.auto_3
+                            in 3.05..<3.15 -> IR.drawable.auto_3_1
+                            in 3.15..<3.25 -> IR.drawable.auto_3_2
+                            in 3.25..<3.35 -> IR.drawable.auto_3_3
+                            in 3.35..<3.45 -> IR.drawable.auto_3_4
+                            in 3.45..<3.55 -> IR.drawable.auto_3_5
+                            in 3.55..<3.65 -> IR.drawable.auto_3_6
+                            in 3.65..<3.75 -> IR.drawable.auto_3_7
+                            in 3.75..<3.85 -> IR.drawable.auto_3_8
+                            in 3.85..<3.95 -> IR.drawable.auto_3_9
+                            in 3.95..<4.05 -> IR.drawable.auto_4
+                            in 4.05..<4.15 -> IR.drawable.auto_4_1
+                            in 4.15..<4.25 -> IR.drawable.auto_4_2
+                            in 4.25..<4.35 -> IR.drawable.auto_4_3
+                            in 4.35..<4.45 -> IR.drawable.auto_4_4
+                            in 4.45..<4.55 -> IR.drawable.auto_4_5
+                            in 4.55..<4.65 -> IR.drawable.auto_4_6
+                            in 4.65..<4.75 -> IR.drawable.auto_4_7
+                            in 4.75..<4.85 -> IR.drawable.auto_4_8
+                            in 4.85..<4.95 -> IR.drawable.auto_4_9
+                            in 4.95..<5.05 -> IR.drawable.auto_5
                             else -> IR.drawable.auto_1
                         }
 
@@ -601,6 +635,12 @@ class MediaSessionManager(
         }
 
         override fun onPlay() {
+            if (Util.isAutomotive(context) && !settings.automotiveConnectedToMediaSession()) {
+                // https://developer.android.com/docs/quality-guidelines/car-app-quality#media-autoplay
+                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Auto start playback ignored just after automotive app restart.")
+                return
+            }
+
             logEvent("play")
             enqueueCommand("play") { playbackManager.playQueueSuspend(sourceView = source) }
         }
@@ -704,7 +744,7 @@ class MediaSessionManager(
     private fun markAsPlayed() {
         launch {
             val episode = playbackManager.getCurrentEpisode()
-            episodeManager.markAsPlayed(episode, playbackManager, podcastManager)
+            episodeManager.markAsPlayedBlocking(episode, playbackManager, podcastManager)
             episode?.let {
                 episodeAnalytics.trackEvent(AnalyticsEvent.EPISODE_MARKED_AS_PLAYED, source, it.uuid)
             }
@@ -752,10 +792,10 @@ class MediaSessionManager(
             val episode = playbackManager.getCurrentEpisode() ?: return@launch
             if (episode is PodcastEpisode) {
                 // update per podcast playback speed
-                val podcast = podcastManager.findPodcastByUuidSuspend(episode.podcastUuid)
+                val podcast = podcastManager.findPodcastByUuid(episode.podcastUuid)
                 if (podcast != null && podcast.overrideGlobalEffects) {
                     podcast.playbackSpeed = newSpeed
-                    podcastManager.updatePlaybackSpeed(podcast = podcast, speed = newSpeed)
+                    podcastManager.updatePlaybackSpeedBlocking(podcast = podcast, speed = newSpeed)
                     playbackManager.updatePlayerEffects(effects = podcast.playbackEffects)
                     return@launch
                 }
@@ -773,16 +813,15 @@ class MediaSessionManager(
             playbackManager.getCurrentEpisode()?.let {
                 if (it is PodcastEpisode) {
                     it.isArchived = true
-                    episodeManager.archive(it, playbackManager)
+                    episodeManager.archiveBlocking(it, playbackManager)
                     episodeAnalytics.trackEvent(AnalyticsEvent.EPISODE_ARCHIVED, source, it.uuid)
                 }
             }
         }
     }
 
-    fun playFromSearchExternal(extras: Bundle) {
-        val searchTerm = extras.getString(SearchManager.QUERY) ?: return
-        performPlayFromSearch(searchTerm)
+    fun playFromSearchExternal(query: String) {
+        performPlayFromSearch(query)
     }
 
     /**
@@ -820,7 +859,7 @@ class MediaSessionManager(
 
             val options = calculateSearchQueryOptions(query)
             for (option in options) {
-                val matchingPodcast: Podcast? = podcastManager.searchPodcastByTitle(option)
+                val matchingPodcast: Podcast? = podcastManager.searchPodcastByTitleBlocking(option)
                 if (matchingPodcast != null) {
                     LogBuffer.i(LogBuffer.TAG_PLAYBACK, "User played podcast from search %s.", option)
                     playPodcast(podcast = matchingPodcast, sourceView = sourceView)
@@ -836,14 +875,14 @@ class MediaSessionManager(
             }
 
             for (option in options) {
-                val playlist = playlistManager.findFirstByTitle(option) ?: continue
+                val playlist = playlistManager.findFirstByTitleBlocking(option) ?: continue
 
                 Timber.i("Playing matched playlist '$option'")
 
-                val episodeCount = playlistManager.countEpisodes(playlist.id, episodeManager, playbackManager)
+                val episodeCount = playlistManager.countEpisodesBlocking(playlist.id, episodeManager, playbackManager)
                 if (episodeCount == 0) return@launch
 
-                val episodesToPlay = playlistManager.findEpisodes(playlist, episodeManager, playbackManager).take(5)
+                val episodesToPlay = playlistManager.findEpisodesBlocking(playlist, episodeManager, playbackManager).take(5)
                 if (episodesToPlay.isEmpty()) return@launch
 
                 playEpisodes(episodesToPlay, sourceView)
@@ -882,7 +921,7 @@ class MediaSessionManager(
     }
 
     private suspend fun playPodcast(podcast: Podcast, sourceView: SourceView = SourceView.UNKNOWN) {
-        val latestEpisode = withContext(Dispatchers.Default) { episodeManager.findLatestUnfinishedEpisodeByPodcast(podcast) } ?: return
+        val latestEpisode = withContext(Dispatchers.Default) { episodeManager.findLatestUnfinishedEpisodeByPodcastBlocking(podcast) } ?: return
         playbackManager.playNow(episode = latestEpisode, sourceView = sourceView)
     }
 

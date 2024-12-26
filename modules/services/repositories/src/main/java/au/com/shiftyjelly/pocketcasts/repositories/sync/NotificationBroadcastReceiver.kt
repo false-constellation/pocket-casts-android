@@ -7,6 +7,7 @@ import android.content.Intent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.EpisodeAnalytics
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.deeplink.DeepLink
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadHelper
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
@@ -56,7 +57,7 @@ class NotificationBroadcastReceiver : BroadcastReceiver(), CoroutineScope {
         const val INTENT_ACTION_PLAY_DOWNLOADED = "au.com.shiftyjelly.pocketcasts.action.PLAY_DOWNLOADED"
 
         const val INTENT_EXTRA_ACTION = "EXTRA_ACTION"
-        const val INTENT_EXTRA_NOTIFICATION_TAG = "NOTIFICATION_TAG"
+        const val INTENT_EXTRA_NOTIFICATION_TAG = DeepLink.EXTRA_NOTIFICATION_TAG
         const val INTENT_EXTRA_EPISODE_UUID = "EPISODE_UUID"
     }
 
@@ -115,7 +116,7 @@ class NotificationBroadcastReceiver : BroadcastReceiver(), CoroutineScope {
     private fun downloadEpisode(episodeUuid: String) {
         launch {
             episodeManager.findEpisodeByUuid(episodeUuid)?.let { episode ->
-                DownloadHelper.manuallyDownloadEpisodeNow(episode, "download from intent", downloadManager, episodeManager)
+                DownloadHelper.manuallyDownloadEpisodeNow(episode, "download from intent", downloadManager, episodeManager, source = source)
             }
         }
     }
@@ -123,7 +124,7 @@ class NotificationBroadcastReceiver : BroadcastReceiver(), CoroutineScope {
     private fun markAsPlayed(episodeUuid: String) {
         launch {
             episodeManager.findEpisodeByUuid(episodeUuid)?.let { episode ->
-                episodeManager.markAsPlayed(episode, playbackManager, podcastManager)
+                episodeManager.markAsPlayedBlocking(episode, playbackManager, podcastManager)
                 episodeAnalytics.trackEvent(AnalyticsEvent.EPISODE_MARKED_AS_PLAYED, source, episodeUuid)
             }
         }
@@ -132,7 +133,7 @@ class NotificationBroadcastReceiver : BroadcastReceiver(), CoroutineScope {
     private fun archiveEpisode(episodeUuid: String) {
         launch {
             episodeManager.findByUuid(episodeUuid)?.let { episode ->
-                episodeManager.archive(episode, playbackManager, true)
+                episodeManager.archiveBlocking(episode, playbackManager, true)
                 episodeAnalytics.trackEvent(AnalyticsEvent.EPISODE_ARCHIVED, source, episodeUuid)
             }
         }

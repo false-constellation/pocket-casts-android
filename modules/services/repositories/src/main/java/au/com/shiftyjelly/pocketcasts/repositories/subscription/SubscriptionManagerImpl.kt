@@ -2,7 +2,6 @@ package au.com.shiftyjelly.pocketcasts.repositories.subscription
 
 import android.app.Activity
 import android.content.Context
-import au.com.shiftyjelly.pocketcasts.analytics.FirebaseAnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.models.type.Subscription
 import au.com.shiftyjelly.pocketcasts.models.type.Subscription.Companion.PATRON_MONTHLY_PRODUCT_ID
@@ -10,11 +9,10 @@ import au.com.shiftyjelly.pocketcasts.models.type.Subscription.Companion.PATRON_
 import au.com.shiftyjelly.pocketcasts.models.type.Subscription.Companion.PLUS_MONTHLY_PRODUCT_ID
 import au.com.shiftyjelly.pocketcasts.models.type.Subscription.Companion.PLUS_YEARLY_PRODUCT_ID
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionFrequency
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionMapper.mapProductIdToTier
+import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionMapper
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionPlatform
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionPricingPhase
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionType
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
@@ -29,6 +27,7 @@ import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesResult
@@ -36,23 +35,26 @@ import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchaseHistoryParams
 import com.android.billingclient.api.QueryPurchasesParams
+import com.android.billingclient.api.queryPurchaseHistory
 import com.android.billingclient.api.queryPurchasesAsync
 import com.jakewharton.rxrelay2.BehaviorRelay
 import com.jakewharton.rxrelay2.PublishRelay
 import io.reactivex.BackpressureStrategy
 import io.reactivex.Flowable
 import io.reactivex.Single
-import io.reactivex.android.schedulers.AndroidSchedulers
-import io.reactivex.schedulers.Schedulers
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.rx2.await
+import kotlinx.coroutines.rx2.rxSingle
 import timber.log.Timber
 
 private const val SUBSCRIPTION_REPLACEMENT_MODE_NOT_SET = -1
@@ -60,7 +62,9 @@ private const val SUBSCRIPTION_REPLACEMENT_MODE_NOT_SET = -1
 @Singleton
 class SubscriptionManagerImpl @Inject constructor(
     private val syncManager: SyncManager,
+    private val productDetailsInterceptor: ProductDetailsInterceptor,
     private val settings: Settings,
+    private val subscriptionMapper: SubscriptionMapper,
     @ApplicationScope private val applicationScope: CoroutineScope,
 ) : SubscriptionManager,
     PurchasesUpdatedListener,
@@ -83,7 +87,7 @@ class SubscriptionManagerImpl @Inject constructor(
     private val productDetails = BehaviorRelay.create<ProductDetailsState>()
     private val purchaseEvents = PublishRelay.create<PurchaseEvent>()
     private val subscriptionChangedEvents = PublishRelay.create<SubscriptionChangedEvent>()
-    private var hasOfferEligible = HashMap<Subscription.SubscriptionTier, Boolean>()
+    private var hasOfferEligible = HashMap<SubscriptionTier, Boolean>()
 
     override fun signOut() {
         clearCachedStatus()
@@ -105,38 +109,52 @@ class SubscriptionManagerImpl @Inject constructor(
         return subscriptionStatus.toFlowable(BackpressureStrategy.LATEST)
     }
 
-    override fun getSubscriptionStatus(allowCache: Boolean): Single<SubscriptionStatus> {
+    override fun subscriptionTier(): Flow<SubscriptionTier> {
+        return observeSubscriptionStatus().asFlow().map { status ->
+            (status.get() as? SubscriptionStatus.Paid)?.tier ?: SubscriptionTier.NONE
+        }.distinctUntilChanged()
+    }
+
+    override fun getSubscriptionStatusRxSingle(allowCache: Boolean): Single<SubscriptionStatus> {
+        return rxSingle {
+            getSubscriptionStatus(allowCache)
+        }
+    }
+
+    override suspend fun getSubscriptionStatus(allowCache: Boolean): SubscriptionStatus {
         val cache = cachedSubscriptionStatus
         if (cache != null && allowCache) {
-            return Single.just(cache)
+            return cache
         }
 
-        return syncManager.subscriptionStatus()
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .map {
-                it.toStatus()
-            }
-            .doOnSuccess {
-                subscriptionStatus.accept(Optional.of(it))
-                val oldStatus = cachedSubscriptionStatus
-                if (oldStatus != it) {
-                    if (it is SubscriptionStatus.Paid && oldStatus is SubscriptionStatus.Free) {
-                        subscriptionChangedEvents.accept(SubscriptionChangedEvent.AccountUpgradedToPlus)
-                    } else if (it is SubscriptionStatus.Free && oldStatus is SubscriptionStatus.Paid) {
-                        subscriptionChangedEvents.accept(SubscriptionChangedEvent.AccountDowngradedToFree)
-                    }
-                }
-                cachedSubscriptionStatus = it
+        val status = syncManager.subscriptionStatus().toStatus()
 
-                if (!it.isLifetimePlus && it is SubscriptionStatus.Paid && it.platform == SubscriptionPlatform.GIFT) { // This account is a trial account
-                    settings.setTrialFinishedSeen(false) // Make sure on expiry we show the trial finished dialog
-                }
+        subscriptionStatus.accept(Optional.of(status))
+        val oldStatus = cachedSubscriptionStatus
+        if (oldStatus != status) {
+            if (status is SubscriptionStatus.Paid && oldStatus is SubscriptionStatus.Free) {
+                subscriptionChangedEvents.accept(SubscriptionChangedEvent.AccountUpgradedToPlus)
+            } else if (status is SubscriptionStatus.Free && oldStatus is SubscriptionStatus.Paid) {
+                subscriptionChangedEvents.accept(SubscriptionChangedEvent.AccountDowngradedToFree)
             }
+        }
+        cachedSubscriptionStatus = status
+
+        if (!status.isPocketCastsChampion && status is SubscriptionStatus.Paid && status.platform == SubscriptionPlatform.GIFT) { // This account is a trial account
+            settings.setTrialFinishedSeen(false) // Make sure on expiry we show the trial finished dialog
+        }
+        return status
     }
 
     override fun connectToGooglePlay(context: Context) {
-        billingClient = BillingClient.newBuilder(context).enablePendingPurchases().setListener(this).build()
+        val params = PendingPurchasesParams.newBuilder()
+            .enablePrepaidPlans()
+            .enableOneTimeProducts()
+            .build()
+        billingClient = BillingClient.newBuilder(context)
+            .enablePendingPurchases(params)
+            .setListener(this)
+            .build()
         billingClient.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
@@ -167,33 +185,29 @@ class SubscriptionManagerImpl @Inject constructor(
                     .setProductId(PLUS_YEARLY_PRODUCT_ID)
                     .setProductType(BillingClient.ProductType.SUBS)
                     .build(),
-            ).apply {
-                add(
-                    QueryProductDetailsParams.Product.newBuilder()
-                        .setProductId(PATRON_MONTHLY_PRODUCT_ID)
-                        .setProductType(BillingClient.ProductType.SUBS)
-                        .build(),
-                )
-                add(
-                    QueryProductDetailsParams.Product.newBuilder()
-                        .setProductId(PATRON_YEARLY_PRODUCT_ID)
-                        .setProductType(BillingClient.ProductType.SUBS)
-                        .build(),
-                )
-            }
+                QueryProductDetailsParams.Product.newBuilder()
+                    .setProductId(PATRON_MONTHLY_PRODUCT_ID)
+                    .setProductType(BillingClient.ProductType.SUBS)
+                    .build(),
+                QueryProductDetailsParams.Product.newBuilder()
+                    .setProductId(PATRON_YEARLY_PRODUCT_ID)
+                    .setProductType(BillingClient.ProductType.SUBS)
+                    .build(),
+            )
 
         val params = QueryProductDetailsParams.newBuilder()
             .setProductList(productList)
             .build()
 
         billingClient.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+            val (result, products) = productDetailsInterceptor.intercept(billingResult, productDetailsList)
+            if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 Timber.d("Billing products loaded")
-                productDetails.accept(ProductDetailsState.Loaded(productDetailsList))
+                productDetails.accept(ProductDetailsState.Loaded(products))
 
                 refreshPurchases()
             } else {
-                productDetails.accept(ProductDetailsState.Error(billingResult.debugMessage))
+                productDetails.accept(ProductDetailsState.Error(result.debugMessage))
             }
         }
     }
@@ -268,12 +282,10 @@ class SubscriptionManagerImpl @Inject constructor(
                         billingClient.acknowledgePurchase(acknowledgePurchaseParams, this@SubscriptionManagerImpl)
                     }
                     purchase.products.map {
-                        mapProductIdToTier(it.toString())
+                        SubscriptionTier.fromProductId(it.toString())
                     }.distinct().forEach {
                         updateOfferEligible(it, false)
                     }
-
-                    FirebaseAnalyticsTracker.plusPurchased()
                 } catch (e: Exception) {
                     LogBuffer.e(LogBuffer.TAG_SUBSCRIPTIONS, e, "Could not send purchase info")
                     purchaseEvents.accept(PurchaseEvent.Failure(e.message ?: "Unknown error", null))
@@ -287,7 +299,7 @@ class SubscriptionManagerImpl @Inject constructor(
             LogBuffer.e(LogBuffer.TAG_SUBSCRIPTIONS, "expected 1 product when sending purchase to server, but there were ${purchase.products.size}")
         }
 
-        val response = syncManager.subscriptionPurchase(SubscriptionPurchaseRequest(purchase.purchaseToken, purchase.products.first())).await()
+        val response = syncManager.subscriptionPurchaseRxSingle(SubscriptionPurchaseRequest(purchase.purchaseToken, purchase.products.first())).await()
         val newStatus = response.toStatus()
         cachedSubscriptionStatus = newStatus
         subscriptionStatus.accept(Optional.of(newStatus))
@@ -297,7 +309,9 @@ class SubscriptionManagerImpl @Inject constructor(
     override fun refreshPurchases() {
         if (!billingClient.isReady) return
 
-        updateOfferEligibilityIfPurchaseHistoryExists()
+        applicationScope.launch {
+            updateOfferEligibilityIfPurchaseHistoryExists()
+        }
 
         val queryPurchasesParams = QueryPurchasesParams.newBuilder()
             .setProductType(BillingClient.ProductType.SUBS)
@@ -311,18 +325,16 @@ class SubscriptionManagerImpl @Inject constructor(
         }
     }
 
-    private fun updateOfferEligibilityIfPurchaseHistoryExists() {
+    private suspend fun updateOfferEligibilityIfPurchaseHistoryExists() {
         val queryPurchaseHistoryParams = QueryPurchaseHistoryParams.newBuilder()
             .setProductType(BillingClient.ProductType.SUBS)
             .build()
-
-        billingClient.queryPurchaseHistoryAsync(queryPurchaseHistoryParams) { _, purchases ->
-            purchases?.forEach {
-                it.products.map { productId ->
-                    mapProductIdToTier(productId)
-                }.distinct().forEach { tier ->
-                    updateOfferEligible(tier, false)
-                }
+        val result = billingClient.queryPurchaseHistory(queryPurchaseHistoryParams)
+        result.purchaseHistoryRecordList?.forEach {
+            it.products.map { productId ->
+                SubscriptionTier.fromProductId(productId)
+            }.distinct().forEach { tier ->
+                updateOfferEligible(tier, false)
             }
         }
     }
@@ -388,16 +400,16 @@ class SubscriptionManagerImpl @Inject constructor(
         cachedSubscriptionStatus = null
         subscriptionStatus.accept(Optional.empty())
     }
-    override fun isOfferEligible(tier: Subscription.SubscriptionTier): Boolean = (hasOfferEligible[tier] ?: true)
-    override fun updateOfferEligible(tier: Subscription.SubscriptionTier, eligible: Boolean) {
+    override fun isOfferEligible(tier: SubscriptionTier): Boolean = (hasOfferEligible[tier] ?: true)
+    override fun updateOfferEligible(tier: SubscriptionTier, eligible: Boolean) {
         hasOfferEligible[tier] = eligible
     }
     override fun getDefaultSubscription(
         subscriptions: List<Subscription>,
-        tier: Subscription.SubscriptionTier?,
+        tier: SubscriptionTier?,
         frequency: SubscriptionFrequency?,
     ): Subscription? {
-        val subscriptionTier = tier ?: Subscription.SubscriptionTier.PLUS
+        val subscriptionTier = tier ?: SubscriptionTier.PLUS
         val subscriptionFrequency = frequency ?: SubscriptionFrequency.YEARLY
 
         val tierSubscriptions = subscriptions.filter { it.tier == subscriptionTier }
@@ -415,17 +427,17 @@ class SubscriptionManagerImpl @Inject constructor(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun freeTrialForSubscriptionTierFlow(subscriptionTier: Subscription.SubscriptionTier) = this
+    override fun freeTrialForSubscriptionTierFlow(subscriptionTier: SubscriptionTier) = this
         .observeProductDetails()
         .asFlow()
         .transformLatest { productDetails ->
             val subscriptions = when (productDetails) {
                 is ProductDetailsState.Error -> null
                 is ProductDetailsState.Loaded -> productDetails.productDetails.mapNotNull { productDetailsState ->
-                    Subscription.fromProductDetails(
+                    subscriptionMapper.mapFromProductDetails(
                         productDetails = productDetailsState,
                         isOfferEligible = isOfferEligible(
-                            mapProductIdToTier(productDetailsState.productId),
+                            SubscriptionTier.fromProductId(productDetailsState.productId),
                         ),
                     )
                 }
@@ -500,28 +512,26 @@ sealed class SubscriptionChangedEvent {
 }
 
 data class FreeTrial(
-    val subscriptionTier: Subscription.SubscriptionTier,
+    val subscriptionTier: SubscriptionTier,
     val exists: Boolean = false,
 )
 
 private fun SubscriptionStatusResponse.toStatus(): SubscriptionStatus {
     val originalPlatform = SubscriptionPlatform.entries.getOrNull(platform) ?: SubscriptionPlatform.NONE
 
-    val subs = subscriptions?.map { it.toSubscription() } ?: emptyList()
-    subs.getOrNull(index)?.isPrimarySubscription = true // Mark the subscription that the server says is the main one
     return if (paid == 0) {
-        SubscriptionStatus.Free(expiryDate, giftDays, originalPlatform, subs)
+        SubscriptionStatus.Free(expiryDate, giftDays, originalPlatform)
     } else {
+        val subs = subscriptions?.map { it.toSubscription() } ?: emptyList()
+        subs.getOrNull(index)?.isPrimarySubscription = true // Mark the subscription that the server says is the main one
         val freq = SubscriptionFrequency.entries.getOrNull(frequency) ?: SubscriptionFrequency.NONE
-        val enumType = SubscriptionType.entries.getOrNull(type) ?: SubscriptionType.NONE
-        val enumTier = SubscriptionTier.fromString(tier, enumType)
-        SubscriptionStatus.Paid(expiryDate ?: Date(), autoRenewing, giftDays, freq, originalPlatform, subs, enumType, enumTier, index)
+        val enumTier = SubscriptionTier.fromString(tier)
+        SubscriptionStatus.Paid(expiryDate ?: Date(), autoRenewing, giftDays, freq, originalPlatform, subs, enumTier, index)
     }
 }
 
 private fun SubscriptionResponse.toSubscription(): SubscriptionStatus.Subscription {
-    val enumType = SubscriptionType.entries.getOrNull(type) ?: SubscriptionType.NONE
-    val enumTier = SubscriptionTier.fromString(tier, enumType)
+    val enumTier = SubscriptionTier.fromString(tier)
     val freq = SubscriptionFrequency.entries.getOrNull(frequency) ?: SubscriptionFrequency.NONE
-    return SubscriptionStatus.Subscription(enumType, enumTier, freq, expiryDate, autoRenewing, updateUrl)
+    return SubscriptionStatus.Subscription(enumTier, freq, expiryDate, autoRenewing, updateUrl)
 }

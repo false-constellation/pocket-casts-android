@@ -9,8 +9,8 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,8 +22,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
-import androidx.core.content.IntentCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.commitNow
@@ -44,19 +45,46 @@ import au.com.shiftyjelly.pocketcasts.account.onboarding.OnboardingActivityContr
 import au.com.shiftyjelly.pocketcasts.account.onboarding.OnboardingActivityContract.OnboardingFinish
 import au.com.shiftyjelly.pocketcasts.account.watchsync.WatchSync
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.EpisodeAnalytics
-import au.com.shiftyjelly.pocketcasts.analytics.FirebaseAnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.databinding.ActivityMainBinding
+import au.com.shiftyjelly.pocketcasts.deeplink.AddBookmarkDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.AssistantDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ChangeBookmarkTitleDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.CloudFilesDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.DeepLink.Companion.EXTRA_PAGE
+import au.com.shiftyjelly.pocketcasts.deeplink.DeepLinkFactory
+import au.com.shiftyjelly.pocketcasts.deeplink.DeleteBookmarkDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.DownloadsDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.NativeShareDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.OpmlImportDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.PlayFromSearchDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.PocketCastsWebsiteGetDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.PromoCodeDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ReferralsDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShareListDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShowBookmarkDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShowDiscoverDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShowEpisodeDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShowFilterDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShowPodcastDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShowPodcastFromUrlDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShowPodcastsDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.ShowUpNextDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.SignInDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.SonosDeepLink
+import au.com.shiftyjelly.pocketcasts.deeplink.UpgradeAccountDeepLink
 import au.com.shiftyjelly.pocketcasts.discover.view.DiscoverFragment
-import au.com.shiftyjelly.pocketcasts.endofyear.StoriesFragment
-import au.com.shiftyjelly.pocketcasts.endofyear.StoriesFragment.StoriesSource
-import au.com.shiftyjelly.pocketcasts.endofyear.views.EndOfYearLaunchBottomSheet
+import au.com.shiftyjelly.pocketcasts.endofyear.StoriesActivity
+import au.com.shiftyjelly.pocketcasts.endofyear.StoriesActivity.StoriesSource
+import au.com.shiftyjelly.pocketcasts.endofyear.ui.EndOfYearLaunchBottomSheet
 import au.com.shiftyjelly.pocketcasts.filters.FiltersFragment
 import au.com.shiftyjelly.pocketcasts.localization.helper.LocaliseHelper
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
+import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.SignInState
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeViewSource
 import au.com.shiftyjelly.pocketcasts.navigation.BottomNavigator
@@ -75,16 +103,17 @@ import au.com.shiftyjelly.pocketcasts.podcasts.view.podcast.PodcastFragment
 import au.com.shiftyjelly.pocketcasts.podcasts.view.podcasts.PodcastsFragment
 import au.com.shiftyjelly.pocketcasts.podcasts.view.share.ShareListIncomingFragment
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
-import au.com.shiftyjelly.pocketcasts.preferences.Settings.Companion.BOOKMARK_UUID
 import au.com.shiftyjelly.pocketcasts.profile.ProfileFragment
 import au.com.shiftyjelly.pocketcasts.profile.SubCancelledFragment
 import au.com.shiftyjelly.pocketcasts.profile.TrialFinishedFragment
 import au.com.shiftyjelly.pocketcasts.profile.cloud.CloudFileBottomSheetFragment
 import au.com.shiftyjelly.pocketcasts.profile.cloud.CloudFilesFragment
 import au.com.shiftyjelly.pocketcasts.profile.sonos.SonosAppLinkActivity
+import au.com.shiftyjelly.pocketcasts.referrals.ReferralsGuestPassFragment
 import au.com.shiftyjelly.pocketcasts.repositories.bumpstats.BumpStatsTask
 import au.com.shiftyjelly.pocketcasts.repositories.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.repositories.di.NotificationPermissionChecker
+import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearManager
 import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationHelper
 import au.com.shiftyjelly.pocketcasts.repositories.opml.OpmlImportTask
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
@@ -97,13 +126,11 @@ import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.refresh.RefreshPodcastsTask
 import au.com.shiftyjelly.pocketcasts.repositories.shortcuts.PocketCastsShortcuts
-import au.com.shiftyjelly.pocketcasts.repositories.shortcuts.PocketCastsShortcuts.INTENT_EXTRA_PAGE
-import au.com.shiftyjelly.pocketcasts.repositories.shortcuts.PocketCastsShortcuts.INTENT_EXTRA_PLAYLIST_ID
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
 import au.com.shiftyjelly.pocketcasts.search.SearchFragment
 import au.com.shiftyjelly.pocketcasts.servers.ServerCallback
-import au.com.shiftyjelly.pocketcasts.servers.ServerManager
+import au.com.shiftyjelly.pocketcasts.servers.ServiceManager
 import au.com.shiftyjelly.pocketcasts.servers.discover.PodcastSearch
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
@@ -115,17 +142,19 @@ import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarColor
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
 import au.com.shiftyjelly.pocketcasts.utils.Network
-import au.com.shiftyjelly.pocketcasts.utils.SentryHelper
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import au.com.shiftyjelly.pocketcasts.utils.observeOnce
 import au.com.shiftyjelly.pocketcasts.view.BottomNavHideManager
 import au.com.shiftyjelly.pocketcasts.view.LockableBottomSheetBehavior
+import au.com.shiftyjelly.pocketcasts.views.activity.WebViewActivity
 import au.com.shiftyjelly.pocketcasts.views.extensions.showAllowingStateLoss
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import au.com.shiftyjelly.pocketcasts.views.helper.HasBackstack
-import au.com.shiftyjelly.pocketcasts.views.helper.IntentUtil
 import au.com.shiftyjelly.pocketcasts.views.helper.UiUtil
 import au.com.shiftyjelly.pocketcasts.views.helper.WarningsHelper
+import com.automattic.android.tracks.crashlogging.CrashLogging
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
@@ -139,7 +168,6 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -154,7 +182,6 @@ import timber.log.Timber
 import android.provider.Settings as AndroidProviderSettings
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 import au.com.shiftyjelly.pocketcasts.views.R as VR
-import com.google.android.material.R as MR
 
 private const val SAVEDSTATE_PLAYER_OPEN = "player_open"
 private const val SAVEDSTATE_MINIPLAYER_SHOWN = "miniplayer_shown"
@@ -173,7 +200,6 @@ class MainActivity :
     companion object {
         private const val INITIAL_KEY = "initial"
         private const val SOURCE_KEY = "source"
-        private const val SOCIAL_SHARE_PATH = "/social/share/show"
         init {
             AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
         }
@@ -189,7 +215,7 @@ class MainActivity :
 
     @Inject lateinit var episodeManager: EpisodeManager
 
-    @Inject lateinit var serverManager: ServerManager
+    @Inject lateinit var serviceManager: ServiceManager
 
     @Inject lateinit var theme: Theme
 
@@ -201,7 +227,7 @@ class MainActivity :
 
     @Inject lateinit var warningsHelper: WarningsHelper
 
-    @Inject lateinit var analyticsTracker: AnalyticsTrackerWrapper
+    @Inject lateinit var analyticsTracker: AnalyticsTracker
 
     @Inject lateinit var episodeAnalytics: EpisodeAnalytics
 
@@ -213,6 +239,8 @@ class MainActivity :
 
     @Inject @ApplicationScope
     lateinit var applicationScope: CoroutineScope
+
+    @Inject lateinit var crashLogging: CrashLogging
 
     private lateinit var bottomNavHideManager: BottomNavHideManager
     private lateinit var observeUpNext: LiveData<UpNextQueue.State>
@@ -233,6 +261,12 @@ class MainActivity :
 
     private val frameBottomSheetBehavior: LockableBottomSheetBehavior<View>
         get() = getBottomSheetBehavior()
+
+    private val miniPlayerHeight: Int
+        get() = resources.getDimension(R.dimen.miniPlayerHeight).toInt()
+
+    private val bottomNavigationHeight: Int
+        get() = binding.bottomNavigation.height - binding.bottomNavigation.paddingBottom
 
     private var bottomSheetTag: String? = null
     private val bottomSheetQueue: MutableList<(() -> Unit)?> = mutableListOf()
@@ -256,6 +290,9 @@ class MainActivity :
                 settings.setHasDoneInitialOnboarding()
                 OnboardingLauncher.openOnboardingFlow(this, OnboardingFlow.Upsell(OnboardingUpgradeSource.LOGIN_PLUS_PROMOTION))
             }
+            OnboardingFinish.DoneShowWelcomeInReferralFlow -> {
+                settings.showReferralWelcome.set(true, updateModifiedAt = false)
+            }
             null -> {
                 Timber.e("Unexpected null result from onboarding activity")
             }
@@ -271,6 +308,8 @@ class MainActivity :
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {}
+
+    private val deepLinkFactory = DeepLinkFactory()
 
     @SuppressLint("WrongConstant") // for custom snackbar duration constant
     private fun checkForNotificationPermission(onPermissionGranted: () -> Unit = {}) {
@@ -327,6 +366,18 @@ class MainActivity :
         setContentView(view)
         checkForNotificationPermission()
 
+        binding.bottomNavigation.doOnLayout {
+            val miniPlayerHeight = miniPlayerHeight
+            val bottomNavigationHeight = binding.bottomNavigation.height
+            val bottomSheetBehavior = BottomSheetBehavior.from(binding.playerBottomSheet)
+            // Set the player bottom sheet position to show the mini player above the bottom navigation
+            bottomSheetBehavior.peekHeight = miniPlayerHeight + bottomNavigationHeight
+            // Add padding to the main content so the end of the page isn't under the bottom navigation
+            binding.mainFragment.updatePadding(bottom = bottomNavigationHeight)
+            // Position the snackbar above the bottom navigation or the mini player if it's shown
+            updateSnackbarPosition(miniPlayerOpen = false)
+        }
+
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.CREATED) {
                 val isEligible = viewModel.isEndOfYearStoriesEligible()
@@ -342,12 +393,21 @@ class MainActivity :
         }
 
         var selectedTab = settings.selectedTab()
-        val tabs = mapOf(
-            VR.id.navigation_podcasts to { FragmentInfo(PodcastsFragment(), true) },
-            VR.id.navigation_filters to { FragmentInfo(FiltersFragment(), true) },
-            VR.id.navigation_discover to { FragmentInfo(DiscoverFragment(), false) },
-            VR.id.navigation_profile to { FragmentInfo(ProfileFragment(), true) },
-        )
+        val tabs = buildMap {
+            put(VR.id.navigation_podcasts) { FragmentInfo(PodcastsFragment(), true) }
+            put(VR.id.navigation_filters) { FragmentInfo(FiltersFragment(), true) }
+            put(VR.id.navigation_discover) { FragmentInfo(DiscoverFragment(), false) }
+            put(VR.id.navigation_profile) { FragmentInfo(ProfileFragment(), true) }
+            put(VR.id.navigation_upnext) {
+                FragmentInfo(
+                    UpNextFragment.newInstance(
+                        embedded = false,
+                        source = UpNextSource.UP_NEXT_TAB,
+                    ),
+                    true,
+                )
+            }
+        }
 
         if (!tabs.keys.contains(selectedTab)) {
             // Guard against tab ids changing and settings having an out of date copy
@@ -374,6 +434,7 @@ class MainActivity :
 
         val showMiniPlayerImmediately = savedInstanceState?.getBoolean(SAVEDSTATE_MINIPLAYER_SHOWN, false) ?: false
         binding.playerBottomSheet.isVisible = showMiniPlayerImmediately
+        settings.updateBottomInset(if (showMiniPlayerImmediately) miniPlayerHeight else 0)
 
         setupPlayerViews(showMiniPlayerImmediately)
 
@@ -398,13 +459,7 @@ class MainActivity :
                     if (settings.selectedTab() != currentTab) {
                         trackTabOpened(currentTab)
                         when (currentTab) {
-                            VR.id.navigation_podcasts -> FirebaseAnalyticsTracker.navigatedToPodcasts()
-                            VR.id.navigation_filters -> FirebaseAnalyticsTracker.navigatedToFilters()
-                            VR.id.navigation_discover -> FirebaseAnalyticsTracker.navigatedToDiscover()
-                            VR.id.navigation_profile -> {
-                                resetEoYBadgeIfNeeded()
-                                FirebaseAnalyticsTracker.navigatedToProfile()
-                            }
+                            VR.id.navigation_profile -> resetEoYBadgeIfNeeded()
                         }
                     }
                     settings.setSelectedTab(currentTab)
@@ -469,10 +524,6 @@ class MainActivity :
     override fun onResume() {
         super.onResume()
 
-        if (settings.selectedTab() == VR.id.navigation_discover) {
-            FirebaseAnalyticsTracker.navigatedToDiscover()
-        }
-
         refreshApp()
         addLineView()
         BumpStatsTask.scheduleToRun(this)
@@ -531,6 +582,7 @@ class MainActivity :
             force = true,
             coroutineScope = applicationScope,
             context = this,
+            source = PocketCastsShortcuts.Source.REFRESH_APP,
         )
 
         subscriptionManager.refreshPurchases()
@@ -554,6 +606,7 @@ class MainActivity :
         mediaRouter?.removeCallback(mediaRouterCallback)
     }
 
+    @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         if (isUpNextShowing()) {
@@ -663,6 +716,7 @@ class MainActivity :
             fragmentManager = supportFragmentManager,
             analyticsTracker = analyticsTracker,
             episodeAnalytics = episodeAnalytics,
+            settings = settings,
         ).show(this)
     }
 
@@ -678,18 +732,23 @@ class MainActivity :
             ComposeView(viewGroup.context).apply {
                 setContent {
                     val shouldShow by viewModel.shouldShowStoriesModal.collectAsState()
-                    EndOfYearLaunchBottomSheet(
-                        parent = viewGroup,
-                        shouldShow = shouldShow,
-                        onClick = {
-                            showStoriesOrAccount(StoriesSource.MODAL.value)
-                        },
-                        onExpanded = {
-                            analyticsTracker.track(AnalyticsEvent.END_OF_YEAR_MODAL_SHOWN)
-                            settings.setEndOfYearShowModal(false)
-                            viewModel.updateStoriesModalShowState(false)
-                        },
-                    )
+                    AppTheme(theme.activeTheme) {
+                        EndOfYearLaunchBottomSheet(
+                            parent = viewGroup,
+                            shouldShow = shouldShow,
+                            onClick = {
+                                showStoriesOrAccount(StoriesSource.MODAL.value)
+                            },
+                            onExpanded = {
+                                analyticsTracker.track(
+                                    AnalyticsEvent.END_OF_YEAR_MODAL_SHOWN,
+                                    mapOf("year" to EndOfYearManager.YEAR_TO_SYNC.value),
+                                )
+                                settings.setEndOfYearShowModal(false)
+                                viewModel.updateStoriesModalShowState(false)
+                            },
+                        )
+                    }
                 }
             },
         )
@@ -712,8 +771,7 @@ class MainActivity :
     }
 
     private fun showStories(source: StoriesSource) {
-        StoriesFragment.newInstance(source)
-            .show(supportFragmentManager, "stories_dialog")
+        StoriesActivity.open(this, source)
     }
 
     @Suppress("DEPRECATION")
@@ -756,17 +814,17 @@ class MainActivity :
         }
 
         val upNextQueueChanges = playbackManager.upNextQueue.getChangesFlowWithLiveCurrentEpisode(episodeManager, podcastManager)
-        val useEpisodeArtworkChanges = settings.useEpisodeArtwork.flow
+        val artworkConfigurationChanges = settings.artworkConfiguration.flow
 
-        val combinedFlow = combine(upNextQueueChanges, useEpisodeArtworkChanges) { upNextQueue, useEpisodeArtwork ->
-            upNextQueue to useEpisodeArtwork
+        val combinedFlow = combine(upNextQueueChanges, artworkConfigurationChanges) { upNextQueue, artworkConfiguration ->
+            upNextQueue to artworkConfiguration
         }
-            .onEach { (upNextQueue, useEpisodeArtwork) ->
+            .onEach { (upNextQueue, artworkConfiguration) ->
                 binding.playerBottomSheet.setUpNext(
                     upNext = upNextQueue,
                     theme = theme,
                     shouldAnimateOnAttach = !showMiniPlayerImmediately,
-                    useEpisodeArtwork = useEpisodeArtwork,
+                    useEpisodeArtwork = artworkConfiguration.useEpisodeArtwork,
                 )
             }
             .catch { Timber.e(it) }
@@ -845,6 +903,7 @@ class MainActivity :
                                 source = EpisodeViewSource.NOTIFICATION_BOOKMARK,
                                 podcastUuid = navigationState.episode.podcastUuid,
                                 forceDark = false,
+                                autoPlay = false,
                             )
                         }
                         is NavigationState.BookmarksForUserEpisode -> {
@@ -873,8 +932,11 @@ class MainActivity :
             override fun onSlide(bottomSheet: View, slideOffset: Float) {}
 
             override fun onStateChanged(bottomSheet: View, newState: Int) {
+                settings.updatePlayerOrUpNextBottomSheetState(newState)
                 if (newState == BottomSheetBehavior.STATE_COLLAPSED) {
-                    analyticsTracker.track(AnalyticsEvent.UP_NEXT_DISMISSED)
+                    if (bottomSheetTag == UpNextFragment::class.java.name) {
+                        analyticsTracker.track(AnalyticsEvent.UP_NEXT_DISMISSED)
+                    }
                     supportFragmentManager.findFragmentByTag(bottomSheetTag)?.let {
                         removeBottomSheetFragment(it)
                     }
@@ -925,22 +987,24 @@ class MainActivity :
     }
 
     override fun onMiniPlayerHidden() {
-        binding.mainFragment.updatePadding(
-            bottom = resources.getDimension(MR.dimen.design_bottom_navigation_height).toInt(),
-        )
-        binding.snackbarFragment.updatePadding(bottom = binding.mainFragment.paddingBottom)
+        updateSnackbarPosition(miniPlayerOpen = false)
+        settings.updateBottomInset(0)
+    }
+
+    private fun updateSnackbarPosition(miniPlayerOpen: Boolean) {
+        binding.snackbarFragment.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            bottomMargin = (if (miniPlayerOpen) miniPlayerHeight else 0) + bottomNavigationHeight
+        }
     }
 
     override fun onMiniPlayerVisible() {
-        binding.mainFragment.updatePadding(
-            bottom = resources.getDimension(MR.dimen.design_bottom_navigation_height)
-                .toInt() + resources.getDimension(R.dimen.miniPlayerHeight).toInt(),
-        )
-        binding.snackbarFragment.updatePadding(bottom = binding.mainFragment.paddingBottom)
+        updateSnackbarPosition(miniPlayerOpen = true)
+
+        settings.updateBottomInset(miniPlayerHeight)
 
         // Handle up next shortcut
-        if (intent.getStringExtra(INTENT_EXTRA_PAGE) == "upnext") {
-            intent.putExtra(INTENT_EXTRA_PAGE, null as String?)
+        if (intent.getStringExtra(EXTRA_PAGE) == ShowUpNextDeepLink.pageId) {
+            intent.removeExtra(EXTRA_PAGE)
             binding.playerBottomSheet.openPlayer()
             showUpNextFragment(UpNextSource.UP_NEXT_SHORTCUT)
         }
@@ -964,8 +1028,6 @@ class MainActivity :
 
         updateNavAndStatusColors(true, viewModel.lastPlaybackState?.podcast)
         UiUtil.hideKeyboard(binding.root)
-
-        FirebaseAnalyticsTracker.nowPlayingOpen()
 
         viewModel.isPlayerOpen = true
 
@@ -1052,28 +1114,12 @@ class MainActivity :
         updateStatusBar()
     }
 
-    override fun openPlayer(source: String?) {
-        val sourceView = SourceView.fromString(source)
+    override fun openPlayer() {
         binding.playerBottomSheet.openPlayer()
-
-        if (sourceView == SourceView.WHATS_NEW) {
-            showNowPlayingTab(sourceView)
-        }
     }
 
     override fun closePlayer() {
         binding.playerBottomSheet.closePlayer()
-    }
-
-    private fun showNowPlayingTab(sourceView: SourceView?) {
-        launch {
-            delay(300) // To let the player open
-            withContext(Dispatchers.Main) {
-                val playerContainerFragment =
-                    supportFragmentManager.fragments.find { it is PlayerContainerFragment } as? PlayerContainerFragment
-                playerContainerFragment?.openPlayer(sourceView)
-            }
-        }
     }
 
     override fun onPlayClicked() {
@@ -1135,6 +1181,7 @@ class MainActivity :
         }
     }
 
+    @Suppress("DEPRECATION")
     override fun onSupportNavigateUp(): Boolean {
         onBackPressed()
         return true
@@ -1150,11 +1197,12 @@ class MainActivity :
             source = source,
             podcastUuid = podcastUuid,
             forceDark = false,
+            autoPlay = false,
         )
     }
 
-    override fun onSearchPodcastClick(podcastUuid: String) {
-        val fragment = PodcastFragment.newInstance(podcastUuid)
+    override fun onSearchPodcastClick(podcastUuid: String, source: SourceView) {
+        val fragment = PodcastFragment.newInstance(podcastUuid, source)
         addFragment(fragment)
     }
 
@@ -1188,7 +1236,7 @@ class MainActivity :
         viewModel.signInState.observeOnce(this, observer)
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent, null)
     }
@@ -1201,148 +1249,132 @@ class MainActivity :
         }
 
         try {
-            // downloading episode notification tapped
-            if (action == Settings.INTENT_OPEN_APP_DOWNLOADING) {
-                closeToRoot()
-                addFragment(ProfileEpisodeListFragment.newInstance(ProfileEpisodeListFragment.Mode.Downloaded))
-            } else if (action == Settings.INTENT_OPEN_APP_ADD_BOOKMARK) {
-                viewModel.buildBookmarkArguments { args ->
-                    bookmarkActivityLauncher.launch(args.getIntent(this))
+            val safeUri = intent.data?.buildUpon()?.clearQuery()?.build() // Remove query parameters from logging
+            LogBuffer.i("DeepLink", "Opening deep link: $intent. Safe URI: $safeUri")
+            when (val deepLink = deepLinkFactory.create(intent)) {
+                is DownloadsDeepLink -> {
+                    closeToRoot()
+                    addFragment(ProfileEpisodeListFragment.newInstance(ProfileEpisodeListFragment.Mode.Downloaded))
                 }
-            } else if (action == Settings.INTENT_OPEN_APP_CHANGE_BOOKMARK_TITLE) {
-                viewModel.buildBookmarkArguments(intent.getStringExtra(BOOKMARK_UUID)) { args ->
-                    bookmarkActivityLauncher.launch(args.getIntent(this))
+                is AddBookmarkDeepLink -> {
+                    viewModel.buildBookmarkArguments { args ->
+                        bookmarkActivityLauncher.launch(args.getIntent(this))
+                    }
                 }
-                notificationHelper.removeNotification(intent.extras, Settings.NotificationId.BOOKMARK.value)
-            } else if (action == Settings.INTENT_OPEN_APP_VIEW_BOOKMARKS) {
-                intent.getStringExtra(BOOKMARK_UUID)?.let {
-                    viewModel.viewBookmark(it)
+                is ChangeBookmarkTitleDeepLink -> {
+                    viewModel.buildBookmarkArguments(deepLink.bookmarkUuid) { args ->
+                        bookmarkActivityLauncher.launch(args.getIntent(this))
+                    }
+                    notificationHelper.removeNotification(intent.extras, Settings.NotificationId.BOOKMARK.value)
                 }
-            } else if (action == Settings.INTENT_OPEN_APP_DELETE_BOOKMARK) {
-                intent.getStringExtra(BOOKMARK_UUID)?.let {
-                    viewModel.deleteBookmark(it)
+                is ShowBookmarkDeepLink -> {
+                    viewModel.viewBookmark(deepLink.bookmarkUuid)
                 }
-                notificationHelper.removeNotification(intent.extras, Settings.NotificationId.BOOKMARK.value)
-            }
-            // new episode notification tapped
-            else if (intent.extras?.containsKey(Settings.INTENT_OPEN_APP_EPISODE_UUID) ?: false) {
-                // intents were being reused for notifications so we had to use the extra to pass action
-                val episodeUuid =
-                    intent.extras?.getString(Settings.INTENT_OPEN_APP_EPISODE_UUID, null)
-                openEpisodeDialog(
-                    episodeUuid = episodeUuid,
-                    source = EpisodeViewSource.NOTIFICATION,
-                    podcastUuid = null,
-                    forceDark = false,
-                )
-            } else if (action == Intent.ACTION_VIEW) {
-                val extraPage = intent.extras?.getString(INTENT_EXTRA_PAGE, null)
-                if (extraPage != null) {
-                    when (extraPage) {
-                        "podcasts" -> openTab(VR.id.navigation_podcasts)
-                        "search" -> openTab(VR.id.navigation_discover)
-                        "playlist" -> {
-                            val playlistId = intent.extras?.getLong(INTENT_EXTRA_PLAYLIST_ID, -1)
-                                ?: -1
-                            launch(Dispatchers.Default) {
-                                playlistManager.findById(playlistId)?.let {
-                                    withContext(Dispatchers.Main) {
-                                        settings.setSelectedFilter(it.uuid)
-
-                                        // HACK: Go diving to find if a filter fragment
-                                        openTab(VR.id.navigation_filters)
-                                        val filtersFragment =
-                                            supportFragmentManager.fragments.find { it is FiltersFragment } as? FiltersFragment
-                                        filtersFragment?.openPlaylist(it)
-                                    }
-                                }
+                is DeleteBookmarkDeepLink -> {
+                    viewModel.deleteBookmark(deepLink.bookmarkUuid)
+                    notificationHelper.removeNotification(intent.extras, Settings.NotificationId.BOOKMARK.value)
+                }
+                is ShowPodcastDeepLink -> {
+                    openPodcastPage(deepLink.podcastUuid, deepLink.sourceView)
+                }
+                is ShowEpisodeDeepLink -> {
+                    openEpisodeDialog(
+                        episodeUuid = deepLink.episodeUuid,
+                        podcastUuid = deepLink.podcastUuid,
+                        source = EpisodeViewSource.fromString(deepLink.sourceView),
+                        forceDark = false,
+                        autoPlay = deepLink.autoPlay,
+                        startTimestamp = deepLink.startTimestamp,
+                        endTimestamp = deepLink.endTimestamp,
+                    )
+                }
+                is ShowPodcastsDeepLink -> {
+                    openTab(VR.id.navigation_podcasts)
+                }
+                is ShowDiscoverDeepLink -> {
+                    openTab(VR.id.navigation_discover)
+                }
+                is ShowUpNextDeepLink -> {
+                    // Do nothig, handled in onMiniPlayerVisible()
+                }
+                is ShowFilterDeepLink -> {
+                    launch(Dispatchers.Default) {
+                        playlistManager.findByIdBlocking(deepLink.filterId)?.let {
+                            withContext(Dispatchers.Main) {
+                                settings.setSelectedFilter(it.uuid)
+                                // HACK: Go diving to find if a filter fragment
+                                openTab(VR.id.navigation_filters)
+                                val filtersFragment = supportFragmentManager.fragments.find { it is FiltersFragment } as? FiltersFragment
+                                filtersFragment?.openPlaylist(it)
                             }
                         }
                     }
-                } else if (IntentUtil.isPocketCastsWebsite(intent)) {
-                    // when the user goes to https://pocketcasts.com/get it should either open the play store or the user's app
-                    return
-                } else if (IntentUtil.isPodloveUrl(intent)) {
-                    openPodcastUrl(IntentUtil.getPodloveUrl(intent))
-                    return
-                } else if (IntentUtil.isSonosAppLinkUrl(intent)) {
+                }
+                is PocketCastsWebsiteGetDeepLink -> {
+                    // Do nothing when the user goes to https://pocketcasts.com/get it should either open the play store or the user's app
+                }
+                is ReferralsDeepLink -> {
+                    openReferralClaim(deepLink.code)
+                }
+                is ShowPodcastFromUrlDeepLink -> {
+                    openPodcastUrl(deepLink.url)
+                }
+                is SonosDeepLink -> {
                     startActivityForResult(
-                        SonosAppLinkActivity.buildIntent(intent, this),
+                        SonosAppLinkActivity.buildIntent(deepLink.state, this),
                         SonosAppLinkActivity.SONOS_APP_ACTIVITY_RESULT,
                     )
-                    return
-                } else if (IntentUtil.isPodcastListShare(intent) || IntentUtil.isPodcastListShareMobile(
-                        intent,
-                    )
-                ) {
-                    intent.data?.path?.let { addFragment(ShareListIncomingFragment.newInstance(it)) }
-                    return
-                } else if (IntentUtil.isSubscribeOnAndroidUrl(intent)) {
-                    openPodcastUrl(IntentUtil.getSubscribeOnAndroidUrl(intent))
-                    return
-                } else if (IntentUtil.isItunesLink(intent)) {
-                    openPodcastUrl(IntentUtil.getUrl(intent))
-                    return
-                } else if (IntentUtil.isCloudFilesIntent(intent)) {
+                }
+                is ShareListDeepLink -> {
+                    addFragment(ShareListIncomingFragment.newInstance(deepLink.path, SourceView.fromString(deepLink.sourceView)))
+                }
+                is CloudFilesDeepLink -> {
                     openCloudFiles()
-                    return
-                } else if (IntentUtil.isUpgradeIntent(intent)) {
+                }
+                is UpgradeAccountDeepLink -> {
                     showAccountUpgradeNowDialog(shouldClose = true)
-                    return
-                } else if (IntentUtil.isPromoCodeIntent(intent)) {
-                    openPromoCode(intent)
-                    return
-                } else if (IntentUtil.isShareLink(intent)) { // Must go last, catches all pktc links
-                    openSharingUrl(intent)
-                    return
-                } else if (IntentUtil.isNativeShareLink(intent)) {
-                    openNativeSharingUrl(intent)
-                    return
                 }
-
-                val scheme = intent.scheme
-                if (scheme != null) {
-                    // import opml from email
-                    if (scheme == "content") {
-                        val uri = Uri.parse(intent.dataString)
-                        OpmlImportTask.run(uri, this)
-                    }
-                    // import podcast feed
-                    else if (scheme == "rss" || scheme == "feed" || scheme == "pcast" || scheme == "itpc" || scheme == "http" || scheme == "https") {
-                        openPodcastUrl(IntentUtil.getUrl(intent))
-                    }
-                    // import opml from file
-                    else if (intent.data != null) {
-                        val uri = intent.data ?: return
-                        OpmlImportTask.run(uri, this)
-                    }
+                is PromoCodeDeepLink -> {
+                    openPromoCode(deepLink.code)
                 }
-                // import opml from file
-                else if (intent.data != null) {
-                    val uri = intent.data ?: return
-                    OpmlImportTask.run(uri, this)
+                is NativeShareDeepLink -> {
+                    openSharingUrl(deepLink)
                 }
-            } else if (action == Intent.ACTION_SEND &&
-                intent.type in listOf("text/x-opml", "application/octet-stream")
-            ) {
-                // Import opml from share sheet
-                val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) ?: return
-                OpmlImportTask.run(uri, this)
-            } else if (action == MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH) {
-                val bundle = intent.extras ?: return
-                playbackManager.mediaSessionManager.playFromSearchExternal(bundle)
-            } else if (intent.extras?.getBoolean(
-                    "extra_accl_intent",
-                    false,
-                ) == true || intent.extras?.getBoolean("handled_by_nga", false) == true
-            ) {
-                // This is what the assistant sends us when it doesn't know what to do and just opens the app. Assume the user wants to play.
-                playbackManager.playQueue()
+                is OpmlImportDeepLink -> {
+                    OpmlImportTask.run(deepLink.uri, this)
+                }
+                is PlayFromSearchDeepLink -> {
+                    playbackManager.mediaSessionManager.playFromSearchExternal(deepLink.query)
+                }
+                is AssistantDeepLink -> {
+                    // This is what the assistant sends us when it doesn't know what to do and just opens the app. Assume the user wants to play.
+                    playbackManager.playQueue()
+                }
+                is SignInDeepLink -> {
+                    val onboardingFlow = when (SourceView.fromString(deepLink.sourceView)) {
+                        SourceView.ENGAGE_SDK_SIGN_IN -> OnboardingFlow.EngageSdk
+                        else -> OnboardingFlow.LoggedOut
+                    }
+                    openOnboardingFlow(onboardingFlow)
+                }
+                null -> {
+                    LogBuffer.i("DeepLink", "Did not find any matching deep link for: $intent")
+                }
             }
         } catch (e: Exception) {
             Timber.e(e)
-            SentryHelper.recordException(e)
+            crashLogging.sendReport(e)
         }
+    }
+
+    private fun openReferralClaim(code: String) {
+        if (!FeatureFlag.isEnabled(Feature.REFERRALS_CLAIM)) {
+            return
+        }
+        settings.referralClaimCode.set(code, false)
+        openTab(VR.id.navigation_profile)
+        val fragment = ReferralsGuestPassFragment.newInstance(ReferralsGuestPassFragment.ReferralsPageType.Claim)
+        showBottomSheet(fragment)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -1356,50 +1388,67 @@ class MainActivity :
         }
     }
 
-    override fun openPodcastPage(uuid: String) {
+    override fun openPodcastPage(uuid: String, sourceView: String?) {
         closePlayer()
         frameBottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
 
         val currentFragment = navigator.currentFragment()
         if (currentFragment is PodcastFragment && uuid == currentFragment.podcastUuid) return // We are already showing it
-        addFragment(PodcastFragment.newInstance(podcastUuid = uuid))
+        addFragment(PodcastFragment.newInstance(podcastUuid = uuid, sourceView = SourceView.fromString(sourceView)))
     }
 
+    @Suppress("DEPRECATION")
     override fun openEpisodeDialog(
         episodeUuid: String?,
         source: EpisodeViewSource,
         podcastUuid: String?,
         forceDark: Boolean,
-        timestamp: Duration?,
+        autoPlay: Boolean,
+        startTimestamp: Duration?,
+        endTimestamp: Duration?,
     ) {
         episodeUuid ?: return
 
-        launch(Dispatchers.Main.immediate) {
-            val episode =
-                withContext(Dispatchers.Default) { episodeManager.findEpisodeByUuid(episodeUuid) }
-            val fragment = if (episode == null) {
-                val podcastUuidFound = podcastUuid ?: return@launch
-                // Assume it's an episode we don't know about
-                EpisodeContainerFragment.newInstance(
-                    episodeUuid = episodeUuid,
-                    source = source,
-                    podcastUuid = podcastUuidFound,
-                    forceDark = forceDark,
-                    timestamp = timestamp,
-                )
-            } else if (episode is PodcastEpisode) {
-                EpisodeContainerFragment.newInstance(
-                    episodeUuid = episodeUuid,
-                    source = source,
-                    podcastUuid = podcastUuid,
-                    forceDark = forceDark,
-                    timestamp = timestamp,
-                )
-            } else {
-                CloudFileBottomSheetFragment.newInstance(episode.uuid, forceDark = true)
-            }
+        // If a clip has both start and end we don't open it in the app.
+        // We do not have a capability of playing a section of an episode between some timestamps.
+        if (startTimestamp != null && endTimestamp != null) {
+            val url = "${Settings.SERVER_SHORT_URL}/episode/$episodeUuid?t=${startTimestamp.inWholeSeconds},${endTimestamp.inWholeSeconds}"
+            WebViewActivity.show(this, getString(LR.string.clip_title), url)
+            return
+        }
 
-            fragment.showAllowingStateLoss(supportFragmentManager, "episode_card")
+        launch(Dispatchers.Main.immediate) {
+            val fragment = when (val localEpisode = withContext(Dispatchers.Default) { episodeManager.findEpisodeByUuid(episodeUuid) }) {
+                is UserEpisode -> {
+                    CloudFileBottomSheetFragment.newInstance(localEpisode.uuid, forceDark = true, source)
+                }
+                is PodcastEpisode -> {
+                    EpisodeContainerFragment.newInstance(
+                        episodeUuid = localEpisode.uuid,
+                        source = source,
+                        podcastUuid = localEpisode.podcastUuid,
+                        forceDark = forceDark,
+                        timestamp = startTimestamp,
+                        autoPlay = autoPlay,
+                    )
+                }
+                null -> {
+                    val dialog = android.app.ProgressDialog.show(this@MainActivity, getString(LR.string.loading), getString(LR.string.please_wait), true)
+                    val searchResult = serviceManager.getSharedItemDetailsSuspend("/social/share/show/$episodeUuid")
+                    dialog.hide()
+                    searchResult?.episode?.let {
+                        EpisodeContainerFragment.newInstance(
+                            episodeUuid = it.uuid,
+                            source = source,
+                            podcastUuid = it.podcastUuid,
+                            forceDark = forceDark,
+                            timestamp = startTimestamp,
+                            autoPlay = autoPlay,
+                        )
+                    }
+                }
+            }
+            fragment?.showAllowingStateLoss(supportFragmentManager, "episode_card")
         }
     }
 
@@ -1408,7 +1457,7 @@ class MainActivity :
         url ?: return
 
         val dialog = android.app.ProgressDialog.show(this, getString(LR.string.loading), getString(LR.string.please_wait), true)
-        serverManager.searchForPodcasts(
+        serviceManager.searchForPodcasts(
             url,
             object : ServerCallback<PodcastSearch> {
                 override fun dataReturned(result: PodcastSearch?) {
@@ -1440,16 +1489,17 @@ class MainActivity :
     }
 
     @Suppress("DEPRECATION")
-    private fun openSharingUrl(intent: Intent) {
-        var sharePath = intent.data?.path ?: return
-        // Prepend social share path to native sharing path
-        if (intent.data?.pathSegments?.size == 1) {
-            sharePath = "$SOCIAL_SHARE_PATH$sharePath"
+    private fun openSharingUrl(deepLink: NativeShareDeepLink) {
+        // If a clip has both start and end we don't open it in the app.
+        // We do not have a capability of playing a section of an episode between some timestamps.
+        if (deepLink.startTimestamp != null && deepLink.endTimestamp != null) {
+            WebViewActivity.show(this, getString(LR.string.clip_title), deepLink.uri.toString())
+            return
         }
-        val timestamp = intent.data?.getQueryParameter("t")?.toIntOrNull()
+
         val dialog = android.app.ProgressDialog.show(this, getString(LR.string.loading), getString(LR.string.please_wait), true)
-        serverManager.getSharedItemDetails(
-            sharePath,
+        serviceManager.getSharedItemDetails(
+            deepLink.sharePath,
             object : ServerCallback<au.com.shiftyjelly.pocketcasts.models.to.Share> {
                 override fun dataReturned(result: au.com.shiftyjelly.pocketcasts.models.to.Share?) {
                     UiUtil.hideProgressDialog(dialog)
@@ -1473,7 +1523,8 @@ class MainActivity :
                             source = EpisodeViewSource.SHARE,
                             podcastUuid = podcastUuid,
                             forceDark = false,
-                            timestamp = timestamp?.seconds,
+                            autoPlay = false,
+                            startTimestamp = deepLink.startTimestamp,
                         )
                     } else {
                         openPodcastPage(podcastUuid)
@@ -1501,32 +1552,9 @@ class MainActivity :
     }
 
     @Suppress("DEPRECATION")
-    private fun openNativeSharingUrl(intent: Intent) {
-        val urlSegments = intent.data?.pathSegments ?: return
-        if (urlSegments.size < 2) {
-            openSharingUrl(intent)
-            return
-        }
-
-        when (urlSegments[0]) {
-            "podcast" -> openPodcastUrl(IntentUtil.getUrl(intent))
-            "episode" -> openEpisodeDialog(
-                episodeUuid = urlSegments[1],
-                source = EpisodeViewSource.SHARE,
-                podcastUuid = null,
-                forceDark = false,
-            )
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun openPromoCode(intent: Intent) {
-        val code = intent.data?.lastPathSegment
-
-        if (code != null) {
-            val accountIntent = AccountActivity.promoCodeInstance(this, code)
-            startActivityForResult(accountIntent, PROMOCODE_REQUEST_CODE)
-        }
+    private fun openPromoCode(code: String) {
+        val accountIntent = AccountActivity.promoCodeInstance(this, code)
+        startActivityForResult(accountIntent, PROMOCODE_REQUEST_CODE)
     }
 
     private fun showUpgradedFromPromoCode(description: String) {
@@ -1556,6 +1584,7 @@ class MainActivity :
     private fun trackTabOpened(tab: Int, isInitial: Boolean = false) {
         val event: AnalyticsEvent? = when (tab) {
             VR.id.navigation_podcasts -> AnalyticsEvent.PODCASTS_TAB_OPENED
+            VR.id.navigation_upnext -> AnalyticsEvent.UP_NEXT_TAB_OPENED
             VR.id.navigation_filters -> AnalyticsEvent.FILTERS_TAB_OPENED
             VR.id.navigation_discover -> AnalyticsEvent.DISCOVER_TAB_OPENED
             VR.id.navigation_profile -> AnalyticsEvent.PROFILE_TAB_OPENED

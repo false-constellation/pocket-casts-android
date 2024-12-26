@@ -1,11 +1,9 @@
 package au.com.shiftyjelly.pocketcasts.models.db.dao
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
 import au.com.shiftyjelly.pocketcasts.models.db.helper.PodcastBookmark
 import au.com.shiftyjelly.pocketcasts.models.db.helper.ProfileBookmark
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
@@ -17,12 +15,6 @@ abstract class BookmarkDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insert(bookmark: Bookmark)
-
-    @Update
-    abstract suspend fun update(bookmark: Bookmark)
-
-    @Delete
-    abstract suspend fun delete(bookmark: Bookmark)
 
     @Query("DELETE FROM bookmarks WHERE uuid = :uuid")
     abstract suspend fun deleteByUuid(uuid: String)
@@ -91,13 +83,6 @@ abstract class BookmarkDao {
     @Query(
         """SELECT *
             FROM bookmarks
-            WHERE deleted = :deleted""",
-    )
-    abstract fun findBookmarksFlow(deleted: Boolean = false): Flow<List<Bookmark>>
-
-    @Query(
-        """SELECT *
-            FROM bookmarks
             WHERE deleted = :deleted
             ORDER BY 
             CASE WHEN :isAsc = 1 THEN created_at END ASC, 
@@ -112,24 +97,43 @@ abstract class BookmarkDao {
     @Query(
         """SELECT 
               bookmarks.*, 
-              podcasts.title as podcastTitle, 
-              podcast_episodes.title as episodeTitle, 
-              podcast_episodes.published_date as publishedDate 
+              podcasts.title as podcastTitle,
+              CASE 
+                WHEN podcast_episodes.title IS NULL 
+                THEN user_episodes.title 
+                ELSE podcast_episodes.title 
+              END as episodeTitle,
+              CASE 
+                WHEN podcast_episodes.published_date IS NULL 
+                THEN user_episodes.published_date 
+                ELSE podcast_episodes.published_date 
+              END as publishedDate
             FROM 
               bookmarks 
-              LEFT JOIN podcast_episodes ON bookmarks.episode_uuid = podcast_episodes.uuid 
+              LEFT JOIN podcast_episodes ON bookmarks.episode_uuid = podcast_episodes.uuid
+              LEFT JOIN user_episodes ON bookmarks.episode_uuid = user_episodes.uuid 
               LEFT JOIN podcasts ON bookmarks.podcast_uuid = podcasts.uuid 
             WHERE 
               deleted = :deleted 
-            ORDER BY 
-              CASE WHEN podcasts.title is NULL then 1 else 0 end, 
-              (CASE
-                  WHEN UPPER(podcasts.title) LIKE 'THE %' THEN SUBSTR(UPPER(podcasts.title), 5)
-                  WHEN UPPER(podcasts.title) LIKE 'A %' THEN SUBSTR(UPPER(podcasts.title), 3)
-                  WHEN UPPER(podcasts.title) LIKE 'AN %' THEN SUBSTR(UPPER(podcasts.title), 4)
-                  ELSE UPPER(podcasts.title)
-              END) ASC, 
-              podcast_episodes.published_date DESC, 
+            ORDER BY
+              CASE WHEN podcasts.title is NULL THEN 1 ELSE 0 end, /* prioritizes podcast episodes with title */
+              CASE WHEN episodeTitle is NULL THEN 1 ELSE 0 END, /* prioritizes episodes with title */
+              (CASE WHEN podcasts.title is NOT NULL THEN /* sort by podcast title if podcast title is not null */
+                (CASE
+                      WHEN UPPER(podcasts.title) LIKE 'THE %' THEN SUBSTR(UPPER(podcasts.title), 5)
+                      WHEN UPPER(podcasts.title) LIKE 'A %' THEN SUBSTR(UPPER(podcasts.title), 3)
+                      WHEN UPPER(podcasts.title) LIKE 'AN %' THEN SUBSTR(UPPER(podcasts.title), 4)
+                      ELSE UPPER(podcasts.title)
+                END) 
+              ELSE /* sort by episode title if podcast title is null */
+                (CASE
+                      WHEN UPPER(episodeTitle) LIKE 'THE %' THEN SUBSTR(UPPER(episodeTitle), 5)
+                      WHEN UPPER(episodeTitle) LIKE 'A %' THEN SUBSTR(UPPER(episodeTitle), 3)
+                      WHEN UPPER(episodeTitle) LIKE 'AN %' THEN SUBSTR(UPPER(episodeTitle), 4)
+                      ELSE UPPER(episodeTitle)
+                  END) 
+              END) ASC,
+              publishedDate DESC,
               bookmarks.time ASC
         """,
     )
@@ -177,7 +181,7 @@ abstract class BookmarkDao {
     abstract suspend fun updateTitle(bookmarkUuid: String, title: String, titleModified: Long, syncStatus: SyncStatus)
 
     @Query("SELECT * FROM bookmarks WHERE sync_status = :syncStatus")
-    abstract fun findNotSynced(syncStatus: SyncStatus = SyncStatus.NOT_SYNCED): List<Bookmark>
+    abstract fun findNotSyncedBlocking(syncStatus: SyncStatus = SyncStatus.NOT_SYNCED): List<Bookmark>
 
     @Query(
         """SELECT bookmarks.*

@@ -28,6 +28,7 @@ import kotlinx.coroutines.reactive.asFlow
 class ProfileUpgradeBannerViewModel @Inject constructor(
     private val subscriptionManager: SubscriptionManager,
     private val settings: Settings,
+    private val subscriptionMapper: SubscriptionMapper,
     app: Application,
 ) : AndroidViewModel(app) {
 
@@ -53,10 +54,10 @@ class ProfileUpgradeBannerViewModel @Inject constructor(
                     val subscriptions = (productDetailsState as? ProductDetailsState.Loaded)
                         ?.productDetails
                         ?.mapNotNull { details ->
-                            Subscription.fromProductDetails(
+                            subscriptionMapper.mapFromProductDetails(
                                 productDetails = details,
                                 isOfferEligible = subscriptionManager.isOfferEligible(
-                                    SubscriptionMapper.mapProductIdToTier(details.productId),
+                                    SubscriptionTier.fromProductId(details.productId),
                                 ),
                             )
                         } ?: emptyList()
@@ -69,7 +70,7 @@ class ProfileUpgradeBannerViewModel @Inject constructor(
                     // If the user is a patron, only show the patron subscription
                     val cachedTier = (cachedSubscriptionStatus as? SubscriptionStatus.Paid)?.tier
                     val filteredSubscriptions = if (cachedTier == SubscriptionTier.PATRON) {
-                        filteredOffer.filter { it.tier == Subscription.SubscriptionTier.PATRON }
+                        filteredOffer.filter { it.tier == SubscriptionTier.PATRON }
                     } else {
                         filteredOffer
                     }
@@ -95,8 +96,8 @@ class ProfileUpgradeBannerViewModel @Inject constructor(
                                 )
                             }
 
-                        val currentTier = SubscriptionMapper
-                            .mapProductIdToTier(defaultSubscription.productDetails.productId)
+                        val currentTier = SubscriptionTier
+                            .fromProductId(defaultSubscription.productDetails.productId)
 
                         _state.value = State.Loaded(
                             featureCardsState = FeatureCardsState(
@@ -125,12 +126,12 @@ class ProfileUpgradeBannerViewModel @Inject constructor(
     ) = subscriptionManager.getDefaultSubscription(
         subscriptions = filteredSubscriptions,
         tier = when (cachedTier) {
-            SubscriptionTier.PATRON -> Subscription.SubscriptionTier.PATRON
+            SubscriptionTier.PATRON -> SubscriptionTier.PATRON
 
             null,
             SubscriptionTier.NONE,
             SubscriptionTier.PLUS,
-            -> Subscription.SubscriptionTier.PLUS
+            -> SubscriptionTier.PLUS
         },
         frequency = getSubscriptionFrequency(cachedSubscriptionStatus),
     )
@@ -151,7 +152,7 @@ class ProfileUpgradeBannerViewModel @Inject constructor(
         }
 
     private fun getPlanType(
-        productTier: Subscription.SubscriptionTier,
+        productTier: SubscriptionTier,
         cachedTier: SubscriptionTier?,
         cachedSubscriptionStatus: SubscriptionStatus?,
     ): PlanType {
@@ -163,7 +164,7 @@ class ProfileUpgradeBannerViewModel @Inject constructor(
             isExpiring -> PlanType.RENEW
             cachedSubscriptionStatus is SubscriptionStatus.Paid &&
                 cachedTier == SubscriptionTier.PLUS &&
-                productTier == Subscription.SubscriptionTier.PATRON -> PlanType.UPGRADE
+                productTier == SubscriptionTier.PATRON -> PlanType.UPGRADE
             else -> PlanType.SUBSCRIBE
         }
     }

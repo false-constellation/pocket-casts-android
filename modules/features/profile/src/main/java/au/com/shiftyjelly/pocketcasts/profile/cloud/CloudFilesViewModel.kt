@@ -6,7 +6,7 @@ import androidx.lifecycle.asLiveData
 import androidx.lifecycle.toLiveData
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
@@ -28,14 +28,13 @@ class CloudFilesViewModel @Inject constructor(
     private val playbackManager: PlaybackManager,
     private val settings: Settings,
     userManager: UserManager,
-    private val analyticsTracker: AnalyticsTrackerWrapper,
+    private val analyticsTracker: AnalyticsTracker,
     private val cloudFilesManager: CloudFilesManager,
     private val bookmarkManager: BookmarkManager,
 ) : ViewModel() {
 
-    val accountUsage = userEpisodeManager.observeAccountUsage().toLiveData()
+    val accountUsage = userEpisodeManager.accountUsageRxFlowable().toLiveData()
     val signInState = userManager.getSignInState().toLiveData()
-    val cloudFilesList = cloudFilesManager.sortedCloudFiles
 
     data class UiState(
         val userEpisodes: List<UserEpisode> = emptyList(),
@@ -89,8 +88,6 @@ class CloudFilesViewModel @Inject constructor(
     }
 
     companion object {
-        private const val ACTION_KEY = "action"
-        private const val SOURCE_KEY = "source"
         private const val SORT_BY = "sort_by"
     }
 }

@@ -12,14 +12,14 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.LifecycleOwner
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
 import au.com.shiftyjelly.pocketcasts.views.R
 import au.com.shiftyjelly.pocketcasts.views.extensions.tintIcons
 import dagger.hilt.android.AndroidEntryPoint
-import io.sentry.Sentry
 import javax.inject.Inject
+import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 import au.com.shiftyjelly.pocketcasts.ui.R as UR
@@ -33,7 +33,7 @@ class MultiSelectToolbar @JvmOverloads constructor(
 
     private var overflowItems: List<MultiSelectAction> = emptyList()
 
-    @Inject lateinit var analyticsTracker: AnalyticsTrackerWrapper
+    @Inject lateinit var analyticsTracker: AnalyticsTracker
 
     fun <T> setup(
         lifecycleOwner: LifecycleOwner,
@@ -47,7 +47,7 @@ class MultiSelectToolbar @JvmOverloads constructor(
         } else {
             multiSelectHelper.toolbarActions.removeObservers(lifecycleOwner)
             multiSelectHelper.toolbarActions.observe(lifecycleOwner) {
-                Sentry.addBreadcrumb("MultiSelectToolbar setup observed toolbarActionChange,$it from ${multiSelectHelper.source}")
+                Timber.d("MultiSelectToolbar setup observed toolbarActionChange,$it from ${multiSelectHelper.source}")
 
                 menu.clear()
 

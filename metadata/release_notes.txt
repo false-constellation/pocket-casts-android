@@ -1,14 +1,8 @@
-*   New Features
-    *   Support embedded chapters from [Podcast Index](https://github.com/Podcastindex-org/podcast-namespace/blob/c40c127d9e1a3e9b800766d6f01e0dcd5b09ab2a/docs/1.0.md#chapters) and [Podlove](https://podlove.org/simple-chapters/).
-        ([#1965](https://github.com/Automattic/pocket-casts-android/pull/1940))
-*   Updates:
-    *   Display episode's RSS artwork in more places in the app.
-        ([#1943](https://github.com/Automattic/pocket-casts-android/pull/1943))
-    *   Consolidate episode's embedded file artwork and RSS artwork into a single setting.
-        ([#1987](https://github.com/Automattic/pocket-casts-android/pull/1987))
-    *   Add alphabetical sort order for podcast episodes.
-        ([#1969](https://github.com/Automattic/pocket-casts-android/pull/1969))
-* Bug Fixes:
-    *   Subscription cancellation redirects now to a correct page.
-        ([#1973](https://github.com/Automattic/pocket-casts-android/pull/1973))
+*   Updates
+    *   Improve log sharing
+        ([#3336](https://github.com/Automattic/pocket-casts-android/pull/3336))
+    *   Update account details header UI
+        ([#3294](https://github.com/Automattic/pocket-casts-android/pull/3294))
+    *   Improve the Up Next clear all button
+        ([#3334](https://github.com/Automattic/pocket-casts-android/pull/3334))
 

@@ -5,10 +5,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.NetworkType
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.SettingsImpl
+import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration
+import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration.Element
 import au.com.shiftyjelly.pocketcasts.preferences.model.ShelfItem
+import au.com.shiftyjelly.pocketcasts.servers.di.ServersModule
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.BookmarkFeatureControl
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import com.squareup.moshi.Moshi
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,7 +27,7 @@ class AdvancedSettingsTest {
 
         val sharedPreferences = context.getSharedPreferences(fileName, Context.MODE_PRIVATE)
         sharedPreferences.edit().clear().commit()
-        val moshi = Moshi.Builder().build()
+        val moshi = ServersModule().provideMoshi()
         val firebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
         settings = SettingsImpl(
             sharedPreferences = sharedPreferences,
@@ -99,5 +101,17 @@ class AdvancedSettingsTest {
         settings.shelfItems.set(items, updateModifiedAt = false)
 
         assertEquals(settings.shelfItems.value.take(5), items)
+    }
+
+    @Test
+    fun artworkConfigurationIsSavedCorrectly() {
+        val config = ArtworkConfiguration(
+            useEpisodeArtwork = true,
+            enabledElements = setOf(Element.Filters, Element.Downloads, Element.Bookmarks),
+        )
+
+        settings.artworkConfiguration.set(config, updateModifiedAt = false)
+
+        assertEquals(config, settings.artworkConfiguration.value)
     }
 }

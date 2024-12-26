@@ -103,7 +103,7 @@ class CreateFilterChipFragment : BaseFragment(), CoroutineScope {
     }
 
     private fun observePlaylist() {
-        viewModel.playlist.observe(viewLifecycleOwner) { playlist ->
+        viewModel.playlist?.observe(viewLifecycleOwner) { playlist ->
             val color = playlist.getColor(context)
 
             val chipPodcasts = binding.chipPodcasts
@@ -245,7 +245,7 @@ private class SimpleEpisodeListAdapter(
         holder.binding.lblSubtitle.text = timeLeft.text
         holder.binding.lblSubtitle.contentDescription = timeLeft.description
 
-        imageRequestFactory.create(item, settings.useEpisodeArtwork.value).loadInto(holder.binding.imageView)
+        imageRequestFactory.create(item, settings.artworkConfiguration.value.useEpisodeArtwork).loadInto(holder.binding.imageView)
     }
 }
 

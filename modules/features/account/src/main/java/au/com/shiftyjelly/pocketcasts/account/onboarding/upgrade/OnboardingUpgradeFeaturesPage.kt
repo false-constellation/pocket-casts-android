@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,6 +63,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import au.com.shiftyjelly.pocketcasts.account.onboarding.components.UpgradeFeatureItem
 import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.OnboardingUpgradeHelper.UpgradeRowButton
+import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.paywallfeatures.UpgradeLayoutFeatures
+import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.paywallreviews.UpgradeLayoutReviews
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeFeaturesState
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeFeaturesViewModel
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
@@ -69,7 +72,7 @@ import au.com.shiftyjelly.pocketcasts.compose.bars.NavigationIconButton
 import au.com.shiftyjelly.pocketcasts.compose.bars.SystemBarsStyles
 import au.com.shiftyjelly.pocketcasts.compose.components.AutoResizeText
 import au.com.shiftyjelly.pocketcasts.compose.components.HorizontalPagerWrapper
-import au.com.shiftyjelly.pocketcasts.compose.components.StyledToggle
+import au.com.shiftyjelly.pocketcasts.compose.components.SegmentedTabBar
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH30
 import au.com.shiftyjelly.pocketcasts.compose.images.OfferBadge
 import au.com.shiftyjelly.pocketcasts.compose.images.SubscriptionBadge
@@ -89,7 +92,7 @@ internal fun OnboardingUpgradeFeaturesPage(
     flow: OnboardingFlow,
     source: OnboardingUpgradeSource,
     onBackPressed: () -> Unit,
-    onClickSubscribe: () -> Unit,
+    onClickSubscribe: (showUpgradeBottomSheet: Boolean) -> Unit,
     onNotNowPressed: () -> Unit,
     canUpgrade: Boolean,
     onUpdateSystemBars: (SystemBarsStyles) -> Unit,
@@ -120,17 +123,39 @@ internal fun OnboardingUpgradeFeaturesPage(
         is OnboardingUpgradeFeaturesState.Loading -> Unit // Do Nothing
         is OnboardingUpgradeFeaturesState.Loaded -> {
             val loadedState = state as OnboardingUpgradeFeaturesState.Loaded
-            UpgradeLayout(
-                state = loadedState,
-                source = source,
-                scrollState = scrollState,
-                onBackPressed = onBackPressed,
-                onNotNowPressed = onNotNowPressed,
-                onSubscriptionFrequencyChanged = { viewModel.onSubscriptionFrequencyChanged(it) },
-                onFeatureCardChanged = { viewModel.onFeatureCardChanged(loadedState.featureCardsState.featureCards[it]) },
-                onClickSubscribe = onClickSubscribe,
-                canUpgrade = canUpgrade,
-            )
+            when (loadedState.upgradeLayout) {
+                UpgradeLayout.Features -> {
+                    UpgradeLayoutFeatures(
+                        state = loadedState,
+                        source = source,
+                        scrollState = scrollState,
+                        onNotNowPressed = onNotNowPressed,
+                        onClickSubscribe = { onClickSubscribe(true) },
+                        canUpgrade = canUpgrade,
+                    )
+                }
+                UpgradeLayout.Reviews -> {
+                    UpgradeLayoutReviews(
+                        state = loadedState,
+                        onNotNowPressed = onNotNowPressed,
+                        onClickSubscribe = { onClickSubscribe(true) },
+                        canUpgrade = canUpgrade,
+                    )
+                }
+                UpgradeLayout.Original -> {
+                    UpgradeLayoutOriginal(
+                        state = loadedState,
+                        source = source,
+                        scrollState = scrollState,
+                        onBackPressed = onBackPressed,
+                        onNotNowPressed = onNotNowPressed,
+                        onSubscriptionFrequencyChanged = { viewModel.onSubscriptionFrequencyChanged(it) },
+                        onFeatureCardChanged = { viewModel.onFeatureCardChanged(loadedState.featureCardsState.featureCards[it]) },
+                        onClickSubscribe = { onClickSubscribe(false) },
+                        canUpgrade = canUpgrade,
+                    )
+                }
+            }
         }
         is OnboardingUpgradeFeaturesState.NoSubscriptions -> {
             NoSubscriptionsLayout(
@@ -143,7 +168,7 @@ internal fun OnboardingUpgradeFeaturesPage(
 }
 
 @Composable
-private fun UpgradeLayout(
+private fun UpgradeLayoutOriginal(
     state: OnboardingUpgradeFeaturesState.Loaded,
     source: OnboardingUpgradeSource,
     scrollState: ScrollState,
@@ -231,16 +256,18 @@ private fun UpgradeLayout(
                                 .padding(bottom = 24.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            StyledToggle(
+                            SegmentedTabBar(
                                 items = state.subscriptionFrequencies
                                     .map { stringResource(id = it.localisedLabelRes) },
-                                defaultSelectedItemIndex = state.subscriptionFrequencies.indexOf(
+                                selectedIndex = state.subscriptionFrequencies.indexOf(
                                     state.currentSubscriptionFrequency,
                                 ),
-                            ) {
-                                val selectedFrequency = state.subscriptionFrequencies[it]
-                                onSubscriptionFrequencyChanged(selectedFrequency)
-                            }
+                                onItemSelected = {
+                                    val selectedFrequency = state.subscriptionFrequencies[it]
+                                    onSubscriptionFrequencyChanged(selectedFrequency)
+                                },
+                                modifier = Modifier.width(IntrinsicSize.Max),
+                            )
                         }
 
                         FeatureCards(
@@ -395,7 +422,7 @@ private fun FeatureCard(
 }
 
 @Composable
-private fun UpgradeButton(
+internal fun UpgradeButton(
     button: UpgradeButton,
     onClickSubscribe: () -> Unit,
 ) {
@@ -454,7 +481,7 @@ private fun SetStatusBarBackground(
 }
 
 @Composable
-private fun BoxWithConstraintsScope.calculateMinimumHeightWithInsets(): Dp {
+internal fun BoxWithConstraintsScope.calculateMinimumHeightWithInsets(): Dp {
     val statusBarPadding = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()

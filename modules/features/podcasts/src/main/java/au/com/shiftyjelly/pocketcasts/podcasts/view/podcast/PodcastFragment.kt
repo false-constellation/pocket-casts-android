@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -20,8 +21,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
-import au.com.shiftyjelly.pocketcasts.analytics.FirebaseAnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.localization.extensions.getStringPlural
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
@@ -46,17 +46,21 @@ import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastViewModel
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastViewModel.PodcastTab
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.AutoPlaySource
+import au.com.shiftyjelly.pocketcasts.reimagine.podcast.SharePodcastFragment
+import au.com.shiftyjelly.pocketcasts.reimagine.timestamp.ShareEpisodeTimestampFragment
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
-import au.com.shiftyjelly.pocketcasts.repositories.chromecast.CastManager
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.SharePodcastHelper
-import au.com.shiftyjelly.pocketcasts.servers.ServerManager
 import au.com.shiftyjelly.pocketcasts.settings.HeadphoneControlsSettingsFragment
 import au.com.shiftyjelly.pocketcasts.settings.SettingsFragment
+import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
+import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
+import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
+import au.com.shiftyjelly.pocketcasts.sharing.SharingClient
+import au.com.shiftyjelly.pocketcasts.sharing.SharingRequest
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
 import au.com.shiftyjelly.pocketcasts.ui.extensions.openUrl
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
@@ -82,10 +86,12 @@ import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectHelper
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx2.asObservable
 import kotlinx.coroutines.withContext
+import kotlinx.parcelize.Parcelize
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 import au.com.shiftyjelly.pocketcasts.ui.R as UR
@@ -95,27 +101,36 @@ import au.com.shiftyjelly.pocketcasts.views.R as VR
 class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
 
     companion object {
-        const val ARG_PODCAST_UUID = "ARG_PODCAST_UUID"
-        const val ARG_LIST_UUID = "ARG_LIST_INDEX_UUID"
-        const val ARG_FEATURED_PODCAST = "ARG_FEATURED_PODCAST"
+        private const val NEW_INSTANCE_ARGS = "PodcastFragmentArgs"
         private const val OPTION_KEY = "option"
         private const val IS_EXPANDED_KEY = "is_expanded"
         private const val PODCAST_UUID_KEY = "podcast_uuid"
         private const val LIST_ID_KEY = "list_id"
         private const val EPISODE_UUID_KEY = "episode_uuid"
+        private const val SOURCE_KEY = "source"
         private const val REMOVE = "remove"
         private const val CHANGE = "change"
         private const val GO_TO = "go_to"
         private const val EPISODE_CARD = "episode_card"
 
-        fun newInstance(podcastUuid: String, fromListUuid: String? = null, featuredPodcast: Boolean = false): PodcastFragment {
-            return PodcastFragment().apply {
-                arguments = bundleOf(
-                    ARG_PODCAST_UUID to podcastUuid,
-                    ARG_LIST_UUID to fromListUuid,
-                    ARG_FEATURED_PODCAST to featuredPodcast,
-                )
-            }
+        fun newInstance(
+            podcastUuid: String,
+            sourceView: SourceView,
+            fromListUuid: String? = null,
+            featuredPodcast: Boolean = false,
+        ): PodcastFragment = PodcastFragment().apply {
+            arguments = bundleOf(
+                NEW_INSTANCE_ARGS to PodcastFragmentArgs(
+                    podcastUuid = podcastUuid,
+                    sourceView = sourceView,
+                    fromListUuid = fromListUuid,
+                    featuredPodcast = featuredPodcast,
+                ),
+            )
+        }
+
+        private fun extractArgs(bundle: Bundle?) = bundle?.let {
+            BundleCompat.getParcelable(it, NEW_INSTANCE_ARGS, PodcastFragmentArgs::class.java)
         }
     }
 
@@ -129,11 +144,7 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
 
     @Inject lateinit var downloadManager: DownloadManager
 
-    @Inject lateinit var serverManager: ServerManager
-
     @Inject lateinit var playButtonListener: PlayButton.OnClickListener
-
-    @Inject lateinit var castManager: CastManager
 
     @Inject lateinit var upNextQueue: UpNextQueue
 
@@ -141,7 +152,9 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
 
     @Inject lateinit var coilManager: CoilManager
 
-    @Inject lateinit var analyticsTracker: AnalyticsTrackerWrapper
+    @Inject lateinit var analyticsTracker: AnalyticsTracker
+
+    @Inject lateinit var sharingClient: SharingClient
 
     private val viewModel: PodcastViewModel by viewModels()
     private val ratingsViewModel: PodcastRatingsViewModel by viewModels()
@@ -151,8 +164,6 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
     private var binding: FragmentPodcastBinding? = null
     private var itemTouchHelper: EpisodeItemTouchHelper? = null
 
-    private var featuredPodcast = false
-    private var fromListUuid: String? = null
     private var listState: Parcelable? = null
 
     private val onScrollListener = object : RecyclerView.OnScrollListener() {
@@ -182,11 +193,9 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
 
     private val onSubscribeClicked: () -> Unit = {
         fromListUuid?.let {
-            FirebaseAnalyticsTracker.podcastSubscribedFromList(it, podcastUuid)
             analyticsTracker.track(AnalyticsEvent.DISCOVER_LIST_PODCAST_SUBSCRIBED, mapOf(LIST_ID_KEY to it, PODCAST_UUID_KEY to podcastUuid))
         }
         if (featuredPodcast) {
-            FirebaseAnalyticsTracker.subscribedToFeaturedPodcast()
             viewModel.podcast.value?.uuid?.let { podcastUuid ->
                 analyticsTracker.track(AnalyticsEvent.DISCOVER_FEATURED_PODCAST_SUBSCRIBED, mapOf(PODCAST_UUID_KEY to podcastUuid))
             }
@@ -198,7 +207,7 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
 
     private val onUnsubscribeClicked: (successCallback: () -> Unit) -> Unit = { successCallback ->
         lifecycleScope.launch {
-            val downloaded = withContext(Dispatchers.Default) { podcastManager.countEpisodesInPodcastWithStatus(podcastUuid, EpisodeStatusEnum.DOWNLOADED) }
+            val downloaded = withContext(Dispatchers.Default) { podcastManager.countEpisodesInPodcastWithStatusBlocking(podcastUuid, EpisodeStatusEnum.DOWNLOADED) }
             val title = when (downloaded) {
                 0 -> getString(LR.string.are_you_sure)
                 1 -> getString(LR.string.podcast_unsubscribe_downloaded_file_singular)
@@ -255,7 +264,6 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
 
     private val onRowClicked: (PodcastEpisode) -> Unit = { episode ->
         fromListUuid?.let { listUuid ->
-            FirebaseAnalyticsTracker.podcastEpisodeTappedFromList(listId = listUuid, podcastUuid = episode.podcastUuid, episodeUuid = episode.uuid)
             analyticsTracker.track(
                 AnalyticsEvent.DISCOVER_LIST_EPISODE_TAPPED,
                 mapOf(LIST_ID_KEY to listUuid, PODCAST_UUID_KEY to episode.podcastUuid, EPISODE_UUID_KEY to episode.uuid),
@@ -436,6 +444,11 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
     private val onFoldersClicked: () -> Unit = {
         lifecycleScope.launch {
             analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_FOLDER_TAPPED)
+            val isSignedInAsPlusOrPatron = viewModel.signInState.value?.isSignedInAsPlusOrPatron == true
+            if (!isSignedInAsPlusOrPatron) {
+                OnboardingLauncher.openOnboardingFlow(activity, OnboardingFlow.Upsell(OnboardingUpgradeSource.FOLDERS_PODCAST_SCREEN))
+                return@launch
+            }
             val folder = viewModel.getFolder()
             if (folder == null) {
                 analyticsTracker.track(AnalyticsEvent.FOLDER_CHOOSE_SHOWN)
@@ -524,23 +537,30 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
         }
     }
 
-    val podcastUuid
-        get() = arguments?.getString(ARG_PODCAST_UUID)!!
+    private val args: PodcastFragmentArgs
+        get() = extractArgs(arguments) ?: error("$NEW_INSTANCE_ARGS argument is missing. Fragment must be created using newInstance function")
+
+    val podcastUuid: String
+        get() = args.podcastUuid
+
+    private val sourceView: SourceView
+        get() = args.sourceView
+
+    private val featuredPodcast: Boolean
+        get() = args.featuredPodcast
+
+    private val fromListUuid: String?
+        get() = args.fromListUuid
 
     private var lastSearchTerm: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val arguments = arguments ?: return
-        fromListUuid = arguments.getString(ARG_LIST_UUID)
-        featuredPodcast = arguments.getBoolean(ARG_FEATURED_PODCAST)
-
         adapter?.fromListUuid = fromListUuid
 
         if (savedInstanceState == null) {
-            analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_SHOWN)
-            FirebaseAnalyticsTracker.openedPodcast(podcastUuid)
+            analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_SHOWN, mapOf(SOURCE_KEY to sourceView.analyticsValue))
         }
     }
 
@@ -648,7 +668,6 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
                     swipeButtonLayoutViewModel = swipeButtonLayoutViewModel,
                     onItemUpdated = ::notifyItemChanged,
                     defaultUpNextSwipeAction = { settings.upNextSwipe.value },
-                    context = context,
                     fragmentManager = parentFragmentManager,
                     swipeSource = EpisodeItemTouchHelper.SwipeSource.PODCAST_DETAILS,
                 ),
@@ -702,7 +721,20 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
     }
 
     private fun onShareBookmarkClick() {
-        viewModel.onShareBookmarkClick(requireContext())
+        lifecycleScope.launch {
+            val (podcast, episode, bookmark) = viewModel.getSharedBookmark() ?: return@launch
+            val timestamp = bookmark.timeSecs.seconds
+            if (FeatureFlag.isEnabled(Feature.REIMAGINE_SHARING)) {
+                ShareEpisodeTimestampFragment
+                    .forBookmark(episode, timestamp, podcast.backgroundColor, SourceView.PODCAST_SCREEN)
+                    .show(parentFragmentManager, "share_screen")
+            } else {
+                val request = SharingRequest.bookmark(podcast, episode, timestamp)
+                    .setSourceView(SourceView.PODCAST_SCREEN)
+                    .build()
+                sharingClient.share(request)
+            }
+        }
     }
 
     private fun onEditBookmarkClick() {
@@ -731,6 +763,7 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
             adapter?.notifyDataSetChanged()
         }
         coordinatorLayout = (activity as FragmentHostListener).snackBarView()
+        context = requireActivity()
         source = SourceView.PODCAST_SCREEN
         listener = object : MultiSelectHelper.Listener<T> {
             override fun multiSelectSelectNone() {
@@ -872,6 +905,14 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
         viewModel.castConnected.observe(viewLifecycleOwner) { castConnected ->
             adapter?.castConnected = castConnected
         }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settings.bottomInset.collect {
+                    binding?.episodesRecyclerView?.updatePadding(bottom = it)
+                }
+            }
+        }
     }
 
     /**
@@ -935,18 +976,19 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
     }
 
     private fun share() {
-        val context = context ?: return
-        viewModel.podcast.value?.let { podcast ->
-            analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_SHARE_TAPPED)
-            SharePodcastHelper(
-                podcast,
-                null,
-                null,
-                context,
-                SharePodcastHelper.ShareType.PODCAST,
-                SourceView.PODCAST_SCREEN,
-                analyticsTracker,
-            ).showShareDialogDirect()
+        val podcast = viewModel.podcast.value ?: return
+        analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_SHARE_TAPPED)
+        if (FeatureFlag.isEnabled(Feature.REIMAGINE_SHARING)) {
+            SharePodcastFragment
+                .newInstance(podcast, SourceView.PODCAST_SCREEN)
+                .show(parentFragmentManager, "share_screen")
+        } else {
+            lifecycleScope.launch {
+                val request = SharingRequest.podcast(podcast)
+                    .setSourceView(SourceView.PODCAST_SCREEN)
+                    .build()
+                sharingClient.share(request)
+            }
         }
     }
 
@@ -974,4 +1016,12 @@ class PodcastFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
         } else {
             0
         }
+
+    @Parcelize
+    data class PodcastFragmentArgs(
+        val podcastUuid: String,
+        val sourceView: SourceView,
+        val fromListUuid: String?,
+        val featuredPodcast: Boolean,
+    ) : Parcelable
 }

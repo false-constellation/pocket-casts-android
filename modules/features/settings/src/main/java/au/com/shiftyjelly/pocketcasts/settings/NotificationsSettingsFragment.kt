@@ -1,13 +1,16 @@
 package au.com.shiftyjelly.pocketcasts.settings
 
-import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.IntentCompat.getParcelableExtra
+import androidx.core.view.updatePadding
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
@@ -15,7 +18,7 @@ import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreference
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.preferences.NotificationSound
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.NewEpisodeNotificationAction
@@ -65,7 +68,7 @@ class NotificationsSettingsFragment :
 
     @Inject lateinit var theme: Theme
 
-    @Inject lateinit var analyticsTracker: AnalyticsTrackerWrapper
+    @Inject lateinit var analyticsTracker: AnalyticsTracker
 
     private var screen: PreferenceScreen? = null
     private var notificationPodcasts: PreferenceScreen? = null
@@ -87,6 +90,14 @@ class NotificationsSettingsFragment :
         super.onViewCreated(view, savedInstanceState)
         view.findToolbar().setup(title = getString(LR.string.settings_title_notifications), navigationIcon = BackArrow, activity = activity, theme = theme)
         analyticsTracker.track(AnalyticsEvent.SETTINGS_NOTIFICATIONS_SHOWN)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settings.bottomInset.collect {
+                    view.updatePadding(bottom = it)
+                }
+            }
+        }
     }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -172,8 +183,8 @@ class NotificationsSettingsFragment :
 
     override fun podcastSelectFragmentSelectionChanged(newSelection: List<String>) {
         launch(Dispatchers.Default) {
-            podcastManager.findSubscribed().forEach {
-                podcastManager.updateShowNotifications(it, newSelection.contains(it.uuid))
+            podcastManager.findSubscribedBlocking().forEach {
+                podcastManager.updateShowNotificationsBlocking(it, newSelection.contains(it.uuid))
             }
         }
     }
@@ -181,7 +192,7 @@ class NotificationsSettingsFragment :
     override fun podcastSelectFragmentGetCurrentSelection(): List<String> {
         return runBlocking {
             async(Dispatchers.Default) {
-                val uuids = podcastManager.findSubscribed().filter { it.isShowNotifications }.map { it.uuid }
+                val uuids = podcastManager.findSubscribedBlocking().filter { it.isShowNotifications }.map { it.uuid }
                 uuids
             }.await()
         }
@@ -201,7 +212,7 @@ class NotificationsSettingsFragment :
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         val ringtoneKey = ringtonePreference?.key
         if (preference.key == ringtoneKey) {
-            val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+            val intent = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
             intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
             intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
             intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
@@ -218,10 +229,11 @@ class NotificationsSettingsFragment :
         }
     }
 
+    @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         if (requestCode == REQUEST_CODE_ALERT_RINGTONE && data != null) {
-            val ringtone = data.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            val ringtone: Uri? = getParcelableExtra(data, RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
             val value = ringtone?.toString() ?: ""
             context?.let {
                 settings.notificationSound.set(NotificationSound(value, it), updateModifiedAt = false)

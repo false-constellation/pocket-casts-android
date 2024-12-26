@@ -1,3 +1,337 @@
+7.80
+-----
+*   New Features
+    *   Add support for podcast descriptions with HTML formatting 
+        ([#3249](https://github.com/Automattic/pocket-casts-android/pull/3249))
+*   Bug Fixes
+    *   Fix global auto download setting was incorrectly overriding the podcast auto download setting
+        ([#3342](https://github.com/Automattic/pocket-casts-android/pull/3342))
+    *   Fix end of year translation
+        ([#3387](https://github.com/Automattic/pocket-casts-android/pull/3387))
+    *   Fix sleep timer was not stopping as expected
+        ([#3377](https://github.com/Automattic/pocket-casts-android/pull/3377))
+
+7.79
+-----
+*   Updates
+    *   Improve log sharing
+        ([#3336](https://github.com/Automattic/pocket-casts-android/pull/3336))
+    *   Update account details header UI
+        ([#3294](https://github.com/Automattic/pocket-casts-android/pull/3294))
+    *   Improve the Up Next clear all button
+        ([#3334](https://github.com/Automattic/pocket-casts-android/pull/3334))
+*   Bug Fixes
+    *   Fix podcast ratings not loading
+        ([#3378](https://github.com/Automattic/pocket-casts-android/pull/3378))
+
+7.78
+-----
+*   New Features
+    *   Add episode basic authentication support
+        ([#3213](https://github.com/Automattic/pocket-casts-android/pull/3213))
+*   Bug Fixes
+    *   Fix account details not working in Automotive app
+        ([#3266](https://github.com/Automattic/pocket-casts-android/pull/3266))
+*   Updates
+    *   Update profile header UI
+        ([#3235](https://github.com/Automattic/pocket-casts-android/pull/3235))
+    *   Deferred addition to UpNext post update after sync 
+        ([#3211](https://github.com/Automattic/pocket-casts-android/pull/312))
+
+7.77
+-----
+*   New Features
+    *   Add custom playback effects settings for podcast in the player
+        ([#3042](https://github.com/Automattic/pocket-casts-android/issues/3042))
+    *   Add Playback 2024 summary
+        ([#3123](https://github.com/Automattic/pocket-casts-android/pull/3123))
+    *   Add the ability to get notified when device is running on low storage and has downloaded episodes
+        ([#3198](https://github.com/Automattic/pocket-casts-android/pull/3198))
+    *   Add Up Next Shuffle
+        ([#3199](https://github.com/Automattic/pocket-casts-android/pull/3199))
+*   Updates
+    *   Renamed the podcast action 'Subscribe' to 'Follow'
+        ([#3120](https://github.com/Automattic/pocket-casts-android/pull/3120))
+    *   Improve the performance of the refresh on Wear OS and Android Automotive
+        ([#3171](https://github.com/Automattic/pocket-casts-android/pull/3171))
+    *   Improve connection when some podcasts failed to play or download
+        ([#3180](https://github.com/Automattic/pocket-casts-android/pull/3180))
+    *   Add new podcast subscriptions to the top instead of bottom for Data Added podcast sort order 
+        ([#3192](https://github.com/Automattic/pocket-casts-android/pull/3192)) 
+*   Bug Fixes
+    *   Improve syncing of deselected chapters
+        ([#3256](https://github.com/Automattic/pocket-casts-android/pull/3256))
+    *   Use red color for the notification icons
+        ([#3154](https://github.com/Automattic/pocket-casts-android/pull/3154))
+    *   Fix effects being lost when paused
+        ([#3219](https://github.com/Automattic/pocket-casts-android/pull/3219))
+
+
+7.76
+-----
+*   New Features
+    *   Add download button to playback actions
+        ([#3046](https://github.com/Automattic/pocket-casts-android/pull/3046))
+    *   Add the ability to auto download episodes after subscribing to a podcast
+        ([#3048](https://github.com/Automattic/pocket-casts-android/pull/3048))
+    *   Add support for the Catalan laguage
+        ([#3072](https://github.com/Automattic/pocket-casts-android/pull/3072))
+    *   Add referrals to the app
+        ([#3107](https://github.com/Automattic/pocket-casts-android/pull/3107))
+*   Bug Fixes
+    *   Keep the playing service in the foreground when casting
+        ([#3094](https://github.com/Automattic/pocket-casts-android/pull/3094))
+    *   Scroll profile tab app bar icons with the content in the landscape orientation
+        ([#3138](https://github.com/Automattic/pocket-casts-android/pull/3138))
+*   Updates
+    *   Move Up Next clear queue button to app bar
+        ([#3068](https://github.com/Automattic/pocket-casts-android/pull/3068))
+
+7.75
+-----
+*   Updates
+    *   Add an advanced setting to display artwork in episode listing
+        ([#2958](https://github.com/Automattic/pocket-casts-android/pull/2958))
+    *   Add a setting that controls whether the remaining playback time adjusts for playback speed and skipped chapters 
+        ([#2955](https://github.com/Automattic/pocket-casts-android/pull/2955))
+        ([#3044](https://github.com/Automattic/pocket-casts-android/pull/3044))
+    *   Display buffer position more accurately for cached episode 
+        ([#2987](https://github.com/Automattic/pocket-casts-android/pull/2987))
+*   Bug Fixes
+    *   Speed up listening history search
+        ([#2979](https://github.com/Automattic/pocket-casts-android/pull/2979))
+    *   Fix search podcast results scroll back to the start after subscribing
+        ([#2923](https://github.com/Automattic/pocket-casts-android/pull/2923))
+    *   Fix episodes stuck on the downloads page
+        ([#3006](https://github.com/Automattic/pocket-casts-android/pull/3006))
+    *   Display web-page based HTML transcripts in web view
+        ([#2910](https://github.com/Automattic/pocket-casts-android/pull/2910))
+*   New Features
+    *   Add a progress bar in the browse view on Android Auto
+        ([#2945](https://github.com/Automattic/pocket-casts-android/pull/2945))
+
+7.74
+-----
+*   Bug Fixes
+    *   Fix search term persists when navigating to different podcast page
+        ([#2908](https://github.com/Automattic/pocket-casts-android/pull/2908))
+    *   Fix the show notes web view jumping after loading
+        ([#2925](https://github.com/Automattic/pocket-casts-android/pull/2925))
+    *   Fix play button local file getting set to pause after episode completion
+        ([#1627](https://github.com/Automattic/pocket-casts-android/pull/1627))
+    *   Fix volume that was not returning to the original level after restarting sleep timer by shaking the device
+        ([#2930](https://github.com/Automattic/pocket-casts-android/pull/2930))
+*   New Features
+    *   Add sleep timer settings to sleep timer bottom sheet
+        ([#2829](https://github.com/Automattic/pocket-casts-android/pull/2829))
+    *   Add Google Engage SDK integration 
+        ([#2847](https://github.com/Automattic/pocket-casts-android/pull/2847))
+
+7.73
+-----
+*   New Features
+    *   Add local search in listening history
+        ([#2794](https://github.com/Automattic/pocket-casts-android/pull/2794))
+*   Updates
+    *   Dark theme improvements on the podcast page
+        ([#2811](https://github.com/Automattic/pocket-casts-android/pull/2811))
+    *   Add a visibility animation to the submit button on the rating screen
+        ([#2824](https://github.com/Automattic/pocket-casts-android/pull/2824))
+    *   Improve performance of rendering artwork
+        ([#2832](https://github.com/Automattic/pocket-casts-android/pull/2832))
+*   Bug Fixes
+    *   Fix issue when transcript type have an alternative valid mime type 
+        [#2910](https://github.com/Automattic/pocket-casts-android/pull/2910)
+    *   Fix display of html entities in transcripts
+        [#2940](https://github.com/Automattic/pocket-casts-android/issues/2940)
+
+7.72
+-----
+*   Bug Fixes
+    *   Fix create filter crash
+        ([#2677](https://github.com/Automattic/pocket-casts-android/pull/2677))
+    *   Improved full screen player Talkback
+        ([#2742](https://github.com/Automattic/pocket-casts-android/pull/2742))
+    *   Fix multi-select toolbar action order
+        ([#2737](https://github.com/Automattic/pocket-casts-android/pull/2737))
+*   New Features
+    *   Content is now shared through a new UI interface with support for different platforms including Instagram Stories
+        ([#2707](https://github.com/Automattic/pocket-casts-android/pull/2707))
+    *   Share clips using links, audio clips, and video clips
+        ([#2707](https://github.com/Automattic/pocket-casts-android/pull/2707))
+    *   Enables transcripts (Internal)
+        ([#2747](https://github.com/Automattic/pocket-casts-android/pull/2747))
+
+7.71
+-----
+*   New Features
+    *   Adds the kids banner in profile
+        ([#2591](https://github.com/Automattic/pocket-casts-android/pull/2591))
+*   Bug Fixes
+    *   Fix playback and download failures due to an insecure connection
+        ([#2717](https://github.com/Automattic/pocket-casts-android/pull/2717))
+    *   Update the episode star value in the Media Session to fix places where it's shown outside the app
+        ([#2613](https://github.com/Automattic/pocket-casts-android/pull/2613))
+    *   Fix content under the mini player on search screens
+        ([#2649](https://github.com/Automattic/pocket-casts-android/pull/2649))
+    *   Fix crash when clicking on chapter title within player
+        ([#2657](https://github.com/Automattic/pocket-casts-android/pull/2657))
+    *   Handle more podcast share links
+        ([#2666](https://github.com/Automattic/pocket-casts-android/pull/2666))
+
+7.70
+-----
+*   Updates
+    *   Episodes shared from the player are updated with the playback status.
+        ([#2499](https://github.com/Automattic/pocket-casts-android/pull/2499))
+    *   Improved the podcast refresh performance.
+        ([#2500](https://github.com/Automattic/pocket-casts-android/pull/2500))
+    *   Rename Lifetime member to Pocket Casts Champion
+        ([#2527](https://github.com/Automattic/pocket-casts-android/pull/2527))
+*   New Features
+    *   Add an option in your account settings to modify your avatar with Gravatar
+        ([#2263](https://github.com/Automattic/pocket-casts-android/pull/2263))
+    *   Add the ability to rate podcasts
+        ([#2506](https://github.com/Automattic/pocket-casts-android/pull/2506))
+*   Bug Fixes
+    *   Fix autoplay for Android Auto
+        ([#2528](https://github.com/Automattic/pocket-casts-android/pull/2528))
+
+7.69
+-----
+* Updated
+    *   App opened from a link with an episode timestamp no longer starts playing automatically.
+        ([#2479](https://github.com/Automattic/pocket-casts-android/pull/2479))
+*   Bug Fixes
+    *   Links to episodes with playback position shared from the app are now correctly recognized.
+        ([#2471](https://github.com/Automattic/pocket-casts-android/pull/2471))
+    *   Fixed Help & feedback AI assistant going under the keyboard.
+        ([#2496](https://github.com/Automattic/pocket-casts-android/pull/2496))
+    *   Fixed Wear app episode download issue.
+        ([#2495](https://github.com/Automattic/pocket-casts-android/pull/2495))
+    *   Fix redirects to the app through https://pocketcasts.com/get links.
+        ([#2559](https://github.com/Automattic/pocket-casts-android/pull/2559))
+
+7.68
+-----
+*   Updates:
+    *   Update Give rating view to include the average rating
+        ([#2421](https://github.com/Automattic/pocket-casts-android/pull/2421))
+    *   Removes download button from shelf list in Now Playing
+        ([#2493](https://github.com/Automattic/pocket-casts-android/pull/2493))
+*   Bug Fixes
+    *   Fix playback speed label tap behavior
+        ([#2439](https://github.com/Automattic/pocket-casts-android/pull/2439))
+
+7.67
+-----
+*   New Features
+    *   Adds advanced setting to enable caching playing episode in order to minimise streaming
+        ([#2380](https://github.com/Automattic/pocket-casts-android/pull/2380))
+*   Bug Fixes
+    *   Fix sharing episodes when using multi-selection
+        ([#2376](https://github.com/Automattic/pocket-casts-android/pull/2376))
+    *   Fix deselected chapters not synced correctly between different platforms
+        ([#2357](https://github.com/Automattic/pocket-casts-android/pull/2357))
+    *   Adds download episode action button to shelf list in Now Playing
+        ([#2325](https://github.com/Automattic/pocket-casts-android/pull/2325))
+    *    Updates carousel title size
+         ([#2401](https://github.com/Automattic/pocket-casts-android/pull/2401))
+
+7.66
+-----
+*   New Features
+    *   Adds an option to export the database and preferences from the Help & Feedback view
+        ([#2309](https://github.com/Automattic/pocket-casts-android/pull/2309))
+    *   Chapters tab is now accessible from episode details.
+        ([#2318](https://github.com/Automattic/pocket-casts-android/pull/2318))
+*   Health
+    *   Increase target SDK version to 34 
+        ([#2279](https://github.com/Automattic/pocket-casts-android/pull/2279))
+    *   Optimize writing large no. of podcast episodes into DB
+        ([#2324](https://github.com/Automattic/pocket-casts-android/pull/2324))
+*   Bug Fixes
+    *   Fix: Subscribe button is highlighted in green instead of gray in the carousel
+        ([#2278](https://github.com/Automattic/pocket-casts-android/pull/2278))
+    *   Fix syncing on app startup in the Automotive app
+        ([#2277](https://github.com/Automattic/pocket-casts-android/pull/2277))
+*   Updates:
+    *   Playback speed can now be changed up to 5x.
+        ([#1645](https://github.com/Automattic/pocket-casts-android/pull/1645))
+
+7.65
+-----
+*   New Features
+    *   Add a storage setting that attempts to fix missing downloads files.
+        ([#2244](https://github.com/Automattic/pocket-casts-android/pull/2244))
+    *   Add an advanced setting that prioritizes seek accuracy over speed during streaming.
+        ([#2265](https://github.com/Automattic/pocket-casts-android/pull/2265))
+    *   Add sleep timer settings that controls the auto restart sleep timer and shake to restart sleep timer
+        ([#2273](https://github.com/Automattic/pocket-casts-android/pull/2273))
+*   Health
+    *   Increase minimum SDK version to 24 ([#2262](https://github.com/Automattic/pocket-casts-android/pull/2262))
+*   Bug Fixes
+    *   Fix Tesla podcast artwork not loading
+        ([#2254](https://github.com/Automattic/pocket-casts-android/pull/2254))
+    *   Fix timestamp parameter handling in shared links
+        ([#2235](https://github.com/Automattic/pocket-casts-android/pull/2235))
+    *   Fix the Google Podcasts OPML file import and include an error message if parsing fails.
+        ([#2260](https://github.com/Automattic/pocket-casts-android/pull/2260))
+    *   Improve intermediate caching of playing episode 
+        ([#2242](https://github.com/Automattic/pocket-casts-android/pull/2242))    
+    *   Fix 'No limit' episode archive setting not being respected 
+        ([#2270](https://github.com/Automattic/pocket-casts-android/pull/2270))
+    *   Fix badges visibility on the Podcasts tab
+        ([#2284](https://github.com/Automattic/pocket-casts-android/pull/2284))
+    *   Fix podcast title talkback on the Podcasts tab
+        ([#2297](https://github.com/Automattic/pocket-casts-android/pull/2297))
+
+7.64
+-----
+*   New Features
+    *   Add three new widgets - small, medium, and large.
+        ([#2216](https://github.com/Automattic/pocket-casts-android/pull/2216))
+*   Updates:
+    *   New design for the Podcasts grid layout
+        ([#2165](https://github.com/Automattic/pocket-casts-android/pull/2165))
+    *   Adds new dedicated tab for up next
+        ([#2213](https://github.com/Automattic/pocket-casts-android/pull/2213))
+    *   Mini player small design refresh
+        ([#2214](https://github.com/Automattic/pocket-casts-android/pull/2214))
+*   Bug Fixes
+    *   Fix pull to refresh icon sometimes being stuck in a loading state
+        ([#2164](https://github.com/Automattic/pocket-casts-android/pull/2164))
+    *   Fix cases where podcasts were ignoring 'Never archive' setting in some cases
+        ([#2194](https://github.com/Automattic/pocket-casts-android/pull/2194))
+    *   Fix sleep timer end of episode was not keeping the last episode listened
+        ([#2269](https://github.com/Automattic/pocket-casts-android/pull/2269))
+
+7.63
+-----
+*   New Features
+    *   Sleep timer: Restart timer when shaking phone
+        ([#2054](https://github.com/Automattic/pocket-casts-android/pull/2054))
+    *   Sleep timer: Start fading out audio when sleep timer has 5 seconds left
+        ([#2069](https://github.com/Automattic/pocket-casts-android/pull/2069))
+    *   Sleep timer: Add the option to select the number of episodes
+        ([#2097](https://github.com/Automattic/pocket-casts-android/pull/2097))
+    *   Enable toggling episode artwork separately in different contexts
+        ([#2112](https://github.com/Automattic/pocket-casts-android/pull/2112))
+    *   Sleep timer: Add the option to select the number of chapters
+        ([#2115](https://github.com/Automattic/pocket-casts-android/pull/2115))
+*   Updates:
+    *   Improved updating podcast episode when subscribed to thousands podcasts. 
+        ([#2082](https://github.com/Automattic/pocket-casts-android/pull/2082))
+    *   Prioritize embedded chapters over remote ones.
+        ([#2098](https://github.com/Automattic/pocket-casts-android/pull/2098))
+*   Bug Fixes
+    *   Fix flashing artwork
+        ([#2086](https://github.com/Automattic/pocket-casts-android/pull/2086))
+    *   Fix embedded artwork not being extracted when adding files
+        ([#2124](https://github.com/Automattic/pocket-casts-android/pull/2124))
+    *   Fix an issue when sorting podcast by episodes could hide some podcasts
+        ([#2125](https://github.com/Automattic/pocket-casts-android/pull/2125))
+
 7.62
 -----
 *   New Features
@@ -5,6 +339,13 @@
         ([#2022](https://github.com/Automattic/pocket-casts-android/pull/2022))
     *   Add profile bookmark screen where all user bookmarks can be managed
         ([#2037](https://github.com/Automattic/pocket-casts-android/pull/2037))
+    *   Sleep Timer restarts automatically if you play again within 5 minutes
+        ([#2048](https://github.com/Automattic/pocket-casts-android/pull/2048))
+*   Bug Fixes
+    *   Improved player view in landscape mode. Added chapter artwork, podcast title, and improved video experience.
+        ([#2044](https://github.com/Automattic/pocket-casts-android/pull/1944))
+    *   Sleep Timer: End of episode option was not being preserved after switching to another episode from Up Next
+        ([#2075](https://github.com/Automattic/pocket-casts-android/pull/2075))
 
 7.61
 -----

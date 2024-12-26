@@ -15,7 +15,7 @@ import androidx.core.os.bundleOf
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.player.databinding.FragmentNotesBinding
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.NotesViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel
@@ -44,7 +44,7 @@ class NotesFragment : BaseFragment() {
 
     @Inject lateinit var playbackManager: PlaybackManager
 
-    @Inject lateinit var analyticsTracker: AnalyticsTrackerWrapper
+    @Inject lateinit var analyticsTracker: AnalyticsTracker
 
     private val playerViewModel: PlayerViewModel by activityViewModels()
     private val viewModel: NotesViewModel by viewModels()
@@ -123,6 +123,8 @@ class NotesFragment : BaseFragment() {
                 settings.loadsImagesAutomatically = true
                 isScrollbarFadingEnabled = false
                 isVerticalScrollBarEnabled = false
+                // stop the web view jumping after loading
+                isFocusable = false
                 setBackgroundColor(Color.TRANSPARENT)
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

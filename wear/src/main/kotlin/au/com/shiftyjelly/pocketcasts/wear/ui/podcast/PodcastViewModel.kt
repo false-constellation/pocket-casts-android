@@ -40,16 +40,16 @@ class PodcastViewModel @Inject constructor(
         ) : UiState()
     }
 
-    val useEpisodeArtwork = settings.useEpisodeArtwork.flow
+    val artworkConfiguration = settings.artworkConfiguration.flow
 
     var uiState: UiState by mutableStateOf(UiState.Empty)
         private set
 
     init {
         viewModelScope.launch(Dispatchers.Default) {
-            val podcast = podcastManager.findPodcastByUuidSuspend(podcastUuid)
+            val podcast = podcastManager.findPodcastByUuid(podcastUuid)
             podcast?.let {
-                episodeManager.observeEpisodesByPodcastOrderedRx(it)
+                episodeManager.findEpisodesByPodcastOrderedRxFlowable(it)
                     .asFlow()
                     .map { podcastEpisodes ->
                         val sortFunction = podcast.grouping.sortFunction

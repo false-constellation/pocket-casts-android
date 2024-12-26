@@ -4,26 +4,24 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import au.com.shiftyjelly.pocketcasts.account.R
 import au.com.shiftyjelly.pocketcasts.models.type.Subscription
-import au.com.shiftyjelly.pocketcasts.models.type.Subscription.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionFrequency
+import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
-import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.UpgradeFeatureCard.PATRON.getTitleForSource as getTitleForSourcePatron
-import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.UpgradeFeatureCard.PLUS.getTitleForSource as getTitleForSourcePlus
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 sealed class UpgradeFeatureCard(
-    val titleRes: (OnboardingUpgradeSource) -> Int,
     @StringRes val shortNameRes: Int,
     @DrawableRes val backgroundGlowsRes: Int,
     @DrawableRes val iconRes: Int,
     val featureItems: (SubscriptionFrequency) -> List<UpgradeFeatureItem>,
     val subscriptionTier: SubscriptionTier,
 ) {
+    abstract val titleRes: (OnboardingUpgradeSource) -> Int
+
     data object PLUS : UpgradeFeatureCard(
-        titleRes = { source -> getTitleForSourcePlus(source) },
         shortNameRes = LR.string.pocket_casts_plus_short,
         backgroundGlowsRes = R.drawable.upgrade_background_plus_glows,
         iconRes = IR.drawable.ic_plus,
@@ -35,7 +33,9 @@ sealed class UpgradeFeatureCard(
         },
         subscriptionTier = SubscriptionTier.PLUS,
     ) {
-        fun getTitleForSource(
+        override val titleRes: (OnboardingUpgradeSource) -> Int = { source -> getTitleForSource(source) }
+
+        private fun getTitleForSource(
             source: OnboardingUpgradeSource,
         ) = when {
             (
@@ -45,12 +45,23 @@ sealed class UpgradeFeatureCard(
                 )
             -> LR.string.skip_chapters_plus_prompt
 
+            source == OnboardingUpgradeSource.UP_NEXT_SHUFFLE &&
+                SubscriptionTier.fromFeatureTier(Feature.UP_NEXT_SHUFFLE) == SubscriptionTier.PLUS
+            -> LR.string.up_next_shuffle_plus_prompt
+
+            source == OnboardingUpgradeSource.FOLDERS || source == OnboardingUpgradeSource.FOLDERS_PODCAST_SCREEN -> LR.string.folders_plus_prompt
+
+            source == OnboardingUpgradeSource.THEMES -> LR.string.themes_plus_prompt
+
+            source == OnboardingUpgradeSource.ICONS -> LR.string.icons_plus_prompt
+
+            source == OnboardingUpgradeSource.FILES -> LR.string.files_plus_prompt
+
             else -> LR.string.onboarding_plus_features_title
         }
     }
 
     data object PATRON : UpgradeFeatureCard(
-        titleRes = { source -> getTitleForSourcePatron(source) },
         shortNameRes = LR.string.pocket_casts_patron_short,
         backgroundGlowsRes = R.drawable.upgrade_background_patron_glows,
         iconRes = IR.drawable.ic_patron,
@@ -62,7 +73,9 @@ sealed class UpgradeFeatureCard(
         },
         subscriptionTier = SubscriptionTier.PATRON,
     ) {
-        fun getTitleForSource(
+        override val titleRes: (OnboardingUpgradeSource) -> Int = { source -> getTitleForSource(source) }
+
+        private fun getTitleForSource(
             source: OnboardingUpgradeSource,
         ) = when {
             (
@@ -83,7 +96,7 @@ data class FeatureCardsState(
     val currentFrequency: SubscriptionFrequency,
 ) {
     val featureCards = SubscriptionTier.entries
-        .filter { tier -> tier != SubscriptionTier.UNKNOWN && tier in subscriptions.map { it.tier } }
+        .filter { tier -> tier != SubscriptionTier.NONE && tier in subscriptions.map { it.tier } }
         .map { it.toUpgradeFeatureCard() }
 
     val showPageIndicator = featureCards.size > 1
@@ -92,5 +105,5 @@ data class FeatureCardsState(
 fun SubscriptionTier.toUpgradeFeatureCard() = when (this) {
     SubscriptionTier.PLUS -> UpgradeFeatureCard.PLUS
     SubscriptionTier.PATRON -> UpgradeFeatureCard.PATRON
-    SubscriptionTier.UNKNOWN -> throw IllegalStateException("Unknown subscription tier")
+    SubscriptionTier.NONE -> throw IllegalStateException("Unknown subscription tier")
 }

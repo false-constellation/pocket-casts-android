@@ -6,7 +6,6 @@ import au.com.shiftyjelly.pocketcasts.models.to.SignInState
 import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionPlatform
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionType
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingExitInfo
 import au.com.shiftyjelly.pocketcasts.sharedtest.MainCoroutineRule
@@ -33,12 +32,11 @@ class OnboardingActivityViewModelTest {
     private lateinit var viewModel: OnboardingActivityViewModel
 
     private val paidSubscriptionStatus = SubscriptionStatus.Paid(
-        expiry = Date(),
+        expiryDate = Date(),
         autoRenew = false,
         index = 0,
         platform = SubscriptionPlatform.GIFT,
         tier = SubscriptionTier.PLUS,
-        type = SubscriptionType.PLUS,
     )
 
     private val freeSubscriptionStatus = SubscriptionStatus.Free()
@@ -70,6 +68,16 @@ class OnboardingActivityViewModelTest {
         viewModel.finishState.test {
             viewModel.onExitOnboarding(OnboardingExitInfo(showPlusPromotionForFreeUser = true))
             assert(awaitItem() == OnboardingFinish.Done)
+        }
+    }
+
+    @Test
+    fun `given showWelcomeInReferralFlow is true, when exit onboarding, then finish with DoneShowWelcomeInReferralFlow`() = runTest {
+        initViewModel(freeSubscriptionStatus)
+
+        viewModel.finishState.test {
+            viewModel.onExitOnboarding(OnboardingExitInfo(showWelcomeInReferralFlow = true))
+            assert(awaitItem() == OnboardingFinish.DoneShowWelcomeInReferralFlow)
         }
     }
 

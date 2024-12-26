@@ -11,13 +11,15 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.StringRes
-import androidx.core.os.bundleOf
+import androidx.core.os.BundleCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
@@ -25,8 +27,12 @@ import au.com.shiftyjelly.pocketcasts.images.R
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeViewSource
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarksFragment
+import au.com.shiftyjelly.pocketcasts.player.view.chapters.ChaptersFragment
+import au.com.shiftyjelly.pocketcasts.player.view.chapters.ChaptersViewModel
+import au.com.shiftyjelly.pocketcasts.player.view.chapters.ChaptersViewModel.Mode.Episode
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.BookmarksViewModel
 import au.com.shiftyjelly.pocketcasts.podcasts.databinding.FragmentEpisodeContainerBinding
+import au.com.shiftyjelly.pocketcasts.podcasts.view.episode.EpisodeFragment.EpisodeFragmentArgs
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
 import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarColor
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
@@ -36,8 +42,9 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.lifecycle.withCreationCallback
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 import au.com.shiftyjelly.pocketcasts.ui.R as UR
@@ -47,13 +54,7 @@ class EpisodeContainerFragment :
     BaseDialogFragment(),
     EpisodeFragment.EpisodeLoadedListener {
     companion object {
-        const val ARG_EPISODE_UUID = "episodeUUID"
-        const val ARG_TIMESTAMP_IN_SECS = "timestamp_in_secs"
-        const val ARG_EPISODE_VIEW_SOURCE = "episode_view_source"
-        const val ARG_OVERRIDE_PODCAST_LINK = "override_podcast_link"
-        const val ARG_PODCAST_UUID = "podcastUUID"
-        const val ARG_FROMLIST_UUID = "fromListUUID"
-        const val ARG_FORCE_DARK = "forceDark"
+        private const val NEW_INSTANCE_ARG = "EpisodeContainerFragmentArg"
 
         fun newInstance(
             episode: PodcastEpisode,
@@ -61,6 +62,7 @@ class EpisodeContainerFragment :
             overridePodcastLink: Boolean = false,
             fromListUuid: String? = null,
             forceDark: Boolean = false,
+            autoPlay: Boolean = false,
         ) = newInstance(
             episodeUuid = episode.uuid,
             source = source,
@@ -68,6 +70,7 @@ class EpisodeContainerFragment :
             podcastUuid = episode.podcastUuid,
             fromListUuid = fromListUuid,
             forceDark = forceDark,
+            autoPlay = autoPlay,
         )
 
         fun newInstance(
@@ -78,17 +81,26 @@ class EpisodeContainerFragment :
             fromListUuid: String? = null,
             forceDark: Boolean = false,
             timestamp: Duration? = null,
+            autoPlay: Boolean = false,
         ) = EpisodeContainerFragment().apply {
-            arguments = bundleOf(
-                ARG_EPISODE_UUID to episodeUuid,
-                ARG_TIMESTAMP_IN_SECS to timestamp?.inWholeSeconds,
-                ARG_EPISODE_VIEW_SOURCE to source.value,
-                ARG_OVERRIDE_PODCAST_LINK to overridePodcastLink,
-                ARG_PODCAST_UUID to podcastUuid,
-                ARG_FROMLIST_UUID to fromListUuid,
-                ARG_FORCE_DARK to forceDark,
-            )
+            arguments = Bundle().apply {
+                putParcelable(
+                    NEW_INSTANCE_ARG,
+                    EpisodeFragmentArgs(
+                        episodeUuid = episodeUuid,
+                        source = source,
+                        overridePodcastLink = overridePodcastLink,
+                        podcastUuid = podcastUuid,
+                        fromListUuid = fromListUuid,
+                        forceDark = forceDark,
+                        timestamp = timestamp,
+                        autoPlay = autoPlay,
+                    ),
+                )
+            }
         }
+        private fun extractArgs(bundle: Bundle?): EpisodeFragmentArgs? =
+            bundle?.let { BundleCompat.getParcelable(it, NEW_INSTANCE_ARG, EpisodeFragmentArgs::class.java) }
     }
 
     override val statusBarColor: StatusBarColor
@@ -100,26 +112,32 @@ class EpisodeContainerFragment :
 
     var binding: FragmentEpisodeContainerBinding? = null
 
-    private val episodeUUID: String?
-        get() = arguments?.getString(ARG_EPISODE_UUID)
+    private val args: EpisodeFragmentArgs
+        get() = extractArgs(arguments) ?: throw IllegalStateException("${this::class.java.simpleName} is missing arguments. It must be created with newInstance function")
+
+    private val episodeUUID: String
+        get() = args.episodeUuid
 
     private val timestamp: Duration?
-        get() = arguments?.getLong(ARG_TIMESTAMP_IN_SECS)?.seconds
+        get() = args.timestamp
 
     private val episodeViewSource: EpisodeViewSource
-        get() = EpisodeViewSource.fromString(arguments?.getString(ARG_EPISODE_VIEW_SOURCE))
+        get() = args.source
 
     private val overridePodcastLink: Boolean
-        get() = arguments?.getBoolean(ARG_OVERRIDE_PODCAST_LINK) ?: false
+        get() = args.overridePodcastLink
 
     val podcastUuid: String?
-        get() = arguments?.getString(ARG_PODCAST_UUID)
+        get() = args.podcastUuid
 
     val fromListUuid: String?
-        get() = arguments?.getString(ARG_FROMLIST_UUID)
+        get() = args.fromListUuid
 
     private val forceDarkTheme: Boolean
-        get() = arguments?.getBoolean(ARG_FORCE_DARK) ?: false
+        get() = args.forceDark
+
+    private val autoPlay: Boolean
+        get() = args.autoPlay
 
     val activeTheme: Theme.ThemeType
         get() = if (forceDarkTheme && theme.isLightTheme) Theme.ThemeType.DARK else theme.activeTheme
@@ -128,6 +146,13 @@ class EpisodeContainerFragment :
 
     private val viewModel: EpisodeContainerFragmentViewModel by viewModels()
     private val bookmarksViewModel: BookmarksViewModel by viewModels()
+    private val chaptersViewModel by viewModels<ChaptersViewModel>(
+        extrasProducer = {
+            defaultViewModelCreationExtras.withCreationCallback<ChaptersViewModel.Factory> { factory ->
+                factory.create(Episode(episodeUUID))
+            }
+        },
+    )
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         if (!forceDarkTheme || theme.isDarkTheme) {
@@ -199,6 +224,7 @@ class EpisodeContainerFragment :
             podcastUuid = podcastUuid,
             fromListUuid = fromListUuid,
             forceDarkTheme = forceDarkTheme,
+            autoPlay = autoPlay,
         )
 
         viewPager.adapter = adapter
@@ -217,12 +243,20 @@ class EpisodeContainerFragment :
                 super.onPageSelected(position)
                 btnFav.isVisible = adapter.isDetailsTab(position)
                 btnShare.isVisible = adapter.isDetailsTab(position)
-                viewModel.onPageSelected(position)
+                viewModel.onPageSelected(adapter.pageKey(position))
             }
         })
 
         if (episodeViewSource == EpisodeViewSource.NOTIFICATION_BOOKMARK) {
             openBookmarks()
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                chaptersViewModel.uiState.collect {
+                    adapter.update(addChapters = it.chaptersCount > 0)
+                }
+            }
         }
     }
 
@@ -266,18 +300,40 @@ class EpisodeContainerFragment :
         private val podcastUuid: String?,
         private val fromListUuid: String?,
         private val forceDarkTheme: Boolean,
+        private val autoPlay: Boolean,
     ) : FragmentStateAdapter(fragmentManager, lifecycle) {
         val indexOfBookmarks: Int
             get() = sections.indexOf(Section.Bookmarks)
 
-        private sealed class Section(@StringRes val titleRes: Int) {
-            data object Details : Section(LR.string.details)
-            data object Bookmarks : Section(LR.string.bookmarks)
+        private sealed class Section(@StringRes val titleRes: Int, val analyticsValue: String) {
+            data object Details : Section(LR.string.details, "details")
+            data object Chapters : Section(LR.string.chapters, "chapters")
+            data object Bookmarks : Section(LR.string.bookmarks, "bookmarks")
         }
 
-        private var sections = mutableListOf<Section>(Section.Details).apply {
-            add(Section.Bookmarks)
-        }.toList()
+        private var sections = listOf(
+            Section.Details,
+            Section.Bookmarks,
+        )
+
+        fun update(addChapters: Boolean) {
+            val currentSections = sections
+            val newSections = buildList {
+                add(Section.Details)
+                if (addChapters) {
+                    add(Section.Chapters)
+                }
+                add(Section.Bookmarks)
+            }
+            if (currentSections != newSections) {
+                sections = newSections
+                if (addChapters) {
+                    notifyItemInserted(1)
+                } else {
+                    notifyItemRemoved(1)
+                }
+            }
+        }
 
         override fun getItemId(position: Int): Long {
             return sections[position].hashCode().toLong()
@@ -294,20 +350,25 @@ class EpisodeContainerFragment :
         override fun createFragment(position: Int): Fragment {
             Timber.d("Creating fragment for position $position ${sections[position]}")
             return when (sections[position]) {
-                Section.Details -> EpisodeFragment.newInstance(
-                    episodeUuid = requireNotNull(episodeUUID),
-                    timestamp = timestamp,
-                    source = episodeViewSource,
-                    overridePodcastLink = overridePodcastLink,
-                    podcastUuid = podcastUuid,
-                    fromListUuid = fromListUuid,
-                    forceDark = forceDarkTheme,
-                )
-
+                Section.Details ->
+                    EpisodeFragment
+                        .newInstance(
+                            episodeUuid = requireNotNull(episodeUUID),
+                            timestamp = timestamp,
+                            source = episodeViewSource,
+                            overridePodcastLink = overridePodcastLink,
+                            podcastUuid = podcastUuid,
+                            fromListUuid = fromListUuid,
+                            forceDark = forceDarkTheme,
+                            autoPlay = autoPlay,
+                        )
                 Section.Bookmarks -> BookmarksFragment.newInstance(
                     sourceView = SourceView.EPISODE_DETAILS,
                     episodeUuid = requireNotNull(episodeUUID),
                     forceDarkTheme = forceDarkTheme,
+                )
+                Section.Chapters -> ChaptersFragment.forEpisode(
+                    episodeUuid = requireNotNull(episodeUUID),
                 )
             }
         }
@@ -316,6 +377,8 @@ class EpisodeContainerFragment :
         fun pageTitle(position: Int): Int {
             return sections[position].titleRes
         }
+
+        fun pageKey(position: Int) = sections[position].analyticsValue
 
         fun isDetailsTab(position: Int) = sections[position] is Section.Details
     }

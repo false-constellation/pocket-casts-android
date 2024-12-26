@@ -109,6 +109,10 @@ object TimeHelper {
         return if (output.isEmpty()) emptyString else output
     }
 
+    fun getTimeLeft(currentTimeMs: Int, durationMs: Int, inProgress: Boolean, context: Context): TimeLeft {
+        return getTimeLeft(currentTimeMs, durationMs.toLong(), inProgress, context)
+    }
+
     fun getTimeLeft(currentTimeMs: Int, durationMs: Long, inProgress: Boolean, context: Context): TimeLeft {
         if (durationMs == 0L) {
             return TimeLeft(text = "-", description = "")
@@ -124,25 +128,6 @@ object TimeHelper {
             text = context.getString(R.string.time_left, getTimeDurationShortString(remaining, context, emptyString = "0")),
             description = context.getString(R.string.time_left, getTimeDurationString(remaining, context, emptyString = "0")),
         )
-    }
-
-    /**
-     * Milliseconds to string e.g. 11:43 or 2:18:90
-     */
-    fun getTimeLeftOnlyNumbers(currentTimeMs: Int, durationMs: Int): String {
-        val timeLeftMs: Int = when {
-            durationMs <= 0 -> 0
-            currentTimeMs <= 0 -> durationMs
-            else -> durationMs - currentTimeMs
-        }
-        return if (timeLeftMs <= 0) formattedMs(0) else "-${formattedMs(timeLeftMs)}"
-    }
-
-    /**
-     * Milliseconds to string e.g. 11:43 or 2:18:90
-     */
-    fun formattedMs(ms: Int): String {
-        return formattedSeconds(ms.toDouble() / 1000.0)
     }
 
     fun formattedSeconds(seconds: Double, hoursFormat: String = "%d:%02d:%02d", noHoursFormat: String = "%02d:%02d"): String {

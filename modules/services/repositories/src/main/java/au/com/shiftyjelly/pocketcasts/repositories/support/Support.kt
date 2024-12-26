@@ -13,6 +13,7 @@ import androidx.lifecycle.toPublisher
 import androidx.work.WorkManager
 import au.com.shiftyjelly.pocketcasts.localization.R
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
+import au.com.shiftyjelly.pocketcasts.models.entity.Podcast.Companion.AUTO_DOWNLOAD_NEW_EPISODES
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
@@ -30,6 +31,8 @@ import au.com.shiftyjelly.pocketcasts.utils.FileUtil
 import au.com.shiftyjelly.pocketcasts.utils.Network
 import au.com.shiftyjelly.pocketcasts.utils.SystemBatteryRestrictions
 import au.com.shiftyjelly.pocketcasts.utils.Util
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import com.jaredrummler.android.device.DeviceName
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -67,11 +70,6 @@ class Support @Inject constructor(
 
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Default
-
-    val afterPlayingValues
-        get() = context.resources.getStringArray(R.array.settings_auto_archive_played_values)
-    val inactiveValues
-        get() = context.resources.getStringArray(R.array.settings_auto_archive_inactive_values)
 
     @Suppress("DEPRECATION")
     suspend fun shareLogs(subject: String, intro: String, emailSupport: Boolean, context: Context): Intent {
@@ -137,33 +135,6 @@ class Support @Inject constructor(
 
         return intent
     }
-
-    suspend fun shareWearLogs(logBytes: ByteArray, subject: String, context: Context): Intent =
-        withContext(Dispatchers.IO) {
-            val intent = Intent(Intent.ACTION_SEND)
-            intent.type = "text/html"
-
-            val isPaid = subscriptionManager.getCachedStatus() is SubscriptionStatus.Paid
-            intent.putExtra(
-                Intent.EXTRA_SUBJECT,
-                "$subject v${settings.getVersion()} ${getAccountType(isPaid)}",
-            )
-
-            try {
-                val emailFolder = File(context.filesDir, "email")
-                emailFolder.mkdirs()
-                val debugFile = File(emailFolder, "debug_wear.txt")
-
-                debugFile.writeBytes(logBytes)
-                val fileUri =
-                    FileUtil.createUriWithReadPermissions(context, debugFile, intent)
-                intent.putExtra(Intent.EXTRA_STREAM, fileUri)
-            } catch (e: Exception) {
-                Timber.e(e)
-                intent.putExtra(Intent.EXTRA_TEXT, String(logBytes))
-            }
-            intent
-        }
 
     suspend fun emailWearLogsToSupportIntent(logBytes: ByteArray, context: Context): Intent {
         val subject = "Android wear support"
@@ -275,12 +246,16 @@ class Support @Inject constructor(
                 }
             }
 
+            val features = Feature.entries.map { "${it.key}: ${FeatureFlag.isEnabled(it)}" }
+            output.append("Feature flags").append(eol)
+            features.forEach { output.append(it).append(eol) }
+
             val podcastsOutput = StringBuilder()
             podcastsOutput.append("Podcasts").append(eol).append("--------").append(eol).append(eol)
             val autoDownloadOn = booleanArrayOf(false)
             val uuidToPodcast = HashMap<String, Podcast>()
             try {
-                val podcasts = podcastManager.findSubscribed()
+                val podcasts = podcastManager.findSubscribedBlocking()
                 for (podcast in podcasts) {
                     if (podcast.isAutoDownloadNewEpisodes) {
                         autoDownloadOn[0] = true
@@ -295,8 +270,8 @@ class Support @Inject constructor(
                     podcastsOutput.append("Custom auto archive: ").append(podcast.overrideGlobalArchive.toString()).append(eol)
                     if (podcast.overrideGlobalArchive) {
                         podcastsOutput.append("Episode limit: ").append(podcast.autoArchiveEpisodeLimit).append(eol)
-                        podcastsOutput.append("Archive after playing: ").append(afterPlayingValues[podcast.autoArchiveAfterPlaying.index]).append(eol)
-                        podcastsOutput.append("Archive inactive: ").append(inactiveValues[podcast.autoArchiveInactive.index]).append(eol)
+                        podcastsOutput.append("Archive after playing: ").append(podcast.autoArchiveAfterPlaying?.analyticsValue).append(eol)
+                        podcastsOutput.append("Archive inactive: ").append(podcast.autoArchiveInactive?.analyticsValue).append(eol)
                     }
                     podcastsOutput.append("Auto add to up next: ").append(autoAddToUpNextToString(podcast.autoAddToUpNext)).append(eol)
                     podcastsOutput.append(eol)
@@ -316,6 +291,9 @@ class Support @Inject constructor(
             output.append(eol)
             output.append("Auto downloads").append(eol)
             output.append("  Any podcast? ").append(yesNoString(autoDownloadOn[0])).append(eol)
+            output.append("  New Episodes? ").append(yesNoString(settings.autoDownloadNewEpisodes.value == AUTO_DOWNLOAD_NEW_EPISODES)).append(eol)
+            output.append("  On Follow? ").append(yesNoString(settings.autoDownloadOnFollowPodcast.value)).append(eol)
+            output.append("  Limit Downloads ").append(settings.autoDownloadLimit.value).append(eol)
             output.append("  Up Next? ").append(yesNoString(settings.autoDownloadUpNext.value)).append(eol)
             output.append("  Only on unmetered WiFi? ").append(yesNoString(settings.autoDownloadUnmeteredOnly.value)).append(eol)
             output.append("  Only when charging? ").append(yesNoString(settings.autoDownloadOnlyWhenCharging.value)).append(eol)
@@ -418,9 +396,9 @@ class Support @Inject constructor(
                     .append(" Volume boost: ").append(if (effects.isVolumeBoosted) "on" else "off").append(eol).append(eol)
 
                 output.append("Database").append(eol)
-                    .append(" ").append(podcastManager.countPodcasts()).append(" Podcasts ").append(eol)
+                    .append(" ").append(podcastManager.countPodcastsBlocking()).append(" Podcasts ").append(eol)
                     .append(" ").append(episodeManager.countEpisodes()).append(" Episodes ").append(eol)
-                    .append(" ").append(playlistManager.findAll().size).append(" Playlists ").append(eol)
+                    .append(" ").append(playlistManager.findAllBlocking().size).append(" Playlists ").append(eol)
                     .append(" ").append(queue.size).append(" Up Next ").append(eol).append(eol)
 
                 output.append(podcastsOutput.toString())
@@ -428,7 +406,7 @@ class Support @Inject constructor(
                 output.append("Filters").append(eol).append("-------").append(eol).append(eol)
 
                 try {
-                    val playlists = playlistManager.findAll()
+                    val playlists = playlistManager.findAllBlocking()
                     for (playlist in playlists) {
                         output.append(playlist.title).append(eol)
                         output.append("Auto Download? ").append(playlist.autoDownload).append(" Unmetered only? ").append(playlist.autoDownloadUnmeteredOnly).append(" Power only? ").append(playlist.autoDownloadPowerOnly).append(eol)
@@ -438,10 +416,14 @@ class Support @Inject constructor(
                     Timber.e(e)
                 }
 
+                output.append("Advance Settings").append(eol).append("-------------------").append(eol).append(eol)
+                output.append("Prioritize seek accuracy? ").append(settings.prioritizeSeekAccuracy.value).append(eol)
+                output.append(eol)
+
                 output.append("Episode Issues").append(eol).append("--------------").append(eol).append(eol)
 
                 try {
-                    val episodes = episodeManager.findEpisodesWhere("downloaded_error_details IS NOT NULL AND LENGTH(downloaded_error_details) > 0 LIMIT 100")
+                    val episodes = episodeManager.findEpisodesWhereBlocking("downloaded_error_details IS NOT NULL AND LENGTH(downloaded_error_details) > 0 LIMIT 100")
                     for (episode in episodes) {
                         output.append("Title: ").append(episode.title).append(eol)
                         output.append("Id: ").append(episode.uuid).append(eol)

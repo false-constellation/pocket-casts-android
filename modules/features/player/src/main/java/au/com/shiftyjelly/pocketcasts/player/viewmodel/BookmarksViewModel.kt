@@ -1,16 +1,16 @@
 package au.com.shiftyjelly.pocketcasts.player.viewmodel
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.bookmark.BookmarkRowColors
 import au.com.shiftyjelly.pocketcasts.compose.buttons.TimePlayButtonStyle
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
+import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarkArguments
@@ -20,6 +20,7 @@ import au.com.shiftyjelly.pocketcasts.player.view.bookmark.components.NoBookmark
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.search.BookmarkSearchHandler
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.UserSetting
+import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration.Element
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortType
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeDefault
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeForProfile
@@ -28,10 +29,8 @@ import au.com.shiftyjelly.pocketcasts.repositories.di.IoDispatcher
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.SharePodcastHelper
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.SharePodcastHelper.ShareType
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import au.com.shiftyjelly.pocketcasts.utils.extensions.combine6
+import au.com.shiftyjelly.pocketcasts.utils.extensions.combine
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.BookmarkFeatureControl
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.UserTier
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
@@ -56,7 +55,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class BookmarksViewModel
 @Inject constructor(
-    private val analyticsTracker: AnalyticsTrackerWrapper,
+    private val analyticsTracker: AnalyticsTracker,
     private val bookmarkManager: BookmarkManager,
     private val episodeManager: EpisodeManager,
     private val podcastManager: PodcastManager,
@@ -74,6 +73,9 @@ class BookmarksViewModel
 
     private val _showOptionsDialog = MutableSharedFlow<Int>()
     val showOptionsDialog = _showOptionsDialog.asSharedFlow()
+
+    private val _message = MutableSharedFlow<BookmarkMessage>()
+    val message = _message.asSharedFlow()
 
     private var isFragmentActive: Boolean = true
 
@@ -163,14 +165,14 @@ class BookmarksViewModel
         val isMultiSelectingFlow = multiSelectHelper.isMultiSelectingLive.asFlow()
         val selectedListFlow = multiSelectHelper.selectedListLive.asFlow()
         val bookmarkSearchResults = bookmarkSearchHandler.getBookmarkSearchResultsFlow()
-        combine6(
+        combine(
             bookmarksFlow,
             isMultiSelectingFlow,
             selectedListFlow,
             settings.cachedSubscriptionStatus.flow,
-            settings.useEpisodeArtwork.flow,
+            settings.artworkConfiguration.flow,
             bookmarkSearchResults,
-        ) { bookmarks, isMultiSelecting, selectedList, cachedSubscriptionStatus, useEpisodeArtwork, searchResults ->
+        ) { bookmarks, isMultiSelecting, selectedList, cachedSubscriptionStatus, artworkConfiguration, searchResults ->
             val userTier = (cachedSubscriptionStatus as? SubscriptionStatus.Paid)?.tier?.toUserTier() ?: UserTier.Free
             _uiState.value = if (!bookmarkFeature.isAvailable(userTier)) {
                 UiState.Upsell(sourceView)
@@ -178,7 +180,7 @@ class BookmarksViewModel
                 UiState.Empty(sourceView)
             } else {
                 val searchText = (_uiState.value as? UiState.Loaded)?.searchText ?: ""
-                val filteredBookmarks = if (searchText.isNotEmpty()) {
+                val filteredBookmarks = if (searchResults.searchTerm.isNotEmpty()) {
                     bookmarks.filter { bookmark -> searchResults.searchUuids?.contains(bookmark.uuid) == true }
                 } else {
                     bookmarks
@@ -192,7 +194,7 @@ class BookmarksViewModel
                     bookmarks = filteredBookmarks,
                     bookmarkIdAndEpisodeMap = bookmarkIdAndEpisodeMap,
                     isMultiSelecting = isMultiSelecting,
-                    useEpisodeArtwork = useEpisodeArtwork,
+                    useEpisodeArtwork = artworkConfiguration.useEpisodeArtwork(Element.Bookmarks),
                     isSelected = { selectedBookmark ->
                         selectedList.map { bookmark -> bookmark.uuid }
                             .contains(selectedBookmark.uuid)
@@ -201,7 +203,8 @@ class BookmarksViewModel
                     sourceView = sourceView,
                     showIcon = sourceView == SourceView.PROFILE,
                     searchEnabled = sourceView == SourceView.PROFILE,
-                    searchText = searchResults.searchTerm,
+                    searchText = searchText,
+                    showEpisodeTitle = sourceView == SourceView.PROFILE,
                 )
             }
         }.stateIn(viewModelScope)
@@ -262,34 +265,19 @@ class BookmarksViewModel
         }
     }
 
-    fun onShareClicked(context: Context) {
-        (_uiState.value as? UiState.Loaded)?.let {
-            val bookmark =
-                it.bookmarks.firstOrNull { bookmark -> multiSelectHelper.isSelected(bookmark) }
-            bookmark?.let {
-                viewModelScope.launch {
-                    val podcast = podcastManager.findPodcastByUuidSuspend(bookmark.podcastUuid)
-                    val episode = episodeManager.findEpisodeByUuid(bookmark.episodeUuid)
-                    if (podcast != null && episode is PodcastEpisode) {
-                        SharePodcastHelper(
-                            podcast,
-                            episode,
-                            bookmark.timeSecs.toDouble(),
-                            context,
-                            ShareType.BOOKMARK_TIME,
-                            sourceView,
-                            analyticsTracker,
-                        ).showShareDialogDirect()
-                    }
-                }
-            }
+    suspend fun getSharedBookmark(): Triple<Podcast, PodcastEpisode, Bookmark>? {
+        return (_uiState.value as? UiState.Loaded)?.let {
+            val bookmark = it.bookmarks.firstOrNull { bookmark -> multiSelectHelper.isSelected(bookmark) } ?: return null
+            val podcast = podcastManager.findPodcastByUuid(bookmark.podcastUuid) ?: return null
+            val episode = episodeManager.findEpisodeByUuid(bookmark.episodeUuid) as? PodcastEpisode ?: return null
+            Triple(podcast, episode, bookmark)
         }
     }
 
     fun onSearchTextChanged(searchText: String) {
         (uiState.value as? UiState.Loaded)?.let {
             _uiState.value = it.copy(searchText = searchText)
-            bookmarkSearchHandler.searchQueryUpdated(searchText)
+            bookmarkSearchHandler.searchQueryUpdated(searchText.trim())
         }
     }
 
@@ -313,7 +301,11 @@ class BookmarksViewModel
                 if (shouldLoadOrSwitchEpisode) {
                     playbackManager.playNowSync(it, sourceView = sourceView)
                 }
+            } ?: run {
+                _message.emit(BookmarkMessage.BookmarkEpisodeNotFound)
+                return@launch
             }
+            _message.emit(BookmarkMessage.PlayingBookmark(bookmark.title))
             playbackManager.seekToTimeMs(positionMs = bookmark.timeSecs * 1000)
             analyticsTracker.track(
                 AnalyticsEvent.BOOKMARK_PLAY_TAPPED,
@@ -332,7 +324,7 @@ class BookmarksViewModel
             bookmark?.let {
                 val episodeUuid = bookmark.episodeUuid
                 viewModelScope.launch(ioDispatcher) {
-                    val podcast = podcastManager.findPodcastByUuidSuspend(bookmark.podcastUuid)
+                    val podcast = podcastManager.findPodcastByUuid(bookmark.podcastUuid)
                     val backgroundColor =
                         if (podcast == null) 0xFF000000.toInt() else theme.playerBackgroundColor(podcast)
                     val tintColor =
@@ -381,6 +373,7 @@ class BookmarksViewModel
             val showIcon: Boolean = false,
             val searchText: String = "",
             val searchEnabled: Boolean = false,
+            val showEpisodeTitle: Boolean = false,
         ) : UiState() {
             val headerRowColors: HeaderRowColors
                 get() = when (sourceView) {
@@ -406,5 +399,10 @@ class BookmarksViewModel
                     else -> MessageViewColors.Default
                 }
         }
+    }
+
+    sealed class BookmarkMessage {
+        data object BookmarkEpisodeNotFound : BookmarkMessage()
+        data class PlayingBookmark(val bookmarkTitle: String) : BookmarkMessage()
     }
 }

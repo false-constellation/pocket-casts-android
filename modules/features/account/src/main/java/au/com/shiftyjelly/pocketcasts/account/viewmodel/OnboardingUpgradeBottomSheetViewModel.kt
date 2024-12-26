@@ -9,10 +9,11 @@ import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeBottomS
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeBottomSheetState.Loading
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeBottomSheetState.NoSubscriptions
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.models.type.OfferSubscriptionPricingPhase
 import au.com.shiftyjelly.pocketcasts.models.type.Subscription
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionMapper
+import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.ProductDetailsState
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.PurchaseEvent
@@ -36,8 +37,9 @@ import timber.log.Timber
 @HiltViewModel
 class OnboardingUpgradeBottomSheetViewModel @Inject constructor(
     private val subscriptionManager: SubscriptionManager,
-    private val analyticsTracker: AnalyticsTrackerWrapper,
+    private val analyticsTracker: AnalyticsTracker,
     private val settings: Settings,
+    private val subscriptionMapper: SubscriptionMapper,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -62,10 +64,10 @@ class OnboardingUpgradeBottomSheetViewModel @Inject constructor(
                     val subscriptions = when (productDetails) {
                         is ProductDetailsState.Error -> null
                         is ProductDetailsState.Loaded -> productDetails.productDetails.mapNotNull { productDetailsState ->
-                            Subscription.fromProductDetails(
+                            subscriptionMapper.mapFromProductDetails(
                                 productDetails = productDetailsState,
                                 isOfferEligible = subscriptionManager.isOfferEligible(
-                                    SubscriptionMapper.mapProductIdToTier(productDetailsState.productId),
+                                    SubscriptionTier.fromProductId(productDetailsState.productId),
                                 ),
                             )
                         }
@@ -155,11 +157,16 @@ class OnboardingUpgradeBottomSheetViewModel @Inject constructor(
         val lastSelectedFrequency = settings.getLastSelectedSubscriptionFrequency().takeIf { source in listOf(OnboardingUpgradeSource.LOGIN, OnboardingUpgradeSource.PROFILE) }
 
         val fromProfile = source == OnboardingUpgradeSource.PROFILE
-        val defaultSelected = subscriptionManager.getDefaultSubscription(
-            subscriptions = subscriptions,
-            tier = lastSelectedTier,
-            frequency = lastSelectedFrequency,
-        )
+        val defaultSelected = if (source == OnboardingUpgradeSource.LOGIN) {
+            subscriptionManager.getDefaultSubscription(
+                subscriptions = subscriptions,
+                tier = lastSelectedTier,
+                frequency = lastSelectedFrequency,
+            )
+        } else {
+            subscriptionManager.getDefaultSubscription(subscriptions = subscriptions, tier = lastSelectedTier)
+        }
+
         return if (defaultSelected == null) {
             NoSubscriptions
         } else {
@@ -215,7 +222,6 @@ sealed class OnboardingUpgradeBottomSheetState {
         val mostRecentlySelectedOfferPhase: OfferSubscriptionPricingPhase? = null,
         val purchaseFailed: Boolean = false,
     ) : OnboardingUpgradeBottomSheetState() {
-        val showTrialInfo = selectedSubscription.offerPricingPhase != null
         val upgradeButton = selectedSubscription.toUpgradeButton()
         init {
             if (subscriptions.isEmpty()) {

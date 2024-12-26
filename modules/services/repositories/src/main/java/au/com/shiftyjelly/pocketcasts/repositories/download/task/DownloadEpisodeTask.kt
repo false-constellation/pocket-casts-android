@@ -19,17 +19,15 @@ import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeStatusEnum
 import au.com.shiftyjelly.pocketcasts.preferences.Settings.NotificationId
-import au.com.shiftyjelly.pocketcasts.repositories.di.DownloadCallFactory
-import au.com.shiftyjelly.pocketcasts.repositories.di.DownloadRequestBuilder
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadProgressUpdate
 import au.com.shiftyjelly.pocketcasts.repositories.download.ResponseValidationResult
 import au.com.shiftyjelly.pocketcasts.repositories.download.toData
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
+import au.com.shiftyjelly.pocketcasts.servers.di.Downloads
 import au.com.shiftyjelly.pocketcasts.utils.FileUtil
 import au.com.shiftyjelly.pocketcasts.utils.Network
-import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.extensions.anyMessageContains
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import dagger.assisted.Assisted
@@ -76,8 +74,8 @@ class DownloadEpisodeTask @AssistedInject constructor(
     var downloadManager: DownloadManager,
     var episodeManager: EpisodeManager,
     var userEpisodeManager: UserEpisodeManager,
-    @DownloadCallFactory private val callFactory: Call.Factory,
-    @DownloadRequestBuilder private val requestBuilderProvider: Provider<Request.Builder>,
+    @Downloads private val callFactory: Call.Factory,
+    @Downloads private val requestBuilderProvider: Provider<Request.Builder>,
 ) : Worker(context, params) {
 
     companion object {
@@ -148,9 +146,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
             }
 
             LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Worker Downloading episode ${episode.title} ${episode.uuid}")
-            if (!Util.isWearOs(context)) {
-                setForegroundAsync(createForegroundInfo())
-            }
+            setForegroundAsync(createForegroundInfo())
 
             runBlocking {
                 episodeManager.updateEpisodeStatus(episode, EpisodeStatusEnum.DOWNLOADING)
@@ -163,7 +159,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
 
             if (!isStopped) {
                 pathToSaveTo?.let {
-                    episodeManager.updateDownloadFilePath(episode, it, false)
+                    episodeManager.updateDownloadFilePathBlocking(episode, it, false)
                     runBlocking {
                         episodeManager.updateEpisodeStatus(episode, EpisodeStatusEnum.DOWNLOADED)
                     }
@@ -231,7 +227,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
             episodeManager.updateEpisodeStatus(episode, EpisodeStatusEnum.DOWNLOAD_FAILED)
         }
         val message = if (downloadMessage.isNullOrBlank()) "Download Failed" else downloadMessage
-        episodeManager.updateDownloadErrorDetails(episode, message)
+        episodeManager.updateDownloadErrorDetailsBlocking(episode, message)
 
         LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Download failed ${episode.title} ${episode.uuid} - $message")
 
@@ -253,7 +249,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
                         emitter.onComplete()
                     }
                 } else {
-                    downloadFile(tempDownloadPath!!, callFactory, emitter)
+                    downloadFile(tempDownloadPath!!, emitter)
                     if (!emitter.isDisposed) {
                         emitter.onComplete()
                     }
@@ -268,7 +264,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
         }
     }
 
-    private fun downloadFile(tempDownloadPath: String, httpClient: Call.Factory, emitter: ObservableEmitter<DownloadProgressUpdate>) {
+    private fun downloadFile(tempDownloadPath: String, emitter: ObservableEmitter<DownloadProgressUpdate>) {
         if (emitter.isDisposed || isStopped || pathToSaveTo == null) {
             return
         }
@@ -286,7 +282,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
         try {
             var downloadUrl = episode.downloadUrl?.toHttpUrlOrNull()
             if (downloadUrl == null && episode is UserEpisode) {
-                downloadUrl = runBlocking { userEpisodeManager.getPlaybackUrl(episode).await()?.toHttpUrlOrNull() }
+                downloadUrl = runBlocking { userEpisodeManager.getPlaybackUrlRxSingle(episode).await()?.toHttpUrlOrNull() }
             }
 
             if (downloadUrl == null) {
@@ -322,7 +318,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
                     .header("Range", "bytes=$localFileSize-")
                     .header("Accept-Encoding", "identity")
                     .build()
-                call = httpClient.newCall(request)
+                call = callFactory.newCall(request)
                 response = call.blockingEnqueue()
 
                 if (response.code != HTTP_RESUME_SUPPORTED) {
@@ -341,7 +337,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
 
             if (response == null) {
                 val request = requestBuilder.build()
-                call = httpClient.newCall(request)
+                call = callFactory.newCall(request)
                 response = call.blockingEnqueue()
             }
 
@@ -469,7 +465,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
                     tempDownloadFile.delete()
 
                     if (episode.sizeInBytes != fullDownloadFile.length()) {
-                        episodeManager.updateSizeInBytes(episode, fullDownloadFile.length())
+                        episodeManager.updateSizeInBytesBlocking(episode, fullDownloadFile.length())
                     }
 
                     if (!emitter.isDisposed) {
@@ -581,7 +577,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
                 }
 
                 val durationInSecs = (duration / 1000000).toDouble()
-                episodeManager.updateDuration(episode, durationInSecs, true)
+                episodeManager.updateDurationBlocking(episode, durationInSecs, true)
 
                 return
             }
@@ -593,7 +589,7 @@ class DownloadEpisodeTask @AssistedInject constructor(
     private fun fixInvalidContentType(contentType: MediaType?) {
         contentType ?: return
         if ((episode.fileType.isNullOrBlank() && (contentType.type == "audio" || contentType.type == "video")) || contentType.type == "video") {
-            episodeManager.updateFileType(episode, contentType.toString())
+            episodeManager.updateFileTypeBlocking(episode, contentType.toString())
             episode.fileType = contentType.toString()
         }
     }

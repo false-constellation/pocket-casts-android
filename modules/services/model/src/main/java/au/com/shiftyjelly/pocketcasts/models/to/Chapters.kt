@@ -67,10 +67,10 @@ data class Chapters(
         return items
     }
 
-    fun getChapterSummary(time: Duration): String {
+    fun getChapterSummary(time: Duration): ChapterSummaryData {
         val chapterSize = items.size
         val chapterIndex = getChapterIndex(time)
-        return if (chapterIndex == -1) "" else "${chapterIndex + 1} of $chapterSize"
+        return ChapterSummaryData(chapterIndex + 1, chapterSize)
     }
 
     fun isFirstChapter(time: Duration): Boolean {
@@ -81,7 +81,26 @@ data class Chapters(
         return getChapterIndex(time) == items.size - 1
     }
 
-    fun toDbChapters(episodeId: String) = items.map { chapter ->
+    fun skippedChaptersDuration(time: Duration): Duration {
+        return if (FeatureFlag.isEnabled(Feature.DESELECT_CHAPTERS)) {
+            items
+                .filter { !it.selected && it.endTime > time }
+                .fold(Duration.ZERO) { duration, chapter ->
+                    duration + if (time in chapter) {
+                        chapter.endTime - time
+                    } else {
+                        chapter.duration
+                    }
+                }
+        } else {
+            Duration.ZERO
+        }
+    }
+
+    fun toDbChapters(
+        episodeId: String,
+        isEmbedded: Boolean,
+    ) = items.map { chapter ->
         DbChapter(
             episodeUuid = episodeId,
             startTimeMs = chapter.startTime.inWholeMilliseconds,
@@ -89,6 +108,12 @@ data class Chapters(
             title = chapter.title,
             imageUrl = chapter.imagePath,
             url = chapter.url?.toString(),
+            isEmbedded = isEmbedded,
         )
     }
 }
+
+data class ChapterSummaryData(
+    val currentIndex: Int = -1,
+    val size: Int = 0,
+)

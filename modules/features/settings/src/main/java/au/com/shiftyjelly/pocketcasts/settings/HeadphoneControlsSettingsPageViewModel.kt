@@ -4,8 +4,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
-import au.com.shiftyjelly.pocketcasts.compose.images.SubscriptionTierColor
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.compose.plusGold
 import au.com.shiftyjelly.pocketcasts.images.R
 import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -23,7 +23,7 @@ import timber.log.Timber
 
 @HiltViewModel
 class HeadphoneControlsSettingsPageViewModel @Inject constructor(
-    private val analyticsTracker: AnalyticsTrackerWrapper,
+    private val analyticsTracker: AnalyticsTracker,
     private val settings: Settings,
     private val bookmarkFeature: BookmarkFeatureControl,
 ) : ViewModel() {
@@ -44,8 +44,8 @@ class HeadphoneControlsSettingsPageViewModel @Inject constructor(
                             isAddBookmarkEnabled = isAddBookmarkEnabled,
                             addBookmarkIconId = R.drawable.ic_plus
                                 .takeIf { !isAddBookmarkEnabled },
-                            addBookmarkIconColor = SubscriptionTierColor.plusGold
-                                .takeIf { !isAddBookmarkEnabled } ?: SubscriptionTierColor.plusGold,
+                            addBookmarkIconColor = Color.plusGold
+                                .takeIf { !isAddBookmarkEnabled } ?: Color.plusGold,
                         )
                     }
 
@@ -74,8 +74,8 @@ class HeadphoneControlsSettingsPageViewModel @Inject constructor(
 
     fun onConfirmationSoundChanged(playConfirmationSound: Boolean) {
         analyticsTracker.track(
-            AnalyticsEvent.SETTINGS_HEADPHONE_CONTROLS_BOOKMARK_CONFIRMATION_SOUND,
-            mapOf("value" to playConfirmationSound),
+            AnalyticsEvent.SETTINGS_HEADPHONE_CONTROLS_BOOKMARK_SOUND_TOGGLED,
+            mapOf("enabled" to playConfirmationSound),
         )
     }
 
@@ -128,7 +128,7 @@ class HeadphoneControlsSettingsPageViewModel @Inject constructor(
         val isAddBookmarkEnabled: Boolean = false,
         val startUpsellFromSource: UpsellSourceAction? = null,
         val addBookmarkIconId: Int? = null,
-        val addBookmarkIconColor: Color = SubscriptionTierColor.plusGold,
+        val addBookmarkIconColor: Color = Color.plusGold,
     )
 
     enum class UpsellSourceAction {

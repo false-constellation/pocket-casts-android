@@ -4,7 +4,7 @@ import android.content.res.Resources
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.discover.view.CategoryPill
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
@@ -24,9 +24,7 @@ import au.com.shiftyjelly.pocketcasts.servers.model.NetworkLoadableList
 import au.com.shiftyjelly.pocketcasts.servers.model.SponsoredPodcast
 import au.com.shiftyjelly.pocketcasts.servers.model.transformWithRegion
 import au.com.shiftyjelly.pocketcasts.servers.server.ListRepository
-import au.com.shiftyjelly.pocketcasts.utils.SentryHelper
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import com.automattic.android.tracks.crashlogging.CrashLogging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.reactivex.BackpressureStrategy
 import io.reactivex.Flowable
@@ -48,7 +46,8 @@ class DiscoverViewModel @Inject constructor(
     val episodeManager: EpisodeManager,
     val playbackManager: PlaybackManager,
     val userManager: UserManager,
-    val analyticsTracker: AnalyticsTrackerWrapper,
+    val analyticsTracker: AnalyticsTracker,
+    val crashLogging: CrashLogging,
 ) : ViewModel() {
     private val disposables = CompositeDisposable()
     private val sourceView = SourceView.DISCOVER
@@ -69,12 +68,7 @@ class DiscoverViewModel @Inject constructor(
     }
 
     fun loadData(resources: Resources) {
-        val feed =
-            if (FeatureFlag.isEnabled(Feature.CATEGORIES_REDESIGN)) {
-                repository.getDiscoverFeedWithCategoriesAtTheTop()
-            } else {
-                repository.getDiscoverFeed()
-            }
+        val feed = repository.getDiscoverFeed()
 
         feed.toFlowable()
             .subscribeBy(
@@ -162,7 +156,7 @@ class DiscoverViewModel @Inject constructor(
                 if (isInvalidSponsoredSource) {
                     val message = "Invalid sponsored source found."
                     Timber.e(message)
-                    SentryHelper.recordException(InvalidObjectException(message))
+                    crashLogging.sendReport(InvalidObjectException(message))
                 }
                 !isInvalidSponsoredSource
             }
@@ -229,8 +223,8 @@ class DiscoverViewModel @Inject constructor(
     )
 
     private fun addSubscriptionStateToPodcasts(list: PodcastList): Flowable<PodcastList> {
-        return podcastManager.getSubscribedPodcastUuids().toFlowable() // Get the current subscribed list
-            .mergeWith(podcastManager.observePodcastSubscriptions()) // Get updated when it changes
+        return podcastManager.getSubscribedPodcastUuidsRxSingle().toFlowable() // Get the current subscribed list
+            .mergeWith(podcastManager.podcastSubscriptionsRxFlowable()) // Get updated when it changes
             .map { subscribedList ->
                 val updatedPodcasts = list.podcasts.map { podcast ->
                     val isSubscribed = subscribedList.contains(podcast.uuid)
@@ -282,10 +276,10 @@ class DiscoverViewModel @Inject constructor(
     }
 
     fun findOrDownloadEpisode(discoverEpisode: DiscoverEpisode, success: (episode: PodcastEpisode) -> Unit) {
-        podcastManager.findOrDownloadPodcastRx(discoverEpisode.podcast_uuid)
+        podcastManager.findOrDownloadPodcastRxSingle(discoverEpisode.podcast_uuid)
             .flatMapMaybe {
                 @Suppress("DEPRECATION")
-                episodeManager.findByUuidRx(discoverEpisode.uuid)
+                episodeManager.findByUuidRxMaybe(discoverEpisode.uuid)
             }
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())

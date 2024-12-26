@@ -5,10 +5,8 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.support.v4.media.session.PlaybackStateCompat
 import android.view.View
 import android.widget.RemoteViews
-import androidx.media.session.MediaButtonReceiver
 import au.com.shiftyjelly.pocketcasts.core.ui.widget.PodcastWidget
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
@@ -92,7 +90,7 @@ class WidgetManagerImpl @Inject constructor(
         }
     }
 
-    override fun updateWidgetRssArtwork(playbackManager: PlaybackManager) {
+    override fun updateWidgetEpisodeArtwork(playbackManager: PlaybackManager) {
         val currentEpisode = playbackManager.getCurrentEpisode() ?: return
         val target = RemoteViewsTarget(
             context,
@@ -100,7 +98,7 @@ class WidgetManagerImpl @Inject constructor(
             RemoteViews(context.packageName, remoteViewsLayoutId),
             R.id.widget_artwork,
         )
-        imageRequestFactory.create(currentEpisode, settings.useEpisodeArtwork.value).loadInto(target)
+        imageRequestFactory.create(currentEpisode, settings.artworkConfiguration.value.useEpisodeArtwork).loadInto(target)
     }
 
     override fun updateWidgetFromPlaybackState(playbackManager: PlaybackManager?) {
@@ -111,7 +109,7 @@ class WidgetManagerImpl @Inject constructor(
 
     private fun findPodcastByEpisode(episode: BaseEpisode): Podcast? {
         return when (episode) {
-            is PodcastEpisode -> podcastManager.findPodcastByUuid(episode.podcastUuid)
+            is PodcastEpisode -> podcastManager.findPodcastByUuidBlocking(episode.podcastUuid)
             is UserEpisode -> podcastManager.buildUserEpisodePodcast(episode)
             else -> null
         }
@@ -200,7 +198,7 @@ class WidgetManagerImpl @Inject constructor(
             views,
             R.id.widget_artwork,
         )
-        imageRequestFactory.create(playingEpisode, settings.useEpisodeArtwork.value).loadInto(target)
+        imageRequestFactory.create(playingEpisode, settings.artworkConfiguration.value.useEpisodeArtwork).loadInto(target)
     }
 
     private fun showPlayButton(playing: Boolean, views: RemoteViews) {
@@ -216,13 +214,23 @@ class WidgetManagerImpl @Inject constructor(
         return context.getLaunchActivityPendingIntent()
     }
 
-    private fun getPlayIntent(): PendingIntent? {
-        return MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_PLAY)
-    }
+    private fun getPlayIntent(): PendingIntent? = PendingIntent.getBroadcast(
+        context,
+        PodcastWidget.PLAY_REQUEST_CODE,
+        Intent(context, PodcastWidget::class.java).apply {
+            action = PodcastWidget.PLAY_ACTION
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
 
-    private fun getPauseIntent(): PendingIntent? {
-        return MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_PAUSE)
-    }
+    private fun getPauseIntent(): PendingIntent? = PendingIntent.getBroadcast(
+        context,
+        PodcastWidget.PAUSE_REQUEST_CODE,
+        Intent(context, PodcastWidget::class.java).apply {
+            action = PodcastWidget.PAUSE_ACTION
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
 
     private fun getSkipBackIntent(): PendingIntent? = PendingIntent.getBroadcast(
         context,
@@ -230,7 +238,7 @@ class WidgetManagerImpl @Inject constructor(
         Intent(context, PodcastWidget::class.java).apply {
             action = PodcastWidget.SKIP_BACKWARD_ACTION
         },
-        PendingIntent.FLAG_UPDATE_CURRENT.or(PendingIntent.FLAG_IMMUTABLE),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
     private fun getSkipForwardIntent(): PendingIntent? = PendingIntent.getBroadcast(
@@ -239,7 +247,7 @@ class WidgetManagerImpl @Inject constructor(
         Intent(context, PodcastWidget::class.java).apply {
             action = PodcastWidget.SKIP_FORWARD_ACTION
         },
-        PendingIntent.FLAG_UPDATE_CURRENT.or(PendingIntent.FLAG_IMMUTABLE),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
     private fun getRemoteViewsLayoutId() = if (settings.useDynamicColorsForWidget.value) {

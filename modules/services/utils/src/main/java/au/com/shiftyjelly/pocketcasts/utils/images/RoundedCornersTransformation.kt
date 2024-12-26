@@ -43,13 +43,17 @@ class RoundedCornersTransformation(
     override val cacheKey = "${javaClass.name}-$topLeft,$topRight,$bottomLeft,$bottomRight"
 
     override suspend fun transform(input: Bitmap, size: Size): Bitmap {
+        if (topLeft == 0f && topRight == 0f && bottomLeft == 0f && bottomRight == 0f) {
+            return input
+        }
+
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
         // Do not crop to target's size to avoid scaling issues.
         // https://github.com/coil-kt/coil/issues/421#issuecomment-640133205
         val (outputWidth, outputHeight) = input.width to input.height
 
-        val output = createBitmap(outputWidth, outputHeight, input.config)
+        val output = createBitmap(outputWidth, outputHeight, input.config ?: Bitmap.Config.ARGB_8888)
         output.applyCanvas {
             drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 

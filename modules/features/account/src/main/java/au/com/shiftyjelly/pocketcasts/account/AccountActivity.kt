@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.IntentCompat
@@ -19,8 +20,7 @@ import au.com.shiftyjelly.pocketcasts.account.viewmodel.CreateAccountState
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.CreateAccountViewModel
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.SubscriptionType
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTrackerWrapper
-import au.com.shiftyjelly.pocketcasts.analytics.FirebaseAnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.views.helper.UiUtil
@@ -33,7 +33,7 @@ class AccountActivity : AppCompatActivity() {
 
     @Inject lateinit var theme: Theme
 
-    @Inject lateinit var analyticsTracker: AnalyticsTrackerWrapper
+    @Inject lateinit var analyticsTracker: AnalyticsTracker
     private val viewModel: CreateAccountViewModel by viewModels()
     private lateinit var binding: AccountActivityBinding
 
@@ -44,6 +44,15 @@ class AccountActivity : AppCompatActivity() {
         binding = AccountActivityBinding.inflate(layoutInflater)
         val view = binding.root
         setContentView(view)
+
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    handleBackPressed()
+                }
+            },
+        )
 
         val navController = findNavController(R.id.nav_host_fragment)
         binding.carHeader?.btnClose?.setOnClickListener {
@@ -78,7 +87,7 @@ class AccountActivity : AppCompatActivity() {
 
             val navConfiguration = AppBarConfiguration(navController.graph)
             binding.toolbar?.setupWithNavController(navController, navConfiguration)
-            binding.toolbar?.setNavigationOnClickListener { _ -> onBackPressed() }
+            binding.toolbar?.setNavigationOnClickListener { _ -> handleBackPressed() }
 
             navController.addOnDestinationChangedListener { _, destination, _ ->
                 destination.trackShown()
@@ -106,29 +115,24 @@ class AccountActivity : AppCompatActivity() {
         }
     }
 
-    override fun onBackPressed() {
+    private fun handleBackPressed() {
         val currentFragment = findNavController(R.id.nav_host_fragment).currentDestination
         currentFragment?.trackDismissed()
+
         if (currentFragment?.id == R.id.createDoneFragment) {
             finish()
             return
         }
-        if (currentFragment?.id == R.id.accountFragment) {
-            FirebaseAnalyticsTracker.closeAccountMissingClicked()
-        }
 
         UiUtil.hideKeyboard(binding.root)
-        @Suppress("DEPRECATION")
-        super.onBackPressed()
+        onBackPressedDispatcher.onBackPressed()
     }
 
     private fun NavDestination.trackShown() {
         val analyticsEvent = when (id) {
             R.id.accountFragment -> AnalyticsEvent.SETUP_ACCOUNT_SHOWN
             R.id.signInFragment -> AnalyticsEvent.SIGNIN_SHOWN
-            R.id.createAccountFragment -> AnalyticsEvent.SELECT_ACCOUNT_TYPE_SHOWN
             R.id.createEmailFragment -> AnalyticsEvent.CREATE_ACCOUNT_SHOWN
-            R.id.createTOSFragment -> AnalyticsEvent.TERMS_OF_USE_SHOWN
             R.id.resetPasswordFragment -> AnalyticsEvent.FORGOT_PASSWORD_SHOWN
             R.id.createDoneFragment -> AnalyticsEvent.ACCOUNT_UPDATED_SHOWN
             else -> null
@@ -152,9 +156,7 @@ class AccountActivity : AppCompatActivity() {
         val analyticsEvent = when (id) {
             R.id.accountFragment -> AnalyticsEvent.SETUP_ACCOUNT_DISMISSED
             R.id.signInFragment -> AnalyticsEvent.SIGNIN_DISMISSED
-            R.id.createAccountFragment -> AnalyticsEvent.SELECT_ACCOUNT_TYPE_DISMISSED
             R.id.createEmailFragment -> AnalyticsEvent.CREATE_ACCOUNT_DISMISSED
-            R.id.createTOSFragment -> AnalyticsEvent.TERMS_OF_USE_DISMISSED
             R.id.resetPasswordFragment -> AnalyticsEvent.FORGOT_PASSWORD_DISMISSED
             R.id.createDoneFragment -> AnalyticsEvent.ACCOUNT_UPDATED_DISMISSED
             else -> null
