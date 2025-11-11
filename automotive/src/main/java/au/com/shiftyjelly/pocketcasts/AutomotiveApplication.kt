@@ -13,9 +13,9 @@ import au.com.shiftyjelly.pocketcasts.crashlogging.InitializeRemoteLogging
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
+import au.com.shiftyjelly.pocketcasts.repositories.jobs.VersionMigrationsWorker
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.refresh.RefreshPodcastsTask
@@ -25,6 +25,7 @@ import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import au.com.shiftyjelly.pocketcasts.utils.log.RxJavaUncaughtExceptionHandling
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import com.squareup.moshi.Moshi
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 import java.util.concurrent.Executors
@@ -37,13 +38,15 @@ import timber.log.Timber
 
 @SuppressLint("LogNotTimber")
 @HiltAndroidApp
-class AutomotiveApplication : Application(), Configuration.Provider {
+class AutomotiveApplication :
+    Application(),
+    Configuration.Provider {
+
+    @Inject lateinit var moshi: Moshi
 
     @Inject lateinit var podcastManager: PodcastManager
 
     @Inject lateinit var episodeManager: EpisodeManager
-
-    @Inject lateinit var playlistManager: PlaylistManager
 
     @Inject lateinit var playbackManager: PlaybackManager
 
@@ -89,9 +92,15 @@ class AutomotiveApplication : Application(), Configuration.Provider {
         runBlocking {
             withContext(Dispatchers.Default) {
                 playbackManager.setup()
-                downloadManager.setup(episodeManager, podcastManager, playlistManager, playbackManager)
+                downloadManager.setup(episodeManager, podcastManager, playbackManager)
                 RefreshPodcastsTask.runNow(this@AutomotiveApplication, applicationScope)
             }
+
+            VersionMigrationsWorker.performMigrations(
+                context = this@AutomotiveApplication,
+                settings = settings,
+                moshi = moshi,
+            )
         }
 
         val playServices = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS

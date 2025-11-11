@@ -16,8 +16,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.reimagine.clip.ShareClipViewModel.SnackbarMessage
 import au.com.shiftyjelly.pocketcasts.reimagine.ui.ShareColors
@@ -26,6 +28,7 @@ import au.com.shiftyjelly.pocketcasts.sharing.Clip
 import au.com.shiftyjelly.pocketcasts.sharing.SharingClient
 import au.com.shiftyjelly.pocketcasts.sharing.SocialPlatform
 import au.com.shiftyjelly.pocketcasts.utils.Util
+import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
 import au.com.shiftyjelly.pocketcasts.utils.parceler.ColorParceler
 import au.com.shiftyjelly.pocketcasts.utils.parceler.DurationParceler
 import au.com.shiftyjelly.pocketcasts.utils.toHhMmSs
@@ -43,7 +46,7 @@ import au.com.shiftyjelly.pocketcasts.ui.R as UR
 
 @AndroidEntryPoint
 class ShareClipFragment : BaseDialogFragment() {
-    private val args get() = requireNotNull(arguments?.let { BundleCompat.getParcelable(it, NEW_INSTANCE_ARG, Args::class.java) })
+    private val args get() = requireArguments().requireParcelable<Args>(NEW_INSTANCE_ARG)
 
     private val shareColors get() = ShareColors(args.baseColor)
 
@@ -66,6 +69,9 @@ class ShareClipFragment : BaseDialogFragment() {
 
     @Inject
     lateinit var sharingClient: SharingClient
+
+    @Inject
+    lateinit var analyticsTracker: AnalyticsTracker
 
     @Inject
     lateinit var clipAnalyticsFactory: ClipAnalytics.Factory
@@ -91,8 +97,14 @@ class ShareClipFragment : BaseDialogFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
-        val platforms = remember { SocialPlatform.getAvailablePlatforms(requireContext()) }
+    ) = contentWithoutConsumedInsets {
+        val platforms = remember {
+            SocialPlatform.getAvailablePlatforms(
+                requireContext(),
+                // Exclude IG video clips are available
+                exclude = setOf(SocialPlatform.Instagram),
+            )
+        }
         val isTalkbackOn = remember { Util.isTalkbackOn(requireContext()) }
 
         val assetController = rememberBackgroundAssetControler(shareColors)
@@ -114,6 +126,9 @@ class ShareClipFragment : BaseDialogFragment() {
             assetController = assetController,
             listener = listener,
             snackbarHostState = snackbarHostState,
+            onNavigationButtonClick = { analyticsTracker.track(AnalyticsEvent.SHARE_SCREEN_NAVIGATION_BUTTON_TAPPED) },
+            onEditClick = { analyticsTracker.track(AnalyticsEvent.SHARE_SCREEN_EDIT_BUTTON_TAPPED) },
+            onCloseClick = { analyticsTracker.track(AnalyticsEvent.SHARE_SCREEN_CLOSE_BUTTON_TAPPED) },
         )
 
         LaunchedEffect(Unit) {
@@ -132,10 +147,7 @@ class ShareClipFragment : BaseDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        styleBackgroundColor(
-            background = shareColors.background.toArgb(),
-            navigationBar = shareColors.navigationBar.toArgb(),
-        )
+        setDialogTint(color = shareColors.background.toArgb())
     }
 
     @Parcelize

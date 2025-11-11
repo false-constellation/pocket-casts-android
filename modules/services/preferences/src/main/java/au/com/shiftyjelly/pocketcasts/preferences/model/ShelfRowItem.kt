@@ -4,6 +4,8 @@ import androidx.annotation.StringRes
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
@@ -37,12 +39,20 @@ enum class ShelfItem(
         showIf = { it is PodcastEpisode },
         analyticsValue = "star_episode",
     ),
-    Transcript(
-        id = "transcript",
-        titleId = { LR.string.transcript },
-        iconId = { IR.drawable.ic_transcript_24 },
+    Share(
+        id = "share",
+        titleId = { LR.string.podcast_share_episode },
+        subtitleId = { episode -> LR.string.player_actions_hidden_for_custom.takeIf { episode is UserEpisode } },
+        iconId = { IR.drawable.ic_share },
         showIf = { it is PodcastEpisode },
-        analyticsValue = "transcript",
+        analyticsValue = "share_episode",
+    ),
+    AddToPlaylist(
+        id = "add_to_playlist",
+        titleId = { LR.string.add_to_playlist_description },
+        showIf = { it is PodcastEpisode && FeatureFlag.isEnabled(Feature.PLAYLISTS_REBRANDING, immutable = true) },
+        iconId = { IR.drawable.ic_add_to_playlist_action },
+        analyticsValue = "add_to_playlist",
     ),
     Download(
         id = "download",
@@ -64,13 +74,12 @@ enum class ShelfItem(
         showIf = { it is PodcastEpisode },
         analyticsValue = "download",
     ),
-    Share(
-        id = "share",
-        titleId = { LR.string.podcast_share_episode },
-        subtitleId = { episode -> LR.string.player_actions_hidden_for_custom.takeIf { episode is UserEpisode } },
-        iconId = { IR.drawable.ic_share },
+    Transcript(
+        id = "transcript",
+        titleId = { LR.string.transcript },
+        iconId = { IR.drawable.ic_transcript_24 },
         showIf = { it is PodcastEpisode },
-        analyticsValue = "share_episode",
+        analyticsValue = "transcript",
     ),
     Podcast(
         id = "podcast",
@@ -102,14 +111,6 @@ enum class ShelfItem(
         subtitleId = { episode -> LR.string.player_actions_show_as_delete_for_custom.takeIf { episode is UserEpisode } },
         iconId = { if (it is UserEpisode) IR.drawable.ic_delete else IR.drawable.ic_archive },
         analyticsValue = "archive",
-    ),
-    Report(
-        id = "report",
-        titleId = { LR.string.report },
-        subtitleId = { if (it is PodcastEpisode) LR.string.report_subtitle else LR.string.player_actions_hidden_for_custom },
-        iconId = { IR.drawable.ic_flag },
-        showIf = { it is PodcastEpisode },
-        analyticsValue = "report",
     ),
     ;
 

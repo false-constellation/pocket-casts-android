@@ -14,11 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.core.net.toUri
-import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.to.Chapter
 import au.com.shiftyjelly.pocketcasts.player.view.PlayerContainerFragment
@@ -28,8 +27,7 @@ import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureTier
+import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import au.com.shiftyjelly.pocketcasts.views.helper.UiUtil
 import dagger.hilt.android.AndroidEntryPoint
@@ -40,7 +38,7 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @AndroidEntryPoint
 class ChaptersFragment : BaseFragment() {
-    private val args get() = requireNotNull(arguments?.let { BundleCompat.getParcelable(it, NEW_INSTANCE_ARG, Args::class.java) })
+    private val args get() = requireArguments().requireParcelable<Args>(NEW_INSTANCE_ARG)
 
     private val mode get() = args.episodeId?.let(::Episode) ?: Player
 
@@ -57,7 +55,7 @@ class ChaptersFragment : BaseFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         val state by viewModel.uiState.collectAsState()
 
         AppThemeWithBackground(mode.themeType) {
@@ -125,7 +123,6 @@ class ChaptersFragment : BaseFragment() {
         val source = OnboardingUpgradeSource.SKIP_CHAPTERS
         val onboardingFlow = OnboardingFlow.Upsell(
             source = source,
-            showPatronOnly = Feature.DESELECT_CHAPTERS.tier == FeatureTier.Patron || Feature.DESELECT_CHAPTERS.isCurrentlyExclusiveToPatron(),
         )
         OnboardingLauncher.openOnboardingFlow(requireActivity(), onboardingFlow)
     }

@@ -9,10 +9,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.models.entity.Folder
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.to.EpisodeItem
@@ -60,7 +60,7 @@ class SearchResultsFragment : BaseFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         val bottomInset by settings.bottomInset.collectAsStateWithLifecycle(initialValue = 0)
         val bottomInsetDp = bottomInset.pxToDp(LocalContext.current).dp
         AppThemeWithBackground(theme.activeTheme) {
@@ -70,7 +70,7 @@ class SearchResultsFragment : BaseFragment() {
                         viewModel = viewModel,
                         onFolderClick = ::onFolderClick,
                         onPodcastClick = ::onPodcastClick,
-                        onBackClick = ::onBackClick,
+                        onBackPress = ::onBackPress,
                         bottomInset = bottomInsetDp,
                     )
                 }
@@ -78,7 +78,7 @@ class SearchResultsFragment : BaseFragment() {
                 ResultsType.EPISODES -> {
                     SearchEpisodeResultsPage(
                         viewModel = viewModel,
-                        onBackClick = ::onBackClick,
+                        onBackPress = ::onBackPress,
                         onEpisodeClick = ::onEpisodeClick,
                         bottomInset = bottomInsetDp,
                     )
@@ -135,7 +135,7 @@ class SearchResultsFragment : BaseFragment() {
         listener?.onSearchPodcastClick(podcast.uuid, SourceView.SEARCH_RESULTS)
     }
 
-    private fun onBackClick() {
+    private fun onBackPress() {
         parentFragmentManager.popBackStack()
     }
 
@@ -147,8 +147,7 @@ class SearchResultsFragment : BaseFragment() {
             ;
 
             companion object {
-                fun fromString(value: String?) =
-                    ResultsType.values().find { it.value == value } ?: UNKNOWN
+                fun fromString(value: String?) = ResultsType.values().find { it.value == value } ?: UNKNOWN
             }
         }
 

@@ -8,10 +8,10 @@ import au.com.shiftyjelly.pocketcasts.models.type.EpisodePlayingStatus
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeStatusEnum
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
-import au.com.shiftyjelly.pocketcasts.servers.extensions.notModified
-import au.com.shiftyjelly.pocketcasts.servers.extensions.wasCached
 import au.com.shiftyjelly.pocketcasts.servers.podcast.PodcastCacheServiceManager
 import au.com.shiftyjelly.pocketcasts.utils.DateUtil
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import com.automattic.android.tracks.crashlogging.CrashLogging
 import java.util.Calendar
@@ -25,15 +25,13 @@ class PodcastRefresherImpl @Inject constructor(
     private val cacheServiceManager: PodcastCacheServiceManager,
     private val crashLogging: CrashLogging,
 ) : PodcastRefresher {
+    private val playlistDao = appDatabase.playlistDao()
+
     override suspend fun refreshPodcast(existingPodcast: Podcast, playbackManager: PlaybackManager) {
         try {
             val podcastResponse = cacheServiceManager.getPodcastResponse(existingPodcast.uuid)
-            if (podcastResponse.wasCached() || podcastResponse.notModified()) {
-                LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refreshing podcast ${existingPodcast.uuid} not required as cached")
-                return
-            }
-
             val updatedPodcast = podcastResponse.body()?.toPodcast()
+
             if (updatedPodcast == null) {
                 LogBuffer.e(LogBuffer.TAG_BACKGROUND_TASKS, "Refreshing podcast ${existingPodcast.uuid} not required as no response")
                 return
@@ -49,6 +47,7 @@ class PodcastRefresherImpl @Inject constructor(
             existingPodcast.estimatedNextEpisode = updatedPodcast.estimatedNextEpisode
             existingPodcast.episodeFrequency = updatedPodcast.episodeFrequency
             existingPodcast.refreshAvailable = updatedPodcast.refreshAvailable
+            existingPodcast.fundingUrl = updatedPodcast.fundingUrl
             val existingEpisodes = episodeManager.findEpisodesByPodcastOrderedByPublishDate(existingPodcast)
             val mostRecentEpisode = existingEpisodes.firstOrNull()
             val insertEpisodes = mutableListOf<PodcastEpisode>()
@@ -58,14 +57,12 @@ class PodcastRefresherImpl @Inject constructor(
                     val originalEpisode = existingEpisode.copy()
                     existingEpisode.title = newEpisode.title
                     existingEpisode.downloadUrl = newEpisode.downloadUrl
-                    // as new episodes are added a task is run to get the content type and file size from the server file as it is more reliable
-                    if (existingEpisode.fileType.isNullOrBlank()) {
-                        existingEpisode.fileType = newEpisode.fileType
-                    }
-                    if (existingEpisode.sizeInBytes <= 0) {
+                    existingEpisode.fileType = newEpisode.fileType
+                    // after downloading an episode use file size instead of the feed XML size
+                    if (newEpisode.sizeInBytes > 0 && !existingEpisode.isDownloaded) {
                         existingEpisode.sizeInBytes = newEpisode.sizeInBytes
                     }
-                    if (existingEpisode.duration <= 0) {
+                    if (newEpisode.duration != 0.0) {
                         existingEpisode.duration = newEpisode.duration
                     }
                     existingEpisode.publishedDate = newEpisode.publishedDate
@@ -107,16 +104,22 @@ class PodcastRefresherImpl @Inject constructor(
                     downloadMetaData = false,
                 )
             }
-            val episodeUuidsToDelete = existingEpisodes.map { it.uuid }
-                .subtract(updatedPodcast.episodes.map { it.uuid }.toSet())
-            val calendar = Calendar.getInstance()
-            calendar.add(Calendar.DAY_OF_MONTH, -14)
-            val twoWeeksAgo = calendar.time
-            val episodesToDelete =
-                episodeUuidsToDelete.mapNotNull { uuid -> existingEpisodes.find { it.uuid == uuid } }
-                    .filter {
-                        it.addedDate.before(twoWeeksAgo) && episodeManager.episodeCanBeCleanedUp(it, playbackManager)
-                    }
+
+            val twoWeeksAgo = Calendar.getInstance()
+                .apply { add(Calendar.DAY_OF_MONTH, -14) }
+                .time
+            val episodesInPlaylists = if (FeatureFlag.isEnabled(Feature.PLAYLISTS_REBRANDING, immutable = true)) {
+                playlistDao.getEpisodesAddedToManualPlaylists()
+            } else {
+                emptyList()
+            }
+            val episodesToDelete = existingEpisodes
+                .map(PodcastEpisode::uuid)
+                .subtract(updatedPodcast.episodes.mapTo(mutableSetOf(), PodcastEpisode::uuid))
+                .mapNotNull { uuid -> existingEpisodes.find { it.uuid == uuid } }
+                .filter {
+                    it.addedDate.before(twoWeeksAgo) && episodeManager.episodeCanBeCleanedUp(it, playbackManager) && it.uuid !in episodesInPlaylists
+                }
             if (episodesToDelete.isNotEmpty()) {
                 episodeManager.deleteEpisodesWithoutSync(episodesToDelete, playbackManager)
             }

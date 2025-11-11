@@ -2,7 +2,6 @@ package au.com.shiftyjelly.pocketcasts.podcasts.view.share
 
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat.startActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
@@ -39,7 +38,7 @@ class ShareListCreateViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val podcasts = podcastManager.findPodcastsOrderByTitle()
-            mutableState.value = mutableState.value.copy(podcasts = podcasts)
+            mutableState.value = mutableState.value.copy(podcasts = podcasts.filter { it.canShare })
         }
     }
 
@@ -99,7 +98,7 @@ class ShareListCreateViewModel @Inject constructor(
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, url)
                 }
-                startActivity(context, Intent.createChooser(intent, label), null)
+                context.startActivity(Intent.createChooser(intent, label), null)
                 trackShareEvent(
                     AnalyticsEvent.SHARE_PODCASTS_LIST_PUBLISH_SUCCEEDED,
                     AnalyticsProp.countMap(selectedPodcasts.size),
@@ -126,7 +125,7 @@ class ShareListCreateViewModel @Inject constructor(
     }
 
     private object AnalyticsProp {
-        private const val count = "count"
-        fun countMap(count: Int) = mapOf(this.count to count)
+        private const val COUNT = "count"
+        fun countMap(count: Int) = mapOf(this.COUNT to count)
     }
 }

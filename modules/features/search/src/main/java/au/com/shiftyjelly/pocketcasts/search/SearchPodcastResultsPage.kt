@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
 import au.com.shiftyjelly.pocketcasts.compose.components.PodcastItem
 import au.com.shiftyjelly.pocketcasts.compose.theme
@@ -24,41 +25,45 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 @Composable
 fun SearchPodcastResultsPage(
     viewModel: SearchViewModel,
+    bottomInset: Dp,
     onFolderClick: (Folder, List<Podcast>) -> Unit,
     onPodcastClick: (Podcast) -> Unit,
-    onBackClick: () -> Unit,
-    bottomInset: Dp,
+    onBackPress: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
-    Column {
+    Column(
+        modifier = modifier,
+    ) {
         ThemedTopAppBar(
             title = stringResource(LR.string.search_results_all_podcasts),
-            bottomShadow = true,
-            onNavigationClick = { onBackClick() },
+            onNavigationClick = { onBackPress() },
         )
-        SearchPodcastResultsView(
-            state = state as SearchState.Results,
-            onFolderClick = onFolderClick,
-            onPodcastClick = onPodcastClick,
-            onSubscribeClick = { viewModel.onSubscribeToPodcast(it) },
-            bottomInset = bottomInset,
-        )
+        ((state as? SearchUiState.OldResults?)?.operation as? SearchUiState.SearchOperation.Success)?.let {
+            SearchPodcastResultsView(
+                items = it.results.podcasts,
+                onFolderClick = onFolderClick,
+                onPodcastClick = onPodcastClick,
+                onSubscribeClick = { viewModel.onSubscribeToPodcast(it) },
+                bottomInset = bottomInset,
+            )
+        }
     }
 }
 
 @Composable
 private fun SearchPodcastResultsView(
-    state: SearchState.Results,
+    items: List<FolderItem>,
     onFolderClick: (Folder, List<Podcast>) -> Unit,
     onPodcastClick: (Podcast) -> Unit,
     onSubscribeClick: (Podcast) -> Unit,
     bottomInset: Dp,
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(bottom = bottomInset),
+        contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 8.dp),
     ) {
         items(
-            items = state.podcasts,
+            items = items,
             key = { it.adapterId },
         ) { folderItem ->
             when (folderItem) {

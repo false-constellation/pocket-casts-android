@@ -6,9 +6,10 @@ import android.view.ActionMode
 import android.view.View
 import androidx.annotation.DoNotInline
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
+import au.com.shiftyjelly.pocketcasts.compose.extensions.getPrimaryClipText
 import au.com.shiftyjelly.pocketcasts.localization.R
 
 /**
@@ -18,7 +19,7 @@ import au.com.shiftyjelly.pocketcasts.localization.R
 class CustomTextToolbar(
     private val view: View,
     private val customMenuItems: List<CustomMenuItemOption>,
-    private val clipboardManager: ClipboardManager,
+    private val clipboard: Clipboard,
 ) : TextToolbar {
     private var actionMode: ActionMode? = null
     private val textActionModeCallback = TextActionModeCallback(
@@ -42,7 +43,12 @@ class CustomTextToolbar(
         textActionModeCallback.onPasteRequested = onPasteRequested
         textActionModeCallback.onSelectAllRequested = onSelectAllRequested
         textActionModeCallback.customMenuItems = customMenuItems
-        textActionModeCallback.onCustomMenuActionRequested = { onCustomMenuItemClicked(it) }
+        textActionModeCallback.onCustomMenuActionRequested = { item ->
+            // Workaround until Google exposes the selected text from the SelectionContainer. Issue: https://issuetracker.google.com/issues/142551575
+            onCopyRequested?.invoke()
+            val text = clipboard.getPrimaryClipText().orEmpty()
+            onCustomMenuItemClicked(item = item, text = text)
+        }
         if (actionMode == null) {
             status = TextToolbarStatus.Shown
             actionMode =
@@ -62,9 +68,8 @@ class CustomTextToolbar(
         actionMode = null
     }
 
-    private fun onCustomMenuItemClicked(item: CustomMenuItemOption) {
+    private fun onCustomMenuItemClicked(item: CustomMenuItemOption, text: String) {
         try {
-            val text = clipboardManager.getText()
             when (item) {
                 CustomMenuItemOption.Share -> {
                     val context = view.context

@@ -70,8 +70,7 @@ class MultiSelectEpisodesHelper @Inject constructor(
             }
         }
 
-    override fun isSelected(multiSelectable: BaseEpisode) =
-        selectedList.count { it.uuid == multiSelectable.uuid } > 0
+    override fun isSelected(multiSelectable: BaseEpisode) = selectedList.count { it.uuid == multiSelectable.uuid } > 0
 
     override fun onMenuItemSelected(itemId: Int, resources: Resources, activity: FragmentActivity): Boolean {
         val fragmentManager = activity.supportFragmentManager
@@ -97,7 +96,7 @@ class MultiSelectEpisodesHelper @Inject constructor(
                 true
             }
             UR.id.menu_undownload -> {
-                deleteDownload()
+                deleteDownload(resources, fragmentManager)
                 true
             }
             R.id.menu_mark_played -> {
@@ -142,6 +141,10 @@ class MultiSelectEpisodesHelper @Inject constructor(
             }
             UR.id.menu_unstar -> {
                 unstar(resources = resources)
+                true
+            }
+            UR.id.menu_remove_listening_history -> {
+                removeListeningHistory(resources = resources)
                 true
             }
             else -> false
@@ -281,6 +284,24 @@ class MultiSelectEpisodesHelper @Inject constructor(
         }
     }
 
+    private fun removeListeningHistory(resources: Resources) {
+        if (selectedList.isEmpty()) {
+            closeMultiSelect()
+            return
+        }
+
+        launch {
+            val list = selectedList.filterIsInstance<PodcastEpisode>().toList()
+            episodeManager.clearEpisodeHistory(list)
+            episodeAnalytics.trackBulkEvent(AnalyticsEvent.EPISODE_REMOVED_LISTENING_HISTORY, source, list.size)
+            withContext(Dispatchers.Main) {
+                val snackText = resources.getStringPlural(selectedList.size, LR.string.remove_listening_history_episodes_singular, LR.string.remove_listening_history_episodes_plural)
+                showSnackBar(snackText)
+                closeMultiSelect()
+            }
+        }
+    }
+
     fun playedWarning(count: Int, resources: Resources, fragmentManager: FragmentManager) {
         val buttonString = resources.getStringPlural(count = count, singular = LR.string.mark_as_played_singular, plural = LR.string.mark_as_played_plural)
 
@@ -323,13 +344,23 @@ class MultiSelectEpisodesHelper @Inject constructor(
         }?.show(fragmentManager, "multiselect_download")
     }
 
-    private fun deleteDownload() {
+    private fun deleteDownload(resources: Resources, fragmentManager: FragmentManager) {
         if (selectedList.isEmpty()) {
             closeMultiSelect()
             return
         }
 
         val list = selectedList.toList()
+        ConfirmationDialog.deleteDownloadWarningDialog(
+            episodeCount = list.size,
+            warningLimit = WARNING_LIMIT,
+            resources = resources,
+        ) {
+            performDeleteDownload(list)
+        }?.show(fragmentManager, "confirm_delete_downloads")
+    }
+
+    private fun performDeleteDownload(list: List<BaseEpisode>) {
         launch {
             val episodes = list.filterIsInstance<PodcastEpisode>()
             episodeManager.deleteEpisodeFiles(episodes, playbackManager)
@@ -472,5 +503,9 @@ class MultiSelectEpisodesHelper @Inject constructor(
         val list = selectedList.toList()
         playbackManager.playEpisodesLast(episodes = list, source = source)
         closeMultiSelect()
+    }
+
+    companion object {
+        const val MULTI_SELECT_TOGGLE_PAYLOAD = "multi-select-toggle"
     }
 }

@@ -14,7 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.bars.NavigationButton
 import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH30
 import au.com.shiftyjelly.pocketcasts.compose.preview.ThemePreviewParameterProvider
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
@@ -41,10 +41,13 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 fun ShareListCreateBuildingPage(
     onCloseClick: () -> Unit,
     viewModel: ShareListCreateViewModel,
+    modifier: Modifier = Modifier,
 ) {
     val state: ShareListCreateViewModel.State by viewModel.state.collectAsState()
 
-    Column {
+    Column(
+        modifier = modifier,
+    ) {
         ThemedTopAppBar(
             title = stringResource(LR.string.podcasts_share_creating_list),
             navigationButton = NavigationButton.Close,
@@ -56,8 +59,12 @@ fun ShareListCreateBuildingPage(
 }
 
 @Composable
-private fun CreateBuildingContent(title: String, podcasts: List<Podcast>, modifier: Modifier = Modifier) {
-    var progress by remember { mutableStateOf(0f) }
+private fun CreateBuildingContent(
+    title: String,
+    podcasts: List<Podcast>,
+    modifier: Modifier = Modifier,
+) {
+    var progress by remember { mutableFloatStateOf(0f) }
     val progressAnimation by animateFloatAsState(
         targetValue = progress,
         animationSpec = tween(durationMillis = 5000, easing = FastOutSlowInEasing),
@@ -89,7 +96,8 @@ private fun CreateBuildingContent(title: String, podcasts: List<Podcast>, modifi
 
 @Composable
 private fun SharePodcastImage(podcast: Podcast, modifier: Modifier = Modifier) {
-    PodcastImage(uuid = podcast.uuid, modifier = modifier.size(100.dp))
+    @Suppress("DEPRECATION")
+    PodcastImageDeprecated(uuid = podcast.uuid, modifier = modifier.size(100.dp))
 }
 
 @Preview(showBackground = true)

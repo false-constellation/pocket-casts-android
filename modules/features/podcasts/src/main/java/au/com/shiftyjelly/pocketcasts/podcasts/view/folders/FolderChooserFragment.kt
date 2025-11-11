@@ -6,7 +6,6 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -14,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.bars.NavigationButton
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseDialogFragment
 import dagger.hilt.android.AndroidEntryPoint
@@ -30,10 +30,10 @@ class FolderChooserFragment : BaseDialogFragment() {
     private var podcastUuid: String? = null
 
     private object NavRoutes {
-        const val folders = "folder_chooser"
-        const val podcasts = "folder_podcasts"
-        const val name = "folder_name"
-        const val color = "folder_color"
+        const val FOLDERS = "folder_chooser"
+        const val PODCASTS = "folder_podcasts"
+        const val NAME = "folder_name"
+        const val COLOR = "folder_color"
     }
 
     companion object {
@@ -60,12 +60,12 @@ class FolderChooserFragment : BaseDialogFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         AppThemeWithBackground(theme.activeTheme) {
             navHostController = rememberNavController()
             val navController = navHostController ?: return@AppThemeWithBackground
-            NavHost(navController = navController, startDestination = NavRoutes.folders) {
-                composable(NavRoutes.folders) {
+            NavHost(navController = navController, startDestination = NavRoutes.FOLDERS) {
+                composable(NavRoutes.FOLDERS) {
                     FolderChooserPage(
                         podcastUuid = podcastUuid,
                         onCloseClick = { dismiss() },
@@ -74,32 +74,32 @@ class FolderChooserFragment : BaseDialogFragment() {
                             if (uuid != null) {
                                 viewModel.addPodcast(uuid)
                                 viewModel.removePodcastFromFolder(uuid)
-                                navController.navigate(NavRoutes.podcasts)
+                                navController.navigate(NavRoutes.PODCASTS)
                             }
                         },
                         viewModel = viewModel,
                     )
                 }
-                composable(NavRoutes.podcasts) {
+                composable(NavRoutes.PODCASTS) {
                     FolderEditPodcastsPage(
                         onCloseClick = { navController.popBackStack() },
                         navigationButton = NavigationButton.Back,
-                        onNextClick = { navController.navigate(NavRoutes.name) },
+                        onNextClick = { navController.navigate(NavRoutes.NAME) },
                         viewModel = viewModel,
                         settings = settings,
                         fragmentManager = parentFragmentManager,
                     )
                 }
-                composable(NavRoutes.name) {
+                composable(NavRoutes.NAME) {
                     FolderEditNamePage(
-                        onBackClick = { navController.popBackStack() },
-                        onNextClick = { navController.navigate(NavRoutes.color) },
+                        onBackPress = { navController.popBackStack() },
+                        onNextClick = { navController.navigate(NavRoutes.COLOR) },
                         viewModel = viewModel,
                     )
                 }
-                composable(NavRoutes.color) {
+                composable(NavRoutes.COLOR) {
                     FolderEditColorPage(
-                        onBackClick = { navController.popBackStack() },
+                        onBackPress = { navController.popBackStack() },
                         onSaveClick = {
                             viewModel.saveFolder(resources = resources) {
                                 dismiss()
@@ -110,9 +110,5 @@ class FolderChooserFragment : BaseDialogFragment() {
                 }
             }
         }
-    }
-
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        return addNavControllerToBackStack(loadNavController = { navHostController }, initialRoute = NavRoutes.folders)
     }
 }

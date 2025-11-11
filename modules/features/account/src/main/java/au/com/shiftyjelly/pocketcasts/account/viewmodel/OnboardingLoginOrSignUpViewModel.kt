@@ -10,6 +10,7 @@ import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
+import au.com.shiftyjelly.pocketcasts.settings.privacy.UserAnalyticsSettings
 import au.com.shiftyjelly.pocketcasts.utils.extensions.isGooglePlayServicesAvailableSuccess
 import com.google.android.gms.common.GoogleApiAvailability
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,6 +27,8 @@ class OnboardingLoginOrSignUpViewModel @Inject constructor(
     private val analyticsTracker: AnalyticsTracker,
     @ApplicationContext context: Context,
     private val podcastManager: PodcastManager,
+    private val userAnalyticsSettings: UserAnalyticsSettings,
+    settings: Settings,
 ) : AndroidViewModel(context as Application) {
 
     val showContinueWithGoogleButton =
@@ -50,7 +53,7 @@ class OnboardingLoginOrSignUpViewModel @Inject constructor(
 
     fun onShown(flow: OnboardingFlow) {
         analyticsTracker.track(
-            AnalyticsEvent.SETUP_ACCOUNT_SHOWN,
+            AnalyticsEvent.ONBOARDING_INTRO_CAROUSEL_SHOWN,
             mapOf(AnalyticsProp.flow(flow)),
         )
     }
@@ -69,6 +72,18 @@ class OnboardingLoginOrSignUpViewModel @Inject constructor(
         )
     }
 
+    fun onGetStartedClicked(flow: OnboardingFlow) {
+        analyticsTracker.track(
+            AnalyticsEvent.ONBOARDING_GET_STARTED,
+            mapOf(AnalyticsProp.flow(flow), AnalyticsProp.ButtonTapped.getStarted),
+        )
+        // keep it consistent with iOS
+        analyticsTracker.track(
+            AnalyticsEvent.SETUP_ACCOUNT_BUTTON_TAPPED,
+            mapOf(AnalyticsProp.flow(flow), AnalyticsProp.ButtonTapped.getStarted),
+        )
+    }
+
     fun onLoginClicked(flow: OnboardingFlow) {
         analyticsTracker.track(
             AnalyticsEvent.SETUP_ACCOUNT_BUTTON_TAPPED,
@@ -80,10 +95,11 @@ class OnboardingLoginOrSignUpViewModel @Inject constructor(
         object AnalyticsProp {
             fun flow(flow: OnboardingFlow) = "flow" to flow.analyticsValue
             object ButtonTapped {
-                private const val button = "button"
-                val signIn = button to "sign_in"
-                val createAccount = button to "create_account"
-                val continueWithGoogle = button to "continue_with_google"
+                private const val BUTTON = "button"
+                val signIn = BUTTON to "sign_in"
+                val createAccount = BUTTON to "create_account"
+                val continueWithGoogle = BUTTON to "continue_with_google"
+                val getStarted = BUTTON to "get_started"
             }
         }
     }

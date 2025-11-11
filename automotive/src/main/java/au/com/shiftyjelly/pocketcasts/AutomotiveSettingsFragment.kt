@@ -21,8 +21,7 @@ import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.components.UserAvatarConfig
 import au.com.shiftyjelly.pocketcasts.compose.extensions.setContentWithViewCompositionStrategy
 import au.com.shiftyjelly.pocketcasts.databinding.FragmentAutomotiveSettingsBinding
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.models.type.SignInState
 import au.com.shiftyjelly.pocketcasts.profile.AccountDetailsFragment
 import au.com.shiftyjelly.pocketcasts.profile.ProfileHeaderConfig
 import au.com.shiftyjelly.pocketcasts.profile.ProfileHeaderState
@@ -31,7 +30,6 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.FolderManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.searchhistory.SearchHistoryManager
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
@@ -65,9 +63,6 @@ class AutomotiveSettingsFragment : BaseFragment() {
 
     @Inject
     lateinit var folderManager: FolderManager
-
-    @Inject
-    lateinit var playlistManager: PlaylistManager
 
     @Inject
     lateinit var searchHistoryManager: SearchHistoryManager
@@ -118,18 +113,14 @@ class AutomotiveSettingsFragment : BaseFragment() {
             when (state) {
                 is SignInState.SignedIn -> ProfileHeaderState(
                     imageUrl = Gravatar.getUrl(state.email),
-                    subscriptionTier = when {
-                        state.isSignedInAsPatron -> SubscriptionTier.PATRON
-                        state.isSignedInAsPlus -> SubscriptionTier.PLUS
-                        else -> SubscriptionTier.NONE
-                    },
+                    subscriptionTier = state.subscription?.tier,
                     email = state.email,
-                    expiresIn = state.subscriptionStatus.expiryDate?.toDurationFromNow(),
+                    expiresIn = state.subscription?.expiryDate?.toDurationFromNow(),
                 )
 
                 is SignInState.SignedOut -> ProfileHeaderState(
                     imageUrl = null,
-                    subscriptionTier = SubscriptionTier.NONE,
+                    subscriptionTier = null,
                     email = null,
                     expiresIn = null,
                 )
@@ -137,7 +128,7 @@ class AutomotiveSettingsFragment : BaseFragment() {
         }
         val emptyState = ProfileHeaderState(
             imageUrl = null,
-            subscriptionTier = SubscriptionTier.NONE,
+            subscriptionTier = null,
             email = null,
             expiresIn = null,
         )
@@ -177,7 +168,6 @@ class AutomotiveSettingsFragment : BaseFragment() {
                     userManager.signOutAndClearData(
                         playbackManager = playbackManager,
                         upNextQueue = upNextQueue,
-                        playlistManager = playlistManager,
                         folderManager = folderManager,
                         searchHistoryManager = searchHistoryManager,
                         episodeManager = episodeManager,

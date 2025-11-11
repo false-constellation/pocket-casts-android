@@ -27,6 +27,8 @@ dependencies {
     api(libs.rx2.java)
     api(libs.timber)
 
+    api(projects.modules.services.payment)
+
     implementation(platform(libs.compose.bom))
     implementation(platform(libs.firebase.bom))
 
@@ -41,10 +43,14 @@ dependencies {
     implementation(libs.play.auth)
     implementation(libs.play.cast)
     implementation(libs.rx2.android)
+    implementation(libs.unidecode)
 
     testImplementation(libs.coroutines.test)
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+
+    testImplementation(projects.modules.services.sharedtest)
 }

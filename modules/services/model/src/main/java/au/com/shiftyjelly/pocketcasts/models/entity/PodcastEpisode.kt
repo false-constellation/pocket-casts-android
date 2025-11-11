@@ -10,6 +10,7 @@ import au.com.shiftyjelly.pocketcasts.localization.R
 import au.com.shiftyjelly.pocketcasts.models.converter.SafeDate
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodePlayingStatus
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeStatusEnum
+import au.com.shiftyjelly.pocketcasts.utils.extensions.unidecode
 import java.io.Serializable
 import java.util.Date
 
@@ -51,8 +52,6 @@ data class PodcastEpisode(
     @ColumnInfo(name = "season") var season: Long? = null,
     @ColumnInfo(name = "number") var number: Long? = null,
     @ColumnInfo(name = "type") var type: String? = null,
-    // Removed but leaving the column until we definitely aren't using it again
-    @ColumnInfo(name = "cleanTitle") var cleanTitle: String? = title,
     @ColumnInfo(name = "last_playback_interaction_date") var lastPlaybackInteraction: Long? = null,
     @ColumnInfo(name = "last_playback_interaction_sync_status") var lastPlaybackInteractionSyncStatus: Long = LAST_PLAYBACK_INTERACTION_SYNCED,
     @ColumnInfo(name = "exclude_from_episode_limit") var excludeFromEpisodeLimit: Boolean = false,
@@ -61,7 +60,9 @@ data class PodcastEpisode(
     @ColumnInfo(name = "image_url") var imageUrl: String? = null,
     @ColumnInfo(name = "deselected_chapters") override var deselectedChapters: ChapterIndices = ChapterIndices(),
     @ColumnInfo(name = "deselected_chapters_modified") override var deselectedChaptersModified: Date? = null,
-) : BaseEpisode, Serializable {
+    @ColumnInfo(name = "slug") var slug: String = "",
+) : BaseEpisode,
+    Serializable {
 
     sealed class EpisodeType {
         object Regular : EpisodeType()
@@ -137,6 +138,11 @@ data class PodcastEpisode(
             }
         }
     }
+
+    @ColumnInfo(name = "cleanTitle")
+    var cleanTitle: String? = ""
+        get() = title.unidecode()
+        internal set
 
     // temporary variables
     @Ignore

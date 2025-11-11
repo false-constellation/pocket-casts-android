@@ -5,10 +5,13 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
+import au.com.shiftyjelly.pocketcasts.preferences.model.AppReviewReason
+import au.com.shiftyjelly.pocketcasts.repositories.appreview.AppReviewManagerImpl
 import au.com.shiftyjelly.pocketcasts.repositories.download.UpdateEpisodeDetailsTask
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
+import au.com.shiftyjelly.pocketcasts.repositories.podcast.SuggestedFoldersManager
 import com.automattic.android.tracks.crashlogging.CrashLogging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,9 +32,11 @@ class DeveloperViewModel
     private val podcastManager: PodcastManager,
     private val episodeManager: EpisodeManager,
     private val playbackManager: PlaybackManager,
+    private val suggestedFoldersManager: SuggestedFoldersManager,
     private val settings: Settings,
     @ApplicationContext private val context: Context,
     private val crashLogging: CrashLogging,
+    private val appReviewManagerImpl: AppReviewManagerImpl,
 ) : ViewModel() {
 
     fun forceRefresh() {
@@ -149,12 +154,35 @@ class DeveloperViewModel
     }
 
     fun resetEoYModalProfileBadge() {
-        settings.setEndOfYearShowBadge2023(true)
+        settings.setEndOfYearShowBadge2025(true)
         settings.setEndOfYearShowModal(true)
     }
 
     fun onSendCrash(crashMessage: String) {
         crashLogging.sendReport(Exception(crashMessage))
         Timber.d("Test crash message: \"$crashMessage\"")
+    }
+
+    fun resetSuggestedFoldersSuggestion() {
+        viewModelScope.launch {
+            suggestedFoldersManager.deleteAllSuggestedFolders()
+            settings.suggestedFoldersFollowedHash.set("", updateModifiedAt = false)
+            settings.suggestedFoldersDismissCount.set(0, updateModifiedAt = false)
+            settings.suggestedFoldersDismissTimestamp.set(null, updateModifiedAt = false)
+        }
+    }
+
+    fun resetPlaylistsOnboarding() {
+        settings.showPlaylistsOnboarding.set(true, updateModifiedAt = false)
+    }
+
+    fun resetNotificationsPrompt() {
+        settings.notificationsPromptAcknowledged.set(false, updateModifiedAt = false)
+    }
+
+    fun showAppReviewPrompt() {
+        viewModelScope.launch {
+            appReviewManagerImpl.triggerPrompt(AppReviewReason.DevelopmentTrigger)
+        }
     }
 }

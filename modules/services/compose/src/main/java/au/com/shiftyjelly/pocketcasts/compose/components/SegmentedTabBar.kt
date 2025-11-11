@@ -34,20 +34,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun SegmentedTabBar(
     items: List<String>,
+    onSelectItem: (Int) -> Unit,
     modifier: Modifier = Modifier,
     selectedIndex: Int = 0,
     colors: SegmentedTabBarColors = SegmentedTabBarDefaults.colors,
     cornerRadius: Dp = SegmentedTabBarDefaults.cornerRadius,
     border: BorderStroke = BorderStroke(SegmentedTabBarDefaults.borderThickness, colors.borderColor),
     textStyle: TextStyle = SegmentedTabBarDefaults.textStyle,
-    onItemSelected: (selectedItemIndex: Int) -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(cornerRadius),
@@ -68,8 +67,8 @@ fun SegmentedTabBar(
                         text = text,
                         textStyle = textStyle,
                         colors = colors,
-                        onItemSelected = {
-                            onItemSelected(index)
+                        onSelectItem = {
+                            onSelectItem(index)
                         },
                     )
                 }
@@ -84,7 +83,7 @@ private fun RowScope.SegmentedTab(
     text: String,
     textStyle: TextStyle,
     colors: SegmentedTabBarColors,
-    onItemSelected: () -> Unit,
+    onSelectItem: () -> Unit,
 ) {
     OutlinedButton(
         shape = RectangleShape,
@@ -92,8 +91,8 @@ private fun RowScope.SegmentedTab(
         colors = ButtonDefaults.buttonColors(
             backgroundColor = if (isSelected) colors.selectedTabBackgroundColor else colors.unSelectedTabBackgroundColor,
         ),
-        onClick = onItemSelected,
-        modifier = Modifier.Companion
+        onClick = onSelectItem,
+        modifier = Modifier
             .weight(1f)
             .fillMaxSize()
             .defaultMinSize(minWidth = SegmentedTabBarDefaults.tabMinSize)
@@ -131,14 +130,13 @@ data class SegmentedTabBarColors(
     val borderColor: Color = Color.White.copy(alpha = .4f),
 )
 
-@ShowkaseComposable(name = "SegmentedTabBar", group = "TabBar")
 @Preview
 @Composable
-fun SegmentedTabBarPreview() {
+private fun SegmentedTabBarPreview() {
     AppThemeWithBackground(Theme.ThemeType.DARK) {
         SegmentedTabBar(
             items = listOf(stringResource(LR.string.plus_yearly), stringResource(LR.string.plus_monthly)),
-            onItemSelected = {},
+            onSelectItem = {},
             modifier = Modifier.width(IntrinsicSize.Max),
         )
     }

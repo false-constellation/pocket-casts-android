@@ -35,7 +35,8 @@ import kotlinx.parcelize.Parcelize
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 class MiniPlayer @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
-    FrameLayout(context, attrs), CoroutineScope {
+    FrameLayout(context, attrs),
+    CoroutineScope {
 
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Main
@@ -144,7 +145,7 @@ class MiniPlayer @JvmOverloads constructor(context: Context, attrs: AttributeSet
 
             val podcast = upNextState.podcast
             if (podcast != null) {
-                updateTintColor(podcast.getPlayerTintColor(theme.isDarkTheme), theme)
+                updateTintColor(podcast.getTintColor(theme.isDarkTheme), theme)
             } else {
                 updateTintColor(context.getThemeColor(androidx.appcompat.R.attr.colorAccent), theme)
             }

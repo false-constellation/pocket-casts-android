@@ -2,8 +2,8 @@ package au.com.shiftyjelly.pocketcasts.models.entity
 
 import android.content.Context
 import android.content.res.Resources
-import android.graphics.Color
 import android.text.format.DateUtils
+import androidx.core.graphics.toColorInt
 import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
@@ -19,6 +19,7 @@ import au.com.shiftyjelly.pocketcasts.models.to.PlaybackEffects
 import au.com.shiftyjelly.pocketcasts.models.to.PodcastGrouping
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodesSortType
 import au.com.shiftyjelly.pocketcasts.models.type.TrimMode
+import au.com.shiftyjelly.pocketcasts.utils.extensions.unidecode
 import java.io.Serializable
 import java.net.MalformedURLException
 import java.net.URL
@@ -75,25 +76,10 @@ data class Podcast(
     @ColumnInfo(name = "exclude_from_auto_archive") var excludeFromAutoArchive: Boolean = false, // Not used anymore
     @ColumnInfo(name = "override_global_archive") var overrideGlobalArchive: Boolean = false,
     @ColumnInfo(name = "override_global_archive_modified") var overrideGlobalArchiveModified: Date? = null,
-    @Deprecated(
-        message = "This property doesn't account for global override. Use 'autoArchiveAfterPlaying' instead.",
-        level = DeprecationLevel.ERROR,
-        replaceWith = ReplaceWith(expression = "autoArchiveAfterPlaying"),
-    )
     @ColumnInfo(name = "auto_archive_played_after") internal var rawAutoArchiveAfterPlaying: AutoArchiveAfterPlaying = AutoArchiveAfterPlaying.Never,
     @ColumnInfo(name = "auto_archive_played_after_modified") var autoArchiveAfterPlayingModified: Date? = null,
-    @Deprecated(
-        message = "This property doesn't account for global override. Use 'autoArchiveInactive' instead.",
-        level = DeprecationLevel.ERROR,
-        replaceWith = ReplaceWith(expression = "autoArchiveInactive"),
-    )
     @ColumnInfo(name = "auto_archive_inactive_after") internal var rawAutoArchiveInactive: AutoArchiveInactive = AutoArchiveInactive.Default,
     @ColumnInfo(name = "auto_archive_inactive_after_modified") var autoArchiveInactiveModified: Date? = null,
-    @Deprecated(
-        message = "This property doesn't account for global override. Use 'autoArchiveEpisodeLimit' instead.",
-        level = DeprecationLevel.ERROR,
-        replaceWith = ReplaceWith(expression = "autoArchiveEpisodeLimit"),
-    )
     @ColumnInfo(name = "auto_archive_episode_limit") internal var rawAutoArchiveEpisodeLimit: AutoArchiveLimit = AutoArchiveLimit.None,
     @ColumnInfo(name = "auto_archive_episode_limit_modified") var autoArchiveEpisodeLimitModified: Date? = null,
     @ColumnInfo(name = "estimated_next_episode") var estimatedNextEpisode: Date? = null,
@@ -107,28 +93,43 @@ data class Podcast(
     @ColumnInfo(name = "trim_silence_level") var trimMode: TrimMode = TrimMode.OFF,
     @ColumnInfo(name = "trim_silence_level_modified") var trimModeModified: Date? = null,
     @ColumnInfo(name = "refresh_available") var refreshAvailable: Boolean = false,
-    @Deprecated(
-        message = "This property doesn't account for home folder. Use 'folderUuid' instead.",
-        level = DeprecationLevel.ERROR,
-        replaceWith = ReplaceWith(expression = "folderUuid"),
-    )
     @ColumnInfo(name = "folder_uuid") internal var rawFolderUuid: String? = null,
     @ColumnInfo(name = "licensing") var licensing: Licensing = Licensing.KEEP_EPISODES,
     @ColumnInfo(name = "isPaid") var isPaid: Boolean = false,
+    @ColumnInfo(name = "is_private") var isPrivate: Boolean = false,
+    @ColumnInfo(name = "is_header_expanded", defaultValue = "1") var isHeaderExpanded: Boolean = true,
+    @ColumnInfo(name = "funding_url") var fundingUrl: String? = null,
+    @ColumnInfo(name = "slug") var slug: String = "",
     @Embedded(prefix = "bundle") var singleBundle: Bundle? = null,
     @Ignore val episodes: MutableList<PodcastEpisode> = mutableListOf(),
 ) : Serializable {
 
     constructor() : this(uuid = "")
 
-    enum class AutoAddUpNext(val databaseInt: Int, val analyticsValue: String) {
-        OFF(0, "off"),
-        PLAY_LAST(1, "add_last"),
-        PLAY_NEXT(2, "add_first"),
+    enum class AutoAddUpNext(
+        val databaseInt: Int,
+        val analyticsValue: String,
+        val labelId: Int,
+    ) {
+        OFF(
+            databaseInt = 0,
+            analyticsValue = "off",
+            labelId = LR.string.off,
+        ),
+        PLAY_LAST(
+            databaseInt = 1,
+            analyticsValue = "add_last",
+            labelId = LR.string.play_last,
+        ),
+        PLAY_NEXT(
+            databaseInt = 2,
+            analyticsValue = "add_first",
+            labelId = LR.string.play_next,
+        ),
         ;
 
         companion object {
-            fun fromDatabaseInt(int: Int?) = values().firstOrNull { it.databaseInt == int }
+            fun fromDatabaseInt(int: Int?) = entries.firstOrNull { it.databaseInt == int }
         }
     }
 
@@ -146,21 +147,17 @@ data class Podcast(
         const val AUTO_DOWNLOAD_NEW_EPISODES = 1
     }
 
+    @ColumnInfo(name = "clean_title")
+    var cleanTitle: String = ""
+        get() = title.unidecode()
+        internal set
+
     @Transient
     @Ignore
     var unplayedEpisodeCount: Int = 0
 
     val isAutoDownloadNewEpisodes: Boolean
         get() = autoDownloadStatus == AUTO_DOWNLOAD_NEW_EPISODES
-
-    val isAutoAddToUpNextOff: Boolean
-        get() = autoAddToUpNext == AutoAddUpNext.OFF
-
-    val isAutoAddToUpNextPlayLast: Boolean
-        get() = autoAddToUpNext == AutoAddUpNext.PLAY_LAST
-
-    val isAutoAddToUpNextPlayNext: Boolean
-        get() = autoAddToUpNext == AutoAddUpNext.PLAY_NEXT
 
     val adapterId: Long
         get() = UUID.nameUUIDFromBytes(uuid.toByteArray()).mostSignificantBits
@@ -170,6 +167,9 @@ data class Podcast(
 
     val isSilenceRemoved: Boolean
         get() = trimMode != TrimMode.OFF
+
+    val canShare: Boolean
+        get() = !isPrivate
 
     val isUsingEffects: Boolean
         get() = overrideGlobalEffects && (isSilenceRemoved || isVolumeBoosted || playbackSpeed != 1.0)
@@ -185,9 +185,9 @@ data class Podcast(
 
     @Suppress("DEPRECATION_ERROR")
     var folderUuid: String?
-        get() = rawFolderUuid?.takeIf { it != Folder.homeFolderUuid }
+        get() = rawFolderUuid?.takeIf { it != Folder.HOME_FOLDER_UUID }
         set(value) {
-            rawFolderUuid = value?.takeIf { it != Folder.homeFolderUuid }
+            rawFolderUuid = value?.takeIf { it != Folder.HOME_FOLDER_UUID }
         }
 
     @Suppress("DEPRECATION_ERROR")
@@ -218,12 +218,17 @@ data class Podcast(
         }
 
     enum class Licensing {
-        KEEP_EPISODES, DELETE_EPISODES
+        KEEP_EPISODES,
+        DELETE_EPISODES,
     }
 
+    fun getFirstCategoryUnlocalised() = podcastCategory.split("\n").first().trim()
+
     fun getFirstCategory(resources: Resources): String {
-        return podcastCategory.split(delimiters = arrayOf("\n")).first().tryToLocalise(resources)
+        return getFirstCategoryUnlocalised().tryToLocalise(resources)
     }
+
+    fun getFirstCategoryId() = getCategoryIdForName(getFirstCategoryUnlocalised().trim().lowercase())
 
     fun addEpisode(episode: PodcastEpisode) {
         this.episodes.add(episode)
@@ -245,7 +250,7 @@ data class Podcast(
             } else {
                 host
             }
-        } catch (e: MalformedURLException) {
+        } catch (_: MalformedURLException) {
             ""
         }
     }
@@ -324,7 +329,32 @@ data class Podcast(
     }
 }
 
-private val DEFAULT_SERVER_LIGHT_TINT_COLOR = Color.parseColor("#F44336")
-private val DEFAULT_SERVER_DARK_TINT_COLOR = Color.parseColor("#C62828")
-private val DEFAULT_LIGHT_TINT = Color.parseColor("#1E1F1E")
-private val DEFAULT_DARK_TINT = Color.parseColor("#FFFFFF")
+private val DEFAULT_SERVER_LIGHT_TINT_COLOR = "#F44336".toColorInt()
+private val DEFAULT_SERVER_DARK_TINT_COLOR = "#C62828".toColorInt()
+private val DEFAULT_LIGHT_TINT = "#1E1F1E".toColorInt()
+private val DEFAULT_DARK_TINT = "#FFFFFF".toColorInt()
+
+private val KnownCategoryIds = mapOf(
+    "arts" to 1,
+    "business" to 2,
+    "comedy" to 3,
+    "education" to 4,
+    "leisure" to 5,
+    "government" to 6,
+    "health & fitness" to 7,
+    "kids & family" to 8,
+    "music" to 9,
+    "news" to 10,
+    "spirituality" to 11,
+    "science" to 12,
+    "society & culture" to 13,
+    "sports" to 14,
+    "tech" to 15,
+    "technology" to 15,
+    "tv & film" to 16,
+    "fiction" to 17,
+    "history" to 18,
+    "true crime" to 19,
+)
+
+private fun getCategoryIdForName(name: String) = KnownCategoryIds[name.trim().lowercase()]

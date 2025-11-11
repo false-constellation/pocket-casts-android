@@ -1,20 +1,27 @@
 package au.com.shiftyjelly.pocketcasts.podcasts.view.folders
 
-import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.os.bundleOf
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
+import au.com.shiftyjelly.pocketcasts.compose.CallOnce
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.podcasts.view.folders.FolderEditViewModel.Companion.COLOR_KEY
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -31,47 +38,70 @@ class FolderCreateFragment : BaseDialogFragment() {
     private val sharedViewModel: FolderCreateSharedViewModel by activityViewModels()
     private var navHostController: NavHostController? = null
 
-    private object NavRoutes {
-        const val podcasts = "folder_podcasts"
-        const val name = "folder_name"
-        const val color = "folder_color"
+    companion object {
+        const val ARG_SOURCE = "ARG_SOURCE"
+
+        fun newInstance(source: String): FolderCreateFragment {
+            return FolderCreateFragment().apply {
+                arguments = bundleOf(
+                    ARG_SOURCE to source,
+                )
+            }
+        }
     }
+
+    private object NavRoutes {
+        const val PODCASTS = "folder_podcasts"
+        const val NAME = "folder_name"
+        const val COLOR = "folder_color"
+    }
+
+    private val source: String
+        get() = arguments?.getString(ARG_SOURCE) ?: ""
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         AppThemeWithBackground(theme.activeTheme) {
+            CallOnce {
+                viewModel.trackShown(source)
+            }
+
             navHostController = rememberNavController()
             val navController = navHostController ?: return@AppThemeWithBackground
-            NavHost(navController = navController, startDestination = NavRoutes.podcasts) {
-                composable(NavRoutes.podcasts) {
+            NavHost(
+                navController = navController,
+                startDestination = NavRoutes.PODCASTS,
+                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+            ) {
+                composable(NavRoutes.PODCASTS) {
                     FolderEditPodcastsPage(
                         onCloseClick = { dismiss() },
                         onNextClick = {
                             viewModel.trackCreateFolderNavigation(AnalyticsEvent.FOLDER_CREATE_NAME_SHOWN)
-                            navController.navigate(NavRoutes.name)
+                            navController.navigate(NavRoutes.NAME)
                         },
                         viewModel = viewModel,
                         settings = settings,
                         fragmentManager = parentFragmentManager,
                     )
                 }
-                composable(NavRoutes.name) {
+                composable(NavRoutes.NAME) {
                     FolderEditNamePage(
-                        onBackClick = { navController.popBackStack() },
+                        onBackPress = { navController.popBackStack() },
                         onNextClick = {
                             viewModel.trackCreateFolderNavigation(AnalyticsEvent.FOLDER_CREATE_COLOR_SHOWN)
-                            navController.navigate(NavRoutes.color)
+                            navController.navigate(NavRoutes.COLOR)
                         },
                         viewModel = viewModel,
                     )
                 }
-                composable(NavRoutes.color) {
+                composable(NavRoutes.COLOR) {
                     val colors = MaterialTheme.theme.colors
                     FolderEditColorPage(
-                        onBackClick = { navController.popBackStack() },
+                        onBackPress = { navController.popBackStack() },
                         onSaveClick = {
                             viewModel.saveFolder(resources = resources) { folder ->
                                 sharedViewModel.folderUuid = folder.uuid
@@ -85,9 +115,5 @@ class FolderCreateFragment : BaseDialogFragment() {
                 }
             }
         }
-    }
-
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        return addNavControllerToBackStack(loadNavController = { navHostController }, initialRoute = NavRoutes.podcasts)
     }
 }

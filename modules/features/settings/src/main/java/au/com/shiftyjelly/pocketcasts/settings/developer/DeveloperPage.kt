@@ -17,13 +17,17 @@ import androidx.compose.material.Card
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Downloading
 import androidx.compose.material.icons.outlined.EditCalendar
-import androidx.compose.material.icons.outlined.HomeRepairService
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,16 +51,21 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @Composable
 fun DeveloperPage(
-    modifier: Modifier = Modifier,
-    onBackClick: () -> Unit,
-    onShowkaseClick: () -> Unit,
+    bottomInset: Dp,
+    onBackPress: () -> Unit,
     onForceRefreshClick: () -> Unit,
     onTriggerNotificationClick: () -> Unit,
     onDeleteFirstEpisodeClick: () -> Unit,
     onTriggerUpdateEpisodeDetails: () -> Unit,
     onTriggerResetEoYModalProfileBadge: () -> Unit,
-    bottomInset: Dp,
     onSendCrash: (String) -> Unit,
+    onShowWhatsNewClick: () -> Unit,
+    onShowNotificationsTestingClick: () -> Unit,
+    onResetSuggestedFoldersSuggestion: () -> Unit,
+    onResetPlaylistsOnboarding: () -> Unit,
+    onResetNotificationsPrompt: () -> Unit,
+    onShowAppReviewPrompt: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var openCrashMessageDialog by remember { mutableStateOf(false) }
     var crashMessage by remember { mutableStateOf("Test crash") }
@@ -68,11 +77,8 @@ fun DeveloperPage(
         item {
             ThemedTopAppBar(
                 title = stringResource(LR.string.settings_developer),
-                onNavigationClick = onBackClick,
+                onNavigationClick = onBackPress,
             )
-        }
-        item {
-            ShowkaseSetting(onClick = onShowkaseClick)
         }
         item {
             ForceRefreshSetting(onClick = onForceRefreshClick)
@@ -95,33 +101,39 @@ fun DeveloperPage(
         item {
             EndOfYear(onClick = onTriggerResetEoYModalProfileBadge)
         }
-
-        if (openCrashMessageDialog) {
-            item {
-                CrashMessageDialog(
-                    initialMessage = crashMessage,
-                    onDismiss = { openCrashMessageDialog = false },
-                    onConfirm = { message ->
-                        openCrashMessageDialog = false
-                        crashMessage = message
-                    },
-                )
-            }
+        item {
+            ResetSuggestedFoldersSuggestion(onClick = onResetSuggestedFoldersSuggestion)
+        }
+        item {
+            ShowWhatsNew(onClick = onShowWhatsNewClick)
+        }
+        item {
+            ShowAppReviewPrompt(onClick = onShowAppReviewPrompt)
+        }
+        item {
+            NotificationsTesting(onClick = onShowNotificationsTestingClick)
+        }
+        item {
+            ResetNotificationsPrompt(onClick = onResetNotificationsPrompt)
+        }
+        item {
+            ResetPlaylistsOnboarding(onClick = onResetPlaylistsOnboarding)
+        }
+        item {
+            CrashApp()
         }
     }
-}
 
-@Composable
-private fun ShowkaseSetting(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    SettingRow(
-        primaryText = "Showkase",
-        secondaryText = "Compose components",
-        icon = rememberVectorPainter(Icons.Outlined.HomeRepairService),
-        modifier = modifier.clickable { onClick() },
-    )
+    if (openCrashMessageDialog) {
+        CrashMessageDialog(
+            initialMessage = crashMessage,
+            onDismiss = { openCrashMessageDialog = false },
+            onConfirm = { message ->
+                openCrashMessageDialog = false
+                crashMessage = message
+            },
+        )
+    }
 }
 
 @Composable
@@ -224,6 +236,19 @@ private fun TriggerNotificationSetting(
 }
 
 @Composable
+private fun ResetNotificationsPrompt(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Reset notifications prompt",
+        secondaryText = "Show enable notifications prompt on Podcasts when the permission is missing",
+        icon = rememberVectorPainter(Icons.Outlined.Notifications),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
 private fun DeleteFirstEpisodeSetting(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -255,9 +280,88 @@ private fun EndOfYear(
     modifier: Modifier = Modifier,
 ) {
     SettingRow(
-        primaryText = "Reset modal/profile badge",
+        primaryText = "Reset End of Year modal",
         secondaryText = "Reset modal and profile badge for end of year",
         icon = rememberVectorPainter(Icons.Outlined.EditCalendar),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
+private fun ShowWhatsNew(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Show What's New",
+        secondaryText = "Open the What's New page",
+        icon = rememberVectorPainter(Icons.Outlined.NewReleases),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
+private fun ShowAppReviewPrompt(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Show app review prompt",
+        secondaryText = "Open the prompt to give ratings",
+        icon = rememberVectorPainter(Icons.Outlined.StarBorder),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
+private fun NotificationsTesting(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Notifications testing",
+        secondaryText = "Adjust delays and trigger notifications on-demand",
+        icon = rememberVectorPainter(Icons.Outlined.Notifications),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
+private fun ResetPlaylistsOnboarding(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Reset Playlists onboarding",
+        secondaryText = "Show Playlists onboarding and tooltips",
+        icon = rememberVectorPainter(Icons.AutoMirrored.Outlined.PlaylistPlay),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
+private fun CrashApp(
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Go Bye Bye",
+        secondaryText = "Crashes the app",
+        icon = rememberVectorPainter(Icons.Outlined.ErrorOutline),
+        modifier = modifier.clickable {
+            throw RuntimeException("Crashing in 3, 2, 1… Boom!")
+        },
+    )
+}
+
+@Composable
+private fun ResetSuggestedFoldersSuggestion(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Reset Smart Folders",
+        secondaryText = "Allows to retrigger suggested folders",
+        icon = rememberVectorPainter(Icons.Outlined.Folder),
         modifier = modifier.clickable { onClick() },
     )
 }
@@ -281,8 +385,7 @@ private fun DeveloperPageDarkPreview() {
 @Composable
 private fun DeveloperPagePreview() {
     DeveloperPage(
-        onBackClick = {},
-        onShowkaseClick = {},
+        onBackPress = {},
         onForceRefreshClick = {},
         onTriggerNotificationClick = {},
         onDeleteFirstEpisodeClick = {},
@@ -290,6 +393,12 @@ private fun DeveloperPagePreview() {
         onTriggerResetEoYModalProfileBadge = {},
         bottomInset = 0.dp,
         onSendCrash = {},
+        onShowWhatsNewClick = {},
+        onResetSuggestedFoldersSuggestion = {},
+        onShowNotificationsTestingClick = {},
+        onResetPlaylistsOnboarding = {},
+        onResetNotificationsPrompt = {},
+        onShowAppReviewPrompt = {},
     )
 }
 

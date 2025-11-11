@@ -1,3 +1,6 @@
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompilerOptions
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -13,6 +16,7 @@ android {
 
     defaultConfig {
         minSdk = project.property("minSdkVersionWear") as Int
+        targetSdk = project.property("targetSdkVersionWear") as Int
         applicationId = project.property("applicationId").toString()
     }
 
@@ -40,9 +44,21 @@ android {
         compose = true
     }
 
-    kotlinOptions {
+    lint {
+        checkDependencies = false
+    }
+}
+
+tasks.withType<KotlinCompilationTask<KotlinJvmCompilerOptions>>().configureEach {
+    compilerOptions {
         // Allow for widescale experimental APIs in Alpha libraries we build upon
-        freeCompilerArgs += "-opt-in=com.google.android.horologist.annotations.ExperimentalHorologistApi"
+        freeCompilerArgs.add("-opt-in=com.google.android.horologist.annotations.ExperimentalHorologistApi")
+    }
+}
+
+androidComponents {
+    beforeVariants { builder ->
+        builder.enable = builder.buildType != "prototype"
     }
 }
 
@@ -72,6 +88,7 @@ dependencies {
     implementation(libs.coroutines.rx2)
     implementation(libs.dagger.hilt.android)
     implementation(libs.dagger.hilt.core)
+    implementation(libs.datastore)?.because("Force using the latest datastore version to stop the app crashing with Glance widgets. Glance and Horologist libraries both include this library. Pull request https://github.com/Automattic/pocket-casts-android/pull/4031.")
     implementation(libs.encryptedlogging)
     implementation(libs.firebase.config)
     implementation(libs.guava)
@@ -111,6 +128,9 @@ dependencies {
     implementation(libs.wear.remote.interactions)
     implementation(libs.wear.tooling.preview)
     implementation(libs.work.runtime)
+    implementation(libs.credentials)
+    implementation(libs.credentials.google.play)
+    implementation(libs.google.identity)
 
     implementation(projects.modules.features.account)
     implementation(projects.modules.features.player)

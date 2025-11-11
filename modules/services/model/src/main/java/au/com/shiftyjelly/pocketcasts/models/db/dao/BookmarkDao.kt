@@ -4,10 +4,14 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
+import androidx.room.Upsert
+import au.com.shiftyjelly.pocketcasts.models.db.AppDatabase
 import au.com.shiftyjelly.pocketcasts.models.db.helper.PodcastBookmark
 import au.com.shiftyjelly.pocketcasts.models.db.helper.ProfileBookmark
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.models.type.SyncStatus
+import au.com.shiftyjelly.pocketcasts.utils.extensions.unidecode
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -16,8 +20,21 @@ abstract class BookmarkDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insert(bookmark: Bookmark)
 
+    @Upsert
+    abstract suspend fun upsertAll(bookmarks: Collection<Bookmark>)
+
     @Query("DELETE FROM bookmarks WHERE uuid = :uuid")
     abstract suspend fun deleteByUuid(uuid: String)
+
+    @Query("DELETE FROM bookmarks WHERE uuid IN (:uuids)")
+    protected abstract suspend fun deleteAllUnsafe(uuids: Collection<String>)
+
+    @Transaction
+    open suspend fun deleteAll(uuids: Collection<String>) {
+        uuids.chunked(AppDatabase.SQLITE_BIND_ARG_LIMIT).forEach { chunk ->
+            deleteAllUnsafe(uuids)
+        }
+    }
 
     @Query("SELECT * FROM bookmarks WHERE uuid = :uuid AND deleted = :deleted")
     abstract suspend fun findByUuid(
@@ -121,15 +138,11 @@ abstract class BookmarkDao {
               (CASE WHEN podcasts.title is NOT NULL THEN /* sort by podcast title if podcast title is not null */
                 (CASE
                       WHEN UPPER(podcasts.title) LIKE 'THE %' THEN SUBSTR(UPPER(podcasts.title), 5)
-                      WHEN UPPER(podcasts.title) LIKE 'A %' THEN SUBSTR(UPPER(podcasts.title), 3)
-                      WHEN UPPER(podcasts.title) LIKE 'AN %' THEN SUBSTR(UPPER(podcasts.title), 4)
                       ELSE UPPER(podcasts.title)
                 END) 
               ELSE /* sort by episode title if podcast title is null */
                 (CASE
                       WHEN UPPER(episodeTitle) LIKE 'THE %' THEN SUBSTR(UPPER(episodeTitle), 5)
-                      WHEN UPPER(episodeTitle) LIKE 'A %' THEN SUBSTR(UPPER(episodeTitle), 3)
-                      WHEN UPPER(episodeTitle) LIKE 'AN %' THEN SUBSTR(UPPER(episodeTitle), 4)
                       ELSE UPPER(episodeTitle)
                   END) 
               END) ASC,
@@ -177,11 +190,40 @@ abstract class BookmarkDao {
     @Query("UPDATE bookmarks SET deleted = :deleted, deleted_modified = :deletedModified, sync_status = :syncStatus WHERE uuid = :uuid")
     abstract suspend fun updateDeleted(uuid: String, deleted: Boolean, deletedModified: Long, syncStatus: SyncStatus)
 
-    @Query("UPDATE bookmarks SET title = :title, title_modified = :titleModified, sync_status = :syncStatus WHERE uuid = :bookmarkUuid")
-    abstract suspend fun updateTitle(bookmarkUuid: String, title: String, titleModified: Long, syncStatus: SyncStatus)
+    @Query("UPDATE bookmarks SET title = :title, clean_title = :cleanTitle, title_modified = :titleModified, sync_status = :syncStatus WHERE uuid = :bookmarkUuid")
+    protected abstract suspend fun updateTitleInternal(
+        bookmarkUuid: String,
+        title: String,
+        cleanTitle: String,
+        titleModified: Long,
+        syncStatus: SyncStatus,
+    )
+
+    suspend fun updateTitle(bookmarkUuid: String, title: String, titleModified: Long, syncStatus: SyncStatus) {
+        updateTitleInternal(
+            bookmarkUuid = bookmarkUuid,
+            title = title,
+            cleanTitle = title.unidecode(),
+            titleModified = titleModified,
+            syncStatus = syncStatus,
+        )
+    }
 
     @Query("SELECT * FROM bookmarks WHERE sync_status = :syncStatus")
     abstract fun findNotSyncedBlocking(syncStatus: SyncStatus = SyncStatus.NOT_SYNCED): List<Bookmark>
+
+    @Query("SELECT * FROM bookmarks WHERE sync_status = 0")
+    abstract suspend fun getAllUnsynced(): List<Bookmark>
+
+    @Query("SELECT * FROM bookmarks WHERE uuid IN (:uuids)")
+    protected abstract suspend fun getAllUnsafe(uuids: Collection<String>): List<Bookmark>
+
+    @Transaction
+    open suspend fun getAll(uuids: Collection<String>): List<Bookmark> {
+        return uuids.chunked(999).flatMap { chunk ->
+            getAllUnsafe(uuids)
+        }
+    }
 
     @Query(
         """SELECT bookmarks.*
@@ -190,4 +232,7 @@ abstract class BookmarkDao {
             AND deleted = :deleted""",
     )
     abstract fun findUserEpisodesBookmarksFlow(deleted: Boolean = false): Flow<List<Bookmark>>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM bookmarks WHERE episode_uuid IS :episodeUuid)")
+    abstract fun hasBookmarksFlow(episodeUuid: String): Flow<Boolean>
 }

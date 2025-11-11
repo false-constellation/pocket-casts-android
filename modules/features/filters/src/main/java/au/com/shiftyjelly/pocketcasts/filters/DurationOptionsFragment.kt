@@ -7,10 +7,10 @@ import android.view.View
 import android.view.ViewGroup
 import au.com.shiftyjelly.pocketcasts.filters.databinding.DurationOptionsFragmentBinding
 import au.com.shiftyjelly.pocketcasts.localization.helper.TimeHelper
-import au.com.shiftyjelly.pocketcasts.models.entity.Playlist
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
+import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistProperty
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistUpdateSource
+import au.com.shiftyjelly.pocketcasts.repositories.podcast.SmartPlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserPlaylistUpdate
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getColor
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
@@ -29,7 +29,7 @@ private const val ARG_PLAYLIST_UUID = "playlist_uuid"
 @AndroidEntryPoint
 class DurationOptionsFragment : BaseFragment() {
     companion object {
-        fun newInstance(playlist: Playlist): DurationOptionsFragment {
+        fun newInstance(playlist: PlaylistEntity): DurationOptionsFragment {
             val bundle = Bundle()
             bundle.putString(ARG_PLAYLIST_UUID, playlist.uuid)
             val fragment = DurationOptionsFragment()
@@ -38,8 +38,8 @@ class DurationOptionsFragment : BaseFragment() {
         }
     }
 
-    @Inject lateinit var playlistManager: PlaylistManager
-    var playlist: Playlist? = null
+    @Inject lateinit var smartPlaylistManager: SmartPlaylistManager
+    var playlist: PlaylistEntity? = null
 
     private var binding: DurationOptionsFragmentBinding? = null
     private var userChanged = false
@@ -101,7 +101,7 @@ class DurationOptionsFragment : BaseFragment() {
         val btnClose = binding.btnClose
 
         launch {
-            val playlist = playlistManager.findByUuid(requireArguments().getString(ARG_PLAYLIST_UUID)!!) ?: return@launch
+            val playlist = smartPlaylistManager.findByUuid(requireArguments().getString(ARG_PLAYLIST_UUID)!!) ?: return@launch
             this@DurationOptionsFragment.playlist = playlist
 
             enableDurations(playlist.filterDuration)
@@ -120,7 +120,7 @@ class DurationOptionsFragment : BaseFragment() {
             stepperShorterThan.value = playlist.shorterThan
             stepperShorterThan.onValueChanged = onStepperValueChanged
 
-            val color = playlist.getColor(context)
+            val color = playlist.icon.getColor(requireContext())
             val filterTintColor = ThemeColor.filterInteractive01(theme.activeTheme, color)
             val filterTintList = ColorStateList.valueOf(filterTintColor)
             btnSave.setBackgroundColor(filterTintColor)
@@ -144,7 +144,7 @@ class DurationOptionsFragment : BaseFragment() {
 
             playlist?.let { playlist ->
                 launch(Dispatchers.Default) {
-                    playlist.syncStatus = Playlist.SYNC_STATUS_NOT_SYNCED
+                    playlist.syncStatus = PlaylistEntity.SYNC_STATUS_NOT_SYNCED
                     playlist.shorterThan = shorterValue
                     playlist.longerThan = longerValue
                     val userPlaylistUpdate = if (userChanged) {
@@ -155,7 +155,7 @@ class DurationOptionsFragment : BaseFragment() {
                     } else {
                         null
                     }
-                    playlistManager.updateBlocking(playlist, userPlaylistUpdate)
+                    smartPlaylistManager.updateBlocking(playlist, userPlaylistUpdate)
                     launch(Dispatchers.Main) { (activity as FragmentHostListener).closeModal(this@DurationOptionsFragment) }
                 }
             }

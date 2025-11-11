@@ -16,7 +16,9 @@ import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.profile.R as PR
 
 @AndroidEntryPoint
-class AutomotiveSettingsActivity : AppCompatActivity(), FragmentHostListener {
+class AutomotiveSettingsActivity :
+    AppCompatActivity(),
+    FragmentHostListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,7 +81,7 @@ class AutomotiveSettingsActivity : AppCompatActivity(), FragmentHostListener {
         addFragment(fragment)
     }
 
-    override fun bottomSheetClosePressed(fragment: Fragment) {
+    override fun closeBottomSheet() {
         handleBackPressed()
     }
 
@@ -106,6 +108,9 @@ class AutomotiveSettingsActivity : AppCompatActivity(), FragmentHostListener {
     override fun closePodcastsToRoot() {
     }
 
+    override fun closeFiltersToRoot() {
+    }
+
     override fun openPodcastPage(uuid: String, sourceView: String?) {
     }
 
@@ -114,6 +119,9 @@ class AutomotiveSettingsActivity : AppCompatActivity(), FragmentHostListener {
 
     override fun snackBarView(): View {
         return findViewById(android.R.id.content)
+    }
+
+    override fun setFullScreenDarkOverlayViewVisibility(visible: Boolean) {
     }
 
     override fun showAccountUpgradeNow(autoSelectPlus: Boolean) {

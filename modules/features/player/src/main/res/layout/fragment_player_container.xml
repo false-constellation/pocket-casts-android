@@ -10,6 +10,11 @@
         android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
+
+        <au.com.shiftyjelly.pocketcasts.views.component.StatusBarSpacer
+            android:layout_width="match_parent"
+            android:layout_height="0dp" />
+
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
@@ -19,7 +24,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:orientation="horizontal"
-                android:paddingTop="8dp"
                 android:paddingBottom="8dp"
                 android:paddingStart="8dp"
                 tools:ignore="RtlSymmetry">
@@ -93,12 +97,14 @@
                 android:theme="@style/ThemeDark"
                 android:visibility="gone"/>
         </FrameLayout>
+
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/viewPager"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:importantForAccessibility="no"
             android:layout_weight="1" />
+
     </LinearLayout>
 
     <FrameLayout
@@ -109,10 +115,5 @@
         android:translationZ="200dp"
         app:behavior_peekHeight="0dp"
         app:layout_behavior="com.google.android.material.bottomsheet.ViewPager2AwareBottomSheetBehavior" />
-
-    <au.com.shiftyjelly.pocketcasts.views.tour.TourView
-        android:id="@+id/tourView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

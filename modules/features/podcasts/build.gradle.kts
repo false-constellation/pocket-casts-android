@@ -34,6 +34,7 @@ dependencies {
     api(libs.rx2.relay)
 
     api(projects.modules.features.player)
+    api(projects.modules.features.transcripts)
     api(projects.modules.services.analytics)
     api(projects.modules.services.compose)
     api(projects.modules.services.localization)
@@ -53,6 +54,8 @@ dependencies {
     implementation(libs.compose.material)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.ui)
+    implementation(libs.coil.base)
+    implementation(libs.coil.compose)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.rx2)
@@ -67,10 +70,12 @@ dependencies {
     implementation(libs.rx2.kotlin)
     implementation(libs.timber)
 
+    implementation(projects.modules.features.ads)
     implementation(projects.modules.features.account)
     implementation(projects.modules.features.reimagine)
     implementation(projects.modules.features.search)
     implementation(projects.modules.features.settings)
+    implementation(projects.modules.services.compose)
     implementation(projects.modules.services.images)
 
     testImplementation(libs.coroutines.test)

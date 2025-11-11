@@ -19,13 +19,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.compose.extensions.darker
 import au.com.shiftyjelly.pocketcasts.models.to.FolderItem
 import au.com.shiftyjelly.pocketcasts.wear.theme.WearColors
@@ -37,20 +37,20 @@ import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 object PodcastsScreen {
-    const val argumentFolderUuid = "folderUuid"
-    const val routeFolder = "podcasts/{$argumentFolderUuid}"
-    const val routeHomeFolder = "podcasts"
+    const val ARGUMENT_FOLDER_UUID = "folderUuid"
+    const val ROUTE_FOLDER = "podcasts/{$ARGUMENT_FOLDER_UUID}"
+    const val ROUTE_HOME_FOLDER = "podcasts"
 
     fun navigateRoute(folderUuid: String) = "podcasts/$folderUuid"
 }
 
 @Composable
 fun PodcastsScreen(
-    modifier: Modifier = Modifier,
-    viewModel: PodcastsViewModel = hiltViewModel(),
     columnState: ScalingLazyColumnState,
     navigateToPodcast: (String) -> Unit,
     navigateToFolder: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: PodcastsViewModel = hiltViewModel(),
 ) {
     when (val uiState = viewModel.uiState.collectAsState().value) {
         is PodcastsViewModel.UiState.Empty -> {
@@ -156,7 +156,8 @@ private fun PodcastChip(
             ChipText(podcast.title)
         },
         icon = {
-            PodcastImage(
+            @Suppress("DEPRECATION")
+            PodcastImageDeprecated(
                 uuid = podcast.uuid,
                 dropShadow = false,
                 modifier = Modifier.size(32.dp),

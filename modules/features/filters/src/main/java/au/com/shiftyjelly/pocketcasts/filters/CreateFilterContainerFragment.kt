@@ -15,7 +15,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import au.com.shiftyjelly.pocketcasts.filters.databinding.FragmentCreateContainerBinding
-import au.com.shiftyjelly.pocketcasts.models.entity.Playlist
+import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getTintedDrawable
 import au.com.shiftyjelly.pocketcasts.ui.extensions.setupKeyboardModePan
@@ -23,8 +23,10 @@ import au.com.shiftyjelly.pocketcasts.ui.extensions.setupKeyboardModeResize
 import au.com.shiftyjelly.pocketcasts.ui.extensions.themeColors
 import au.com.shiftyjelly.pocketcasts.ui.helper.ColorUtils
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
-import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarColor
+import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarIconColor
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
+import au.com.shiftyjelly.pocketcasts.views.extensions.includeStatusBarPadding
+import au.com.shiftyjelly.pocketcasts.views.extensions.setSystemWindowInsetToPadding
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -47,6 +49,7 @@ class CreateFilterContainerFragment : BaseFragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentCreateContainerBinding.inflate(inflater, container, false)
+        binding.root.setSystemWindowInsetToPadding(bottom = true)
         return binding.root
     }
 
@@ -79,6 +82,7 @@ class CreateFilterContainerFragment : BaseFragment() {
             }
         })
         binding.viewPager.isUserInputEnabled = false
+        binding.toolbar.includeStatusBarPadding()
 
         binding.btnCreate.setOnClickListener {
             if (binding.viewPager.currentItem == 0) {
@@ -101,7 +105,7 @@ class CreateFilterContainerFragment : BaseFragment() {
     }
 
     private fun updateToolbarColors() {
-        val colorResId = Playlist.themeColors.getOrNull(viewModel.colorIndex.value) ?: UR.attr.filter_01
+        val colorResId = PlaylistEntity.themeColors.getOrNull(viewModel.colorIndex.value) ?: UR.attr.filter_01
         val tintColor = view?.context?.getThemeColor(colorResId) ?: return
         val iconRes = if (binding.viewPager.currentItem == 0) IR.drawable.ic_close else IR.drawable.ic_arrow_back
         val backIcon = context?.getTintedDrawable(iconRes, ThemeColor.filterIcon01(theme.activeTheme, tintColor))
@@ -111,7 +115,7 @@ class CreateFilterContainerFragment : BaseFragment() {
         val filterUi01 = ThemeColor.filterUi01(theme.activeTheme, tintColor)
         toolbar.setBackgroundColor(filterUi01)
         toolbar.setTitleTextColor(ThemeColor.filterText01(theme.activeTheme, tintColor))
-        theme.updateWindowStatusBar(window = requireActivity().window, statusBarColor = StatusBarColor.Custom(filterUi01, theme.activeTheme.defaultLightIcons), context = requireContext())
+        theme.updateWindowStatusBarIcons(window = requireActivity().window, statusBarIconColor = StatusBarIconColor.Theme)
     }
 
     private fun observeLockedFirstPage(adapter: CreatePagerAdapter) {
@@ -146,7 +150,7 @@ class CreateFilterContainerFragment : BaseFragment() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.colorIndex.collect {
-                    val colorResId = Playlist.themeColors.getOrNull(it) ?: UR.attr.filter_01
+                    val colorResId = PlaylistEntity.themeColors.getOrNull(it) ?: UR.attr.filter_01
                     val tintColor = requireContext().getThemeColor(colorResId)
                     val stateList = ColorStateList(
                         arrayOf(

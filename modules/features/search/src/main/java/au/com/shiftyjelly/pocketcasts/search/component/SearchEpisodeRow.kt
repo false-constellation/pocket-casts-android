@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import au.com.shiftyjelly.pocketcasts.compose.components.HorizontalDivider
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.compose.components.TextC50
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH40
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH60
@@ -33,20 +33,23 @@ fun SearchEpisodeItem(
     val context = LocalContext.current
     val durationMs = episode.duration * 1000
     val dateFormatter = RelativeDateFormatter(context)
-    Column {
+    Column(
+        modifier = modifier,
+    ) {
         Row(
             verticalAlignment = Alignment.Top,
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onClick(episode) }
                 .padding(16.dp),
         ) {
-            PodcastImage(
+            @Suppress("DEPRECATION")
+            PodcastImageDeprecated(
                 uuid = episode.podcastUuid,
-                modifier = modifier.size(IconSize),
+                modifier = Modifier.size(IconSize),
             )
             Column(
-                modifier = modifier
+                modifier = Modifier
                     .padding(start = 12.dp, end = 16.dp)
                     .weight(1f),
             ) {

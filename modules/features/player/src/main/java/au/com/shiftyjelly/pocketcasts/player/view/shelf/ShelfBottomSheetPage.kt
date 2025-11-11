@@ -1,7 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.player.view.shelf
 
 import android.view.View
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +13,7 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +42,7 @@ import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSourc
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import com.google.android.gms.cast.framework.CastButtonFactory
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -69,18 +70,26 @@ fun ShelfBottomSheetPage(
             )
         },
     ) {
+        val uiState by shelfViewModel.uiState.collectAsState()
         MenuShelfItems(
-            shelfViewModel = shelfViewModel,
+            state = uiState,
             onClick = { item, enabled ->
                 when (item) {
                     ShelfItem.Effects -> shelfSharedViewModel.onEffectsClick(ShelfItemSource.OverflowMenu)
-                    ShelfItem.Sleep -> shelfSharedViewModel.onSleepClick(ShelfItemSource.OverflowMenu)
+                    ShelfItem.Sleep -> {
+                        shelfSharedViewModel.onSleepClick(ShelfItemSource.OverflowMenu)
+                    }
                     ShelfItem.Star -> shelfSharedViewModel.onStarClick(ShelfItemSource.OverflowMenu)
                     ShelfItem.Transcript -> shelfSharedViewModel.onTranscriptClick(enabled, ShelfItemSource.OverflowMenu)
                     ShelfItem.Share -> {
                         val podcast = playerViewModel.podcast ?: return@MenuShelfItems
                         val episode = playerViewModel.episode as? PodcastEpisode ?: return@MenuShelfItems
-                        shelfSharedViewModel.onShareClick(podcast, episode, ShelfItemSource.OverflowMenu)
+
+                        if (podcast.canShare) {
+                            shelfSharedViewModel.onShareClick(podcast, episode, ShelfItemSource.OverflowMenu)
+                        } else {
+                            shelfSharedViewModel.onShareNotAvailable(ShelfItemSource.OverflowMenu)
+                        }
                     }
 
                     ShelfItem.Podcast -> shelfSharedViewModel.onShowPodcastOrCloudFiles(playerViewModel.podcast, ShelfItemSource.OverflowMenu)
@@ -110,20 +119,27 @@ fun ShelfBottomSheetPage(
                     }
 
                     ShelfItem.Bookmark -> shelfSharedViewModel.onAddBookmarkClick(
-                        OnboardingUpgradeSource.OVERFLOW_MENU,
+                        OnboardingUpgradeSource.BOOKMARKS_SHELF_ACTION,
                         ShelfItemSource.OverflowMenu,
                     )
-                    ShelfItem.Report -> {
-                        shelfSharedViewModel.onReportClick(ShelfItemSource.OverflowMenu)
-                    }
                     ShelfItem.Download -> {
                         playerViewModel.handleDownloadClickFromPlaybackActions(
                             onDownloadStart = { shelfSharedViewModel.onEpisodeDownloadStart(ShelfItemSource.OverflowMenu) },
                             onDeleteStart = { shelfSharedViewModel.onEpisodeRemoveClick(ShelfItemSource.OverflowMenu) },
                         )
                     }
+                    ShelfItem.AddToPlaylist -> {
+                        val episodeUuid = playerViewModel.episode?.uuid ?: return@MenuShelfItems
+                        shelfSharedViewModel.onAddToPlaylistClick(
+                            episodeUuid = episodeUuid,
+                            source = ShelfItemSource.OverflowMenu,
+                        )
+                    }
                 }
                 if (item != ShelfItem.Cast) onDismiss()
+            },
+            onMove = { from, to ->
+                shelfViewModel.onShelfItemMove(from, to)
             },
         )
     }
@@ -142,12 +158,11 @@ private fun Content(
         modifier = Modifier
             .fillMaxWidth(),
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
 
         Pill(
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .background(MaterialTheme.theme.colors.playerContrast01),
+            backgroundColor = MaterialTheme.theme.colors.playerContrast01,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
         )
 
         Spacer(Modifier.height(8.dp))
@@ -182,7 +197,7 @@ private fun Content(
 
 @Composable
 private fun MediaRouteButton(
-    clickTrigger: MutableSharedFlow<Unit>,
+    clickTrigger: Flow<Unit>,
 ) {
     val scope = rememberCoroutineScope()
     AndroidView(

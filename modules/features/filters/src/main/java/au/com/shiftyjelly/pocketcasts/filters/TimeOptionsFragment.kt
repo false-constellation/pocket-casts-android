@@ -9,10 +9,10 @@ import androidx.annotation.StringRes
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import au.com.shiftyjelly.pocketcasts.filters.databinding.FilterOptionsFragmentBinding
-import au.com.shiftyjelly.pocketcasts.models.entity.Playlist
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
+import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistProperty
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistUpdateSource
+import au.com.shiftyjelly.pocketcasts.repositories.podcast.SmartPlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserPlaylistUpdate
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getColor
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
@@ -30,7 +30,9 @@ private const val ARG_PLAYLIST_UUID = "playlist_uuid"
 private const val ARG_OPTIONS_TYPE = "options_type"
 
 @AndroidEntryPoint
-class TimeOptionsFragment : BaseFragment(), CoroutineScope {
+class TimeOptionsFragment :
+    BaseFragment(),
+    CoroutineScope {
     sealed class OptionsType(val type: String) {
         object Time : OptionsType("time")
         object Downloaded : OptionsType("downloaded")
@@ -38,7 +40,7 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
     }
 
     companion object {
-        fun newInstance(playlist: Playlist, options: OptionsType): TimeOptionsFragment {
+        fun newInstance(playlist: PlaylistEntity, options: OptionsType): TimeOptionsFragment {
             val bundle = Bundle()
             bundle.putString(ARG_PLAYLIST_UUID, playlist.uuid)
             bundle.putString(ARG_OPTIONS_TYPE, options.type)
@@ -52,7 +54,7 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
         get() = Dispatchers.Main
 
     @Inject
-    lateinit var playlistManager: PlaylistManager
+    lateinit var smartPlaylistManager: SmartPlaylistManager
 
     private var userChanged = false
 
@@ -68,7 +70,7 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
     private lateinit var options: List<FilterOption>
     private var binding: FilterOptionsFragmentBinding? = null
 
-    var playlist: Playlist? = null
+    var playlist: PlaylistEntity? = null
     var adapter: FilterOptionsAdapter? = null
     var selectedPosition: Int = 0
 
@@ -93,12 +95,12 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val anytime = filterOptionForTitle(LR.string.filters_time_anytime, Playlist.ANYTIME)
-        val last24Hours = filterOptionForTitle(LR.string.filters_time_24_hours, Playlist.LAST_24_HOURS)
-        val last3Days = filterOptionForTitle(LR.string.filters_time_3_days, Playlist.LAST_3_DAYS)
-        val lastWeek = filterOptionForTitle(LR.string.filters_time_week, Playlist.LAST_WEEK)
-        val last2Weeks = filterOptionForTitle(LR.string.filters_time_2_weeks, Playlist.LAST_2_WEEKS)
-        val lastMonth = filterOptionForTitle(LR.string.filters_time_month, Playlist.LAST_MONTH)
+        val anytime = filterOptionForTitle(LR.string.filters_time_anytime, PlaylistEntity.ANYTIME)
+        val last24Hours = filterOptionForTitle(LR.string.filters_time_24_hours, PlaylistEntity.LAST_24_HOURS)
+        val last3Days = filterOptionForTitle(LR.string.filters_time_3_days, PlaylistEntity.LAST_3_DAYS)
+        val lastWeek = filterOptionForTitle(LR.string.filters_time_week, PlaylistEntity.LAST_WEEK)
+        val last2Weeks = filterOptionForTitle(LR.string.filters_time_2_weeks, PlaylistEntity.LAST_2_WEEKS)
+        val lastMonth = filterOptionForTitle(LR.string.filters_time_month, PlaylistEntity.LAST_MONTH)
 
         val downloadAll = FilterOption(
             LR.string.all,
@@ -134,7 +136,7 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
             false,
             { v, position ->
                 if (v) {
-                    playlist?.audioVideo = Playlist.AUDIO_VIDEO_FILTER_ALL
+                    playlist?.audioVideo = PlaylistEntity.AUDIO_VIDEO_FILTER_ALL
                     onCheckedChanged(v, position)
                 }
             },
@@ -144,7 +146,7 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
             false,
             { v, position ->
                 if (v) {
-                    playlist?.audioVideo = Playlist.AUDIO_VIDEO_FILTER_AUDIO_ONLY
+                    playlist?.audioVideo = PlaylistEntity.AUDIO_VIDEO_FILTER_AUDIO_ONLY
                     onCheckedChanged(v, position)
                 }
             },
@@ -154,7 +156,7 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
             false,
             { v, position ->
                 if (v) {
-                    playlist?.audioVideo = Playlist.AUDIO_VIDEO_FILTER_VIDEO_ONLY
+                    playlist?.audioVideo = PlaylistEntity.AUDIO_VIDEO_FILTER_VIDEO_ONLY
                     onCheckedChanged(v, position)
                 }
             },
@@ -180,18 +182,30 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
         val recyclerView = binding.recyclerView
 
         launch {
-            val playlist = playlistManager.findByUuid(requireArguments().getString(ARG_PLAYLIST_UUID)!!) ?: return@launch
+            val playlist = smartPlaylistManager.findByUuid(requireArguments().getString(ARG_PLAYLIST_UUID)!!) ?: return@launch
             this@TimeOptionsFragment.playlist = playlist
 
             selectedPosition = when (optionType) {
                 OptionsType.Time -> options.indexOfFirst { it.playlistValue!! >= playlist.filterHours }
-                OptionsType.Downloaded -> if (playlist.downloaded && playlist.notDownloaded) 0 else if (playlist.downloaded) 1 else 2
-                OptionsType.AudioVideo -> if (playlist.audioVideo == Playlist.AUDIO_VIDEO_FILTER_ALL) 0 else if (playlist.audioVideo == Playlist.AUDIO_VIDEO_FILTER_AUDIO_ONLY) 1 else 2
+                OptionsType.Downloaded -> if (playlist.downloaded && playlist.notDownloaded) {
+                    0
+                } else if (playlist.downloaded) {
+                    1
+                } else {
+                    2
+                }
+                OptionsType.AudioVideo -> if (playlist.audioVideo == PlaylistEntity.AUDIO_VIDEO_FILTER_ALL) {
+                    0
+                } else if (playlist.audioVideo == PlaylistEntity.AUDIO_VIDEO_FILTER_AUDIO_ONLY) {
+                    1
+                } else {
+                    2
+                }
             }
 
             updatedSelected(0, selectedPosition)
 
-            val color = playlist.getColor(context)
+            val color = playlist.icon.getColor(requireContext())
             val filterTintColor = ThemeColor.filterInteractive01(theme.activeTheme, color)
             btnSave.backgroundTintList = ColorStateList.valueOf(filterTintColor)
             btnSave.setTextColor(ThemeColor.filterInteractive02(theme.activeTheme, color))
@@ -229,14 +243,14 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
                     }
 
                     OptionsType.AudioVideo -> when (selectedPosition) {
-                        0 -> playlist.audioVideo = Playlist.AUDIO_VIDEO_FILTER_ALL
-                        1 -> playlist.audioVideo = Playlist.AUDIO_VIDEO_FILTER_AUDIO_ONLY
-                        2 -> playlist.audioVideo = Playlist.AUDIO_VIDEO_FILTER_VIDEO_ONLY
+                        0 -> playlist.audioVideo = PlaylistEntity.AUDIO_VIDEO_FILTER_ALL
+                        1 -> playlist.audioVideo = PlaylistEntity.AUDIO_VIDEO_FILTER_AUDIO_ONLY
+                        2 -> playlist.audioVideo = PlaylistEntity.AUDIO_VIDEO_FILTER_VIDEO_ONLY
                     }
                 }
 
                 launch(Dispatchers.Default) {
-                    playlist.syncStatus = Playlist.SYNC_STATUS_NOT_SYNCED
+                    playlist.syncStatus = PlaylistEntity.SYNC_STATUS_NOT_SYNCED
 
                     val playlistProperty = when (optionType) {
                         OptionsType.AudioVideo -> PlaylistProperty.MediaType
@@ -252,7 +266,7 @@ class TimeOptionsFragment : BaseFragment(), CoroutineScope {
                         null
                     }
 
-                    playlistManager.updateBlocking(playlist, userPlaylistUpdate)
+                    smartPlaylistManager.updateBlocking(playlist, userPlaylistUpdate)
                     launch(Dispatchers.Main) { (activity as FragmentHostListener).closeModal(this@TimeOptionsFragment) }
                 }
             }

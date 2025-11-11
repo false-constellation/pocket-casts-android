@@ -14,21 +14,19 @@ import au.com.shiftyjelly.pocketcasts.deeplink.DeleteBookmarkDeepLink
 import au.com.shiftyjelly.pocketcasts.deeplink.ShowBookmarkDeepLink
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.R
+import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationOpenReceiverActivity
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.utils.AppPlatform
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.extensions.isAppForeground
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.BookmarkFeatureControl
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
-import javax.inject.Inject
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
-class BookmarkHelper @Inject constructor(
+class BookmarkHelper(
     private val playbackManager: PlaybackManager,
     private val bookmarkManager: BookmarkManager,
     private val settings: Settings,
-    private val bookmarkFeature: BookmarkFeatureControl,
 ) {
     suspend fun handleAddBookmarkAction(
         context: Context,
@@ -70,8 +68,7 @@ class BookmarkHelper @Inject constructor(
         }
     }
 
-    private fun shouldAllowAddBookmark() =
-        bookmarkFeature.isAvailable(settings.userTier)
+    private fun shouldAllowAddBookmark() = settings.cachedSubscription.value != null
 }
 
 private fun buildAndShowNotification(
@@ -90,6 +87,17 @@ private fun buildAndShowNotification(
         buildPendingIntent(context, DeleteBookmarkDeepLink(bookmarkUuid).toIntent(context)),
     )
 
+    val originalContentIntent = ShowBookmarkDeepLink(bookmarkUuid).toIntent(context)
+    val contentIntent = if (Util.getAppPlatform(context) == AppPlatform.Phone) {
+        PendingIntent.getActivity(
+            context,
+            0,
+            NotificationOpenReceiverActivity.toDeeplinkIntentRelay(context, originalContentIntent),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    } else {
+        buildPendingIntent(context, originalContentIntent)
+    }
     val notification = NotificationCompat.Builder(
         context,
         Settings.NotificationChannel.NOTIFICATION_CHANNEL_ID_BOOKMARK.id,
@@ -100,7 +108,7 @@ private fun buildAndShowNotification(
         .setSmallIcon(IR.drawable.notification)
         .setAutoCancel(true)
         .setOnlyAlertOnce(true)
-        .setContentIntent(buildPendingIntent(context, ShowBookmarkDeepLink(bookmarkUuid).toIntent(context)))
+        .setContentIntent(contentIntent)
         .addAction(changeTitleAction)
         .addAction(deleteAction)
         .build()

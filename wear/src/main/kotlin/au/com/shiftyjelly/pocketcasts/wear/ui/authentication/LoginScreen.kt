@@ -1,7 +1,7 @@
 package au.com.shiftyjelly.pocketcasts.wear.ui.authentication
 
 import androidx.compose.runtime.Composable
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.material.ChipDefaults
 import au.com.shiftyjelly.pocketcasts.compose.BuildConfig
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
@@ -17,6 +17,7 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 fun LoginScreen(
     onLoginWithGoogleClick: () -> Unit,
     onLoginWithPhoneClick: () -> Unit,
+    viewModel: LoginViewModel = hiltViewModel(),
     onLoginWithEmailClick: () -> Unit,
 ) {
     val columnState = rememberColumnState()
@@ -24,8 +25,6 @@ fun LoginScreen(
     ScreenScaffold(
         scrollState = columnState,
     ) {
-        val viewModel = hiltViewModel<LoginViewModel>()
-
         CallOnce {
             viewModel.onShown()
         }
@@ -39,8 +38,9 @@ fun LoginScreen(
                     colors = ChipDefaults.secondaryChipColors(),
                     icon = DrawableResPaintable(IR.drawable.google_g_white),
                     onClick = {
-                        viewModel.onGoogleLoginClicked()
-                        onLoginWithGoogleClick()
+                        viewModel.onGoogleLoginClicked {
+                            onLoginWithGoogleClick()
+                        }
                     },
                 )
             }

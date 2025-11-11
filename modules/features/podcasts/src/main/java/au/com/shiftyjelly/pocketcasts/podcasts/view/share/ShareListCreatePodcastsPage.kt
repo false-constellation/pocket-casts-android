@@ -26,7 +26,7 @@ fun ShareListCreatePodcastsPage(
     modifier: Modifier = Modifier,
 ) {
     val state: ShareListCreateViewModel.State by viewModel.state.collectAsState()
-    Column {
+    Column(modifier = modifier) {
         ThemedTopAppBar(
             title = stringResource(LR.string.podcasts_share_select_podcasts),
             navigationButton = NavigationButton.Close,
@@ -46,11 +46,10 @@ fun ShareListCreatePodcastsPage(
         PodcastSelectGrid(
             podcasts = state.podcasts,
             selectedPodcasts = state.selectedPodcasts,
-            onPodcastSelected = { podcast -> viewModel.selectPodcast(podcast) },
-            onPodcastUnselected = { podcast -> viewModel.unselectPodcast(podcast) },
+            onSelectPodcast = { podcast -> viewModel.selectPodcast(podcast) },
+            onDeselectPodcast = { podcast -> viewModel.unselectPodcast(podcast) },
             onSelectAll = { viewModel.selectAll() },
             onSelectNone = { viewModel.selectNone() },
-            modifier = modifier,
         )
     }
 }

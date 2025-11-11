@@ -16,15 +16,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.fragment.compose.content
+import androidx.compose.ui.unit.Dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
+import au.com.shiftyjelly.pocketcasts.compose.CallOnce
 import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRow
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRowToggle
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingSection
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration
@@ -32,29 +37,41 @@ import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
-import au.com.shiftyjelly.pocketcasts.ui.R as UR
 
 @AndroidEntryPoint
 class EpisodeArtworkConfigurationFragment : BaseFragment() {
     @Inject
     lateinit var settings: Settings
 
+    @Inject
+    lateinit var analyticsTracker: AnalyticsTracker
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         val sortedElements = remember { ArtworkConfiguration.Element.entries.sortedBy { getString(it.titleId) } }
+        val bottomInset by settings.bottomInset.collectAsStateWithLifecycle(initialValue = 0)
+
         AppThemeWithBackground(theme.activeTheme) {
             val artworkConfiguration by settings.artworkConfiguration.flow.collectAsState()
+
+            CallOnce {
+                analyticsTracker.track(AnalyticsEvent.SETTINGS_ADVANCED_EPISODE_ARTWORK_SHOWN)
+            }
 
             EpisodeArtworkSettings(
                 artworkConfiguration = artworkConfiguration,
                 elements = sortedElements,
+                bottomInset = LocalDensity.current.run { bottomInset.toDp() },
                 onUpdateConfiguration = { configuration ->
+                    if (artworkConfiguration.useEpisodeArtwork != configuration.useEpisodeArtwork) {
+                        analyticsTracker.track(AnalyticsEvent.SETTINGS_ADVANCED_EPISODE_ARTWORK_USE_EPISODE_ARTWORK_TOGGLED, mapOf("enabled" to configuration.useEpisodeArtwork))
+                    }
                     settings.artworkConfiguration.set(configuration, updateModifiedAt = true)
                 },
-                onBackPressed = {
+                onBackPress = {
                     @Suppress("DEPRECATION")
                     activity?.onBackPressed()
                 },
@@ -66,34 +83,37 @@ class EpisodeArtworkConfigurationFragment : BaseFragment() {
     private fun EpisodeArtworkSettings(
         artworkConfiguration: ArtworkConfiguration,
         elements: List<ArtworkConfiguration.Element>,
+        bottomInset: Dp,
         onUpdateConfiguration: (ArtworkConfiguration) -> Unit,
-        onBackPressed: () -> Unit,
+        onBackPress: () -> Unit,
     ) {
         Column(
-            modifier = Modifier
-                .background(MaterialTheme.theme.colors.primaryUi02)
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.background(MaterialTheme.theme.colors.primaryUi02),
         ) {
             ThemedTopAppBar(
                 title = stringResource(LR.string.settings_use_episode_artwork_title),
-                onNavigationClick = onBackPressed,
+                onNavigationClick = onBackPress,
                 bottomShadow = true,
             )
-            SettingSection {
-                UseEpisodeArtwork(artworkConfiguration, onUpdateConfiguration)
-            }
-            SettingSection(
-                heading = stringResource(LR.string.settings_use_episode_artwork_customization_section),
-                subHeading = stringResource(LR.string.settings_use_episode_artwork_customization_description),
-                showDivider = false,
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
             ) {
-                elements.forEach { element ->
-                    ArtworkElement(artworkConfiguration, element, onUpdateConfiguration)
+                SettingSection {
+                    UseEpisodeArtwork(artworkConfiguration, onUpdateConfiguration)
                 }
+                SettingSection(
+                    heading = stringResource(LR.string.settings_use_episode_artwork_customization_section),
+                    subHeading = stringResource(LR.string.settings_use_episode_artwork_customization_description),
+                    showDivider = false,
+                ) {
+                    elements.forEach { element ->
+                        ArtworkElement(artworkConfiguration, element, onUpdateConfiguration)
+                    }
+                }
+                Spacer(
+                    modifier = Modifier.height(bottomInset),
+                )
             }
-            Spacer(
-                modifier = Modifier.height(dimensionResource(UR.dimen.mini_player_height)),
-            )
         }
     }
 
@@ -122,6 +142,9 @@ class EpisodeArtworkConfigurationFragment : BaseFragment() {
             primaryText = stringResource(element.titleId),
             toggle = SettingRowToggle.Checkbox(checked = configuration.useEpisodeArtwork(element), enabled = configuration.useEpisodeArtwork),
             modifier = Modifier.toggleable(value = configuration.useEpisodeArtwork(element), role = Role.Checkbox) { newValue ->
+                if (configuration.useEpisodeArtwork) {
+                    analyticsTracker.track(AnalyticsEvent.SETTINGS_ADVANCED_EPISODE_ARTWORK_CUSTOMIZATION_ELEMENT_TOGGLED, mapOf("enabled" to newValue, "element" to element.analyticsValue))
+                }
                 onUpdateConfiguration(if (newValue) configuration.enable(element) else configuration.disable(element))
             },
         )

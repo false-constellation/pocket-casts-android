@@ -10,9 +10,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,18 +19,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.unit.dp
-import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.doOnLayout
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import androidx.lifecycle.lifecycleScope
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.dialogs.OptionsDialogComponent
 import au.com.shiftyjelly.pocketcasts.compose.dialogs.OptionsDialogOption
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeStatusEnum
@@ -45,8 +40,7 @@ import au.com.shiftyjelly.pocketcasts.sharing.SharingClient
 import au.com.shiftyjelly.pocketcasts.sharing.SharingRequest
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
 import au.com.shiftyjelly.pocketcasts.utils.parceler.ColorParceler
 import au.com.shiftyjelly.pocketcasts.utils.parceler.DurationParceler
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -74,7 +68,7 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
     @Inject
     lateinit var sharingClient: SharingClient
 
-    private val args get() = requireNotNull(arguments?.let { BundleCompat.getParcelable(it, NEW_INSTANCE_ARG, Args::class.java) })
+    private val args get() = requireArguments().requireParcelable<Args>(NEW_INSTANCE_ARG)
 
     private val bottomSheet get() = requireDialog().findViewById<View>(MR.id.design_bottom_sheet)
 
@@ -90,7 +84,7 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         val usePodcastColors = args.backgroundColor != null
         val state by viewModel.uiState.collectAsState()
         val podcast = state.podcast
@@ -99,7 +93,7 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
         // Dismiss dialog as this is a user episode
         if (podcast == null || episode !is PodcastEpisode) {
             LaunchedEffect(Unit) { dismiss() }
-            return@content
+            return@contentWithoutConsumedInsets
         }
 
         if (usePodcastColors) {
@@ -109,8 +103,7 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
 
             Box(modifier = Modifier.background(backgroundColor)) {
                 ShareDialog(
-                    options = createShareOptions(podcast, episode, backgroundColor, textColor),
-                    handleColor = Color(ThemeColor.primaryIcon02(theme.activeTheme)),
+                    options = createShareOptions(podcast, episode, textColor),
                     dividerColor = dividerColor,
                 )
             }
@@ -119,10 +112,7 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
             }
         } else {
             AppTheme(theme.activeTheme) {
-                ShareDialog(
-                    options = createShareOptions(podcast, episode),
-                    handleColor = Color(ThemeColor.primaryIcon02(theme.activeTheme)),
-                )
+                ShareDialog(options = createShareOptions(podcast, episode))
             }
         }
     }
@@ -142,17 +132,10 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
     @Composable
     private fun ShareDialog(
         options: List<OptionsDialogOption>,
-        handleColor: Color,
         dividerColor: Color? = null,
     ) = Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            modifier = Modifier
-                .width(48.dp)
-                .height(4.dp)
-                .background(handleColor, RoundedCornerShape(2.dp)),
-        )
         OptionsDialogComponent(
             options = options,
             dividerColor = dividerColor,
@@ -164,7 +147,6 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
     private fun createShareOptions(
         podcast: Podcast,
         episode: PodcastEpisode,
-        backgroundColor: Color? = null,
         textColor: Color? = null,
     ) = buildList {
         if (ShareDialogFragment.Options.Podcast in args.options) {
@@ -172,20 +154,10 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
                 shareOption(
                     textId = LR.string.share_podcast,
                     textColor = textColor,
-                    backgroundColor = backgroundColor,
                     onClick = {
-                        if (FeatureFlag.isEnabled(Feature.REIMAGINE_SHARING)) {
-                            SharePodcastFragment
-                                .newInstance(podcast, args.source)
-                                .show(parentFragmentManager, "share_screen")
-                        } else {
-                            lifecycleScope.launch(NonCancellable) {
-                                val request = SharingRequest.podcast(podcast)
-                                    .setSourceView(args.source)
-                                    .build()
-                                sharingClient.share(request)
-                            }
-                        }
+                        SharePodcastFragment
+                            .newInstance(podcast, args.source)
+                            .show(parentFragmentManager, "share_screen")
                     },
                 ),
             )
@@ -195,20 +167,10 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
                 shareOption(
                     textId = LR.string.podcast_share_episode,
                     textColor = textColor,
-                    backgroundColor = backgroundColor,
                     onClick = {
-                        if (FeatureFlag.isEnabled(Feature.REIMAGINE_SHARING)) {
-                            ShareEpisodeFragment
-                                .newInstance(episode, podcast.backgroundColor, args.source)
-                                .show(parentFragmentManager, "share_screen")
-                        } else {
-                            lifecycleScope.launch(NonCancellable) {
-                                val request = SharingRequest.episode(podcast, episode)
-                                    .setSourceView(args.source)
-                                    .build()
-                                sharingClient.share(request)
-                            }
-                        }
+                        ShareEpisodeFragment
+                            .newInstance(episode, podcast.backgroundColor, args.source)
+                            .show(parentFragmentManager, "share_screen")
                     },
                 ),
             )
@@ -216,43 +178,29 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
                 shareOption(
                     textId = LR.string.podcast_share_current_position,
                     textColor = textColor,
-                    backgroundColor = backgroundColor,
                     onClick = {
-                        if (FeatureFlag.isEnabled(Feature.REIMAGINE_SHARING)) {
-                            ShareEpisodeTimestampFragment
-                                .forEpisodePosition(episode, podcast.backgroundColor, args.source)
-                                .show(parentFragmentManager, "share_screen")
-                        } else {
-                            lifecycleScope.launch(NonCancellable) {
-                                val request = SharingRequest.episodePosition(podcast, episode, episode.playedUpTo.seconds)
-                                    .setSourceView(args.source)
-                                    .build()
-                                sharingClient.share(request)
-                            }
-                        }
+                        ShareEpisodeTimestampFragment
+                            .forEpisodePosition(episode, podcast.backgroundColor, args.source)
+                            .show(parentFragmentManager, "share_screen")
                     },
                 ),
             )
-            if (FeatureFlag.isEnabled(Feature.REIMAGINE_SHARING)) {
-                add(
-                    shareOption(
-                        textId = LR.string.podcast_share_clip,
-                        textColor = textColor,
-                        backgroundColor = backgroundColor,
-                        onClick = {
-                            ShareClipFragment
-                                .newInstance(episode, podcast.backgroundColor, args.source)
-                                .show(parentFragmentManager, "share_screen")
-                        },
-                    ),
-                )
-            }
+            add(
+                shareOption(
+                    textId = LR.string.podcast_share_clip,
+                    textColor = textColor,
+                    onClick = {
+                        ShareClipFragment
+                            .newInstance(episode, podcast.backgroundColor, args.source)
+                            .show(parentFragmentManager, "share_screen")
+                    },
+                ),
+            )
             if (episode.isDownloaded) {
                 add(
                     shareOption(
                         textId = LR.string.podcast_share_open_file_in,
                         textColor = textColor,
-                        backgroundColor = backgroundColor,
                         onClick = {
                             lifecycleScope.launch(NonCancellable) {
                                 val request = SharingRequest.episodeFile(podcast, episode)
@@ -270,12 +218,10 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
     private fun shareOption(
         @StringRes textId: Int,
         textColor: Color?,
-        backgroundColor: Color?,
         onClick: () -> Unit,
     ) = OptionsDialogOption(
         titleId = textId,
         titleColor = textColor?.toArgb(),
-        backgroundColor = backgroundColor,
         click = {
             onClick()
             dismiss()
@@ -285,11 +231,9 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
     private fun refreshSystemColors(color: Color) {
         val argbColor = color.toArgb()
         requireActivity().window?.let { activityWindow ->
-            activityWindow.statusBarColor = argbColor
             WindowInsetsControllerCompat(activityWindow, activityWindow.decorView).isAppearanceLightStatusBars = color.luminance() > 0.5f
         }
         requireDialog().window?.let { dialogWindow ->
-            dialogWindow.navigationBarColor = argbColor
             WindowInsetsControllerCompat(dialogWindow, dialogWindow.decorView).isAppearanceLightNavigationBars = color.luminance() > 0.5f
         }
         bottomSheet.backgroundTintList = ColorStateList.valueOf(argbColor)

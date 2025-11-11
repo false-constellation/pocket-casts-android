@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -16,6 +15,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -130,6 +130,9 @@ internal fun ShareClipPage(
     useEpisodeArtwork: Boolean,
     useKeyboardInput: Boolean,
     assetController: BackgroundAssetController,
+    onNavigationButtonClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onCloseClick: () -> Unit,
     listener: ShareClipPageListener,
     state: ClipPageState = rememberClipPageState(
         firstVisibleItemIndex = (clipRange.startInSeconds - 10).coerceAtLeast(0),
@@ -150,6 +153,9 @@ internal fun ShareClipPage(
             useKeyboardInput = useKeyboardInput,
             assetController = assetController,
             listener = listener,
+            onNavigationButtonClick = onNavigationButtonClick,
+            onEditClick = onEditClick,
+            onCloseClick = onCloseClick,
             state = state,
             snackbarHostState = snackbarHostState,
         )
@@ -166,13 +172,15 @@ internal fun ShareClipPage(
             useKeyboardInput = useKeyboardInput,
             assetController = assetController,
             listener = listener,
+            onNavigationButtonClick = onNavigationButtonClick,
+            onEditClick = onEditClick,
+            onCloseClick = onCloseClick,
             state = state,
             snackbarHostState = snackbarHostState,
         )
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VerticalClipPage(
     episode: PodcastEpisode?,
@@ -187,6 +195,9 @@ private fun VerticalClipPage(
     useKeyboardInput: Boolean,
     assetController: BackgroundAssetController,
     listener: ShareClipPageListener,
+    onNavigationButtonClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onCloseClick: () -> Unit,
     state: ClipPageState,
     snackbarHostState: SnackbarHostState,
 ) {
@@ -197,9 +208,10 @@ private fun VerticalClipPage(
     ) {
         AnimatedVisiblity(podcast = podcast, episode = episode) { podcast, episode ->
             Column {
-                val pagerState = rememberPagerState(pageCount = { CardType.entires.size })
+                // Hide audio card until audio clips are available
+                val pagerState = rememberPagerState(pageCount = { CardType.visualEntries.size })
                 val scrollState = rememberScrollState()
-                val selectedCard = CardType.entires[pagerState.currentPage]
+                val selectedCard = CardType.visualEntries[pagerState.currentPage]
                 Column(
                     verticalArrangement = Arrangement.Center,
                     modifier = Modifier
@@ -213,6 +225,7 @@ private fun VerticalClipPage(
                         sharingState = sharingState,
                         shareColors = shareColors,
                         selectedCard = selectedCard,
+                        onEditClick = onEditClick,
                         listener = listener,
                         state = state,
                     )
@@ -239,6 +252,7 @@ private fun VerticalClipPage(
                     shareColors = shareColors,
                     useKeyboardInput = useKeyboardInput,
                     selectedCard = selectedCard,
+                    onNavigationButtonClick = onNavigationButtonClick,
                     listener = listener,
                     state = state,
                 )
@@ -246,7 +260,10 @@ private fun VerticalClipPage(
         }
         CloseButton(
             shareColors = shareColors,
-            onClick = listener::onClose,
+            onClick = {
+                onCloseClick()
+                listener.onClose()
+            },
             modifier = Modifier
                 .padding(top = 12.dp, end = 12.dp)
                 .align(Alignment.TopEnd),
@@ -273,6 +290,9 @@ private fun HorizontalClipPage(
     useKeyboardInput: Boolean,
     assetController: BackgroundAssetController,
     listener: ShareClipPageListener,
+    onNavigationButtonClick: () -> Unit,
+    onCloseClick: () -> Unit,
+    onEditClick: () -> Unit,
     state: ClipPageState,
     snackbarHostState: SnackbarHostState,
 ) {
@@ -289,6 +309,7 @@ private fun HorizontalClipPage(
                     sharingState = sharingState,
                     shareColors = shareColors,
                     selectedCard = CardType.Horizontal,
+                    onEditClick = onEditClick,
                     listener = listener,
                     state = state,
                 )
@@ -323,6 +344,7 @@ private fun HorizontalClipPage(
                         useKeyboardInput = useKeyboardInput,
                         selectedCard = CardType.Horizontal,
                         listener = listener,
+                        onNavigationButtonClick = onNavigationButtonClick,
                         state = state,
                         modifier = Modifier.weight(1f),
                     )
@@ -334,7 +356,10 @@ private fun HorizontalClipPage(
         }
         CloseButton(
             shareColors = shareColors,
-            onClick = listener::onClose,
+            onClick = {
+                onCloseClick()
+                listener.onClose()
+            },
             modifier = Modifier
                 .padding(top = 12.dp, end = 12.dp)
                 .align(Alignment.TopEnd),
@@ -352,6 +377,7 @@ private fun DescriptionContent(
     sharingState: SharingState,
     shareColors: ShareColors,
     selectedCard: CardType,
+    onEditClick: () -> Unit,
     listener: ShareClipPageListener,
     state: ClipPageState,
 ) {
@@ -420,7 +446,10 @@ private fun DescriptionContent(
                             indication = ripple(color = shareColors.accent),
                             onClickLabel = stringResource(LR.string.share_clip_edit_label),
                             role = Role.Button,
-                            onClick = listener::onShowClipSelection,
+                            onClick = {
+                                onEditClick()
+                                listener.onShowClipSelection()
+                            },
                         )
                         .padding(vertical = 4.dp, horizontal = 16.dp),
                 )
@@ -439,9 +468,8 @@ private fun DescriptionContent(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PagingContent(
+private fun ColumnScope.PagingContent(
     episode: PodcastEpisode,
     podcast: Podcast,
     sharingState: SharingState,
@@ -527,6 +555,7 @@ private fun PageControlsContent(
     useKeyboardInput: Boolean,
     selectedCard: CardType,
     listener: ShareClipPageListener,
+    onNavigationButtonClick: () -> Unit,
     state: ClipPageState,
     modifier: Modifier = Modifier,
 ) {
@@ -547,6 +576,7 @@ private fun PageControlsContent(
                 useKeyboardInput = useKeyboardInput,
                 selectedCard = selectedCard,
                 listener = listener,
+                onNavigationButtonClick = onNavigationButtonClick,
                 state = state,
             )
             Step.PlatformSelection -> SharingControls(
@@ -574,6 +604,7 @@ private fun ClipControls(
     shareColors: ShareColors,
     useKeyboardInput: Boolean,
     selectedCard: CardType,
+    onNavigationButtonClick: () -> Unit,
     listener: ShareClipPageListener,
     state: ClipPageState,
 ) {
@@ -598,6 +629,8 @@ private fun ClipControls(
         )
         BaseRowButton(
             onClick = {
+                onNavigationButtonClick()
+
                 if (!sharingState.iSharing) {
                     when (selectedCard) {
                         CardType.Vertical, CardType.Horizontal, CardType.Square -> {
@@ -729,71 +762,71 @@ private fun AnimatedVisiblity(
     }
 }
 
-@Preview(name = "Regular", device = Devices.PortraitRegular, group = "vertical")
+@Preview(name = "Regular", device = Devices.PORTRAIT_REGULAR, group = "vertical")
 @Composable
 private fun ShareClipVerticalRegularPreview() = ShareClipPagePreview()
 
-@Preview(name = "Regular keyboard", device = Devices.PortraitRegular, group = "vertical")
+@Preview(name = "Regular keyboard", device = Devices.PORTRAIT_REGULAR, group = "vertical")
 @Composable
 private fun ShareClipVerticalRegularKeyboardPreview() = ShareClipPagePreview(
     useKeyboardInput = true,
 )
 
-@Preview(name = "Regular sharing", device = Devices.PortraitRegular, group = "vertical")
+@Preview(name = "Regular sharing", device = Devices.PORTRAIT_REGULAR, group = "vertical")
 @Composable
 private fun ShareClipVerticalRegularSharingPreview() = ShareClipPagePreview(
     sharingState = SharingState(step = Step.PlatformSelection, iSharing = false),
 )
 
-@Preview(name = "Regular clipping", device = Devices.PortraitRegular, group = "vertical")
+@Preview(name = "Regular clipping", device = Devices.PORTRAIT_REGULAR, group = "vertical")
 @Composable
 private fun ShareClipVerticalRegularClippingPreview() = ShareClipPagePreview(
     sharingState = SharingState(step = Step.PlatformSelection, iSharing = true),
 )
 
-@Preview(name = "Small", device = Devices.PortraitSmall, group = "vertical")
+@Preview(name = "Small", device = Devices.PORTRAIT_SMALL, group = "vertical")
 @Composable
 private fun ShareClipVerticalSmallPreviewPreview() = ShareClipPagePreview()
 
-@Preview(name = "Regular", device = Devices.LandscapeRegular, group = "horizontal")
+@Preview(name = "Regular", device = Devices.LANDSCAPE_REGULAR, group = "horizontal")
 @Composable
 private fun ShareClipHorizontalRegularPreview() = ShareClipPagePreview()
 
-@Preview(name = "Regular keyboard", device = Devices.LandscapeRegular, group = "horizontal")
+@Preview(name = "Regular keyboard", device = Devices.LANDSCAPE_REGULAR, group = "horizontal")
 @Composable
 private fun ShareClipHorizontalRegularKeyboardPreview() = ShareClipPagePreview(
     useKeyboardInput = true,
 )
 
-@Preview(name = "Regular sharing", device = Devices.LandscapeRegular, group = "horizontal")
+@Preview(name = "Regular sharing", device = Devices.LANDSCAPE_REGULAR, group = "horizontal")
 @Composable
 private fun ShareClipHorizontalRegularSharingPreview() = ShareClipPagePreview(
     sharingState = SharingState(step = Step.PlatformSelection, iSharing = false),
 )
 
-@Preview(name = "Regular clipping", device = Devices.LandscapeRegular, group = "horizontal")
+@Preview(name = "Regular clipping", device = Devices.LANDSCAPE_REGULAR, group = "horizontal")
 @Composable
 private fun ShareClipHorizontalRegularClippingPreview() = ShareClipPagePreview(
     sharingState = SharingState(step = Step.PlatformSelection, iSharing = true),
 )
 
-@Preview(name = "Small", device = Devices.LandscapeSmall, group = "horizontal")
+@Preview(name = "Small", device = Devices.LANDSCAPE_SMALL, group = "horizontal")
 @Composable
 private fun ShareClipHorizontalSmallPreviewPreview() = ShareClipPagePreview()
 
-@Preview(name = "Foldable", device = Devices.PortraitFoldable, group = "irregular")
+@Preview(name = "Foldable", device = Devices.PORTRAIT_FOLDABLE, group = "irregular")
 @Composable
 private fun ShareClipVerticalFoldablePreviewPreview() = ShareClipPagePreview()
 
-@Preview(name = "Foldable", device = Devices.LandscapeFoldable, group = "irregular")
+@Preview(name = "Foldable", device = Devices.LANDSCAPE_FOLDABLE, group = "irregular")
 @Composable
 private fun ShareClipHorizontalFoldablePreviewPreview() = ShareClipPagePreview()
 
-@Preview(name = "Tablet", device = Devices.PortraitTablet, group = "irregular")
+@Preview(name = "Tablet", device = Devices.PORTRAIT_TABLET, group = "irregular")
 @Composable
 private fun ShareClipVerticalTabletPreview() = ShareClipPagePreview()
 
-@Preview(name = "Tablet", device = Devices.LandscapeTablet, group = "irregular")
+@Preview(name = "Tablet", device = Devices.LANDSCAPE_TABLET, group = "irregular")
 @Composable
 private fun ShareClipHorizontalTabletPreview() = ShareClipPagePreview()
 
@@ -827,6 +860,9 @@ internal fun ShareClipPagePreview(
         useKeyboardInput = useKeyboardInput,
         assetController = BackgroundAssetController.preview(),
         listener = ShareClipPageListener.Preview,
+        onNavigationButtonClick = {},
+        onCloseClick = {},
+        onEditClick = {},
         state = rememberClipPageState(
             firstVisibleItemIndex = 0,
         ),

@@ -8,21 +8,25 @@ import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.analytics.TracksAnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.experiments.ExperimentProvider
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
+import au.com.shiftyjelly.pocketcasts.models.db.dao.PlaylistDao
+import au.com.shiftyjelly.pocketcasts.models.type.SignInState
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearSync
+import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationScheduler
+import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationSchedulerImpl.Companion.TAG_TRENDING_RECOMMENDATIONS
+import au.com.shiftyjelly.pocketcasts.repositories.notification.TrendingAndRecommendationsNotificationType
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
+import au.com.shiftyjelly.pocketcasts.repositories.playlist.DefaultPlaylistsInitializer
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.FolderManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.searchhistory.SearchHistoryManager
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
+import au.com.shiftyjelly.pocketcasts.utils.Optional
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import com.automattic.android.tracks.crashlogging.CrashLogging
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,15 +38,18 @@ import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.rx2.asFlowable
+import kotlinx.coroutines.rx2.rxSingle
 import timber.log.Timber
 
 interface UserManager {
     fun beginMonitoringAccountManager(playbackManager: PlaybackManager)
     fun getSignInState(): Flowable<SignInState>
     fun signOut(playbackManager: PlaybackManager, wasInitiatedByUser: Boolean)
-    fun signOutAndClearData(playbackManager: PlaybackManager, upNextQueue: UpNextQueue, playlistManager: PlaylistManager, folderManager: FolderManager, searchHistoryManager: SearchHistoryManager, episodeManager: EpisodeManager, wasInitiatedByUser: Boolean)
+    fun signOutAndClearData(playbackManager: PlaybackManager, upNextQueue: UpNextQueue, folderManager: FolderManager, searchHistoryManager: SearchHistoryManager, episodeManager: EpisodeManager, wasInitiatedByUser: Boolean)
 }
 
 class UserManagerImpl @Inject constructor(
@@ -52,13 +59,17 @@ class UserManagerImpl @Inject constructor(
     val subscriptionManager: SubscriptionManager,
     val podcastManager: PodcastManager,
     val userEpisodeManager: UserEpisodeManager,
+    private val playlistDao: PlaylistDao,
+    private val playlistsInitializer: DefaultPlaylistsInitializer,
     private val analyticsTracker: AnalyticsTracker,
     private val tracker: TracksAnalyticsTracker,
     @ApplicationScope private val applicationScope: CoroutineScope,
     private val crashLogging: CrashLogging,
     private val experimentProvider: ExperimentProvider,
     private val endOfYearSync: EndOfYearSync,
-) : UserManager, CoroutineScope {
+    private val notificationScheduler: NotificationScheduler,
+) : UserManager,
+    CoroutineScope {
 
     companion object {
         private const val KEY_USER_INITIATED = "user_initiated"
@@ -88,25 +99,33 @@ class UserManagerImpl @Inject constructor(
         return syncManager.isLoggedInObservable.toFlowable(BackpressureStrategy.LATEST)
             .switchMap { isLoggedIn ->
                 if (isLoggedIn) {
-                    subscriptionManager.observeSubscriptionStatus()
-                        .flatMapSingle {
-                            val value = it.get()
-                            if (value != null) {
-                                Single.just(value)
+                    launch(coroutineContext) {
+                        notificationScheduler.setupTrendingAndRecommendationsNotifications()
+                    }
+
+                    settings.cachedSubscription.flow
+                        .map { Optional.of(it) }
+                        .asFlowable()
+                        .flatMapSingle { maybeSubscription ->
+                            if (maybeSubscription.isPresent()) {
+                                Single.just(maybeSubscription)
                             } else {
-                                subscriptionManager.getSubscriptionStatusRxSingle(allowCache = false)
+                                rxSingle { Optional.of(subscriptionManager.fetchFreshSubscription()) }
                             }
                         }
                         .combineLatest(syncManager.emailFlowable())
-                        .map { (status, maybeEmail) ->
+                        .map { (maybeSubscription, maybeEmail) ->
                             analyticsTracker.refreshMetadata()
-                            SignInState.SignedIn(email = maybeEmail.get() ?: "", subscriptionStatus = status)
+                            SignInState.SignedIn(email = maybeEmail.get() ?: "", subscription = maybeSubscription.get())
                         }
                         .onErrorReturn {
                             Timber.e(it, "Error getting subscription state")
-                            SignInState.SignedIn(syncManager.getEmail() ?: "", SubscriptionStatus.Free())
+                            SignInState.SignedIn(syncManager.getEmail() ?: "", subscription = null)
                         }
                 } else {
+                    launch(coroutineContext) {
+                        notificationScheduler.cancelScheduledWorksByTag(listOf("$TAG_TRENDING_RECOMMENDATIONS-${TrendingAndRecommendationsNotificationType.Recommendations.subcategory}"))
+                    }
                     Flowable.just(SignInState.SignedOut)
                 }
             }
@@ -115,7 +134,6 @@ class UserManagerImpl @Inject constructor(
     override fun signOut(playbackManager: PlaybackManager, wasInitiatedByUser: Boolean) {
         if (wasInitiatedByUser || !settings.getFullySignedOut()) {
             LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Signing out")
-            subscriptionManager.clearCachedStatus()
             syncManager.signOut {
                 applicationScope.launch {
                     settings.clearPlusPreferences()
@@ -139,6 +157,7 @@ class UserManagerImpl @Inject constructor(
                     endOfYearSync.reset()
                 }
             }
+            subscriptionManager.clearCachedMembership()
         }
         settings.setFullySignedOut(true)
     }
@@ -146,7 +165,6 @@ class UserManagerImpl @Inject constructor(
     override fun signOutAndClearData(
         playbackManager: PlaybackManager,
         upNextQueue: UpNextQueue,
-        playlistManager: PlaylistManager,
         folderManager: FolderManager,
         searchHistoryManager: SearchHistoryManager,
         episodeManager: EpisodeManager,
@@ -167,7 +185,8 @@ class UserManagerImpl @Inject constructor(
         runBlocking(Dispatchers.IO) {
             upNextQueue.removeAllIncludingChanges()
 
-            playlistManager.resetDb()
+            playlistDao.deleteAllPlaylists()
+            playlistsInitializer.initialize(force = true)
             folderManager.deleteAll()
             searchHistoryManager.clearAll()
 

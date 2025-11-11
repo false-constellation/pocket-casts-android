@@ -10,7 +10,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.components.SearchBar
@@ -20,6 +20,7 @@ import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 @Composable
 fun ProfileEpisodeListSearchBar(
     activeTheme: Theme.ThemeType,
+    modifier: Modifier = Modifier,
     viewModel: ProfileEpisodeListViewModel = hiltViewModel<ProfileEpisodeListViewModel>(),
 ) {
     AppTheme(activeTheme) {
@@ -30,9 +31,9 @@ fun ProfileEpisodeListSearchBar(
             SearchBar(
                 text = searchQueryFlow,
                 placeholder = stringResource(R.string.search),
-                onTextChanged = { viewModel.onSearchQueryChanged(it) },
+                onTextChange = { viewModel.onSearchQueryChanged(it) },
                 onSearch = {},
-                modifier = Modifier
+                modifier = modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .focusRequester(focusRequester),

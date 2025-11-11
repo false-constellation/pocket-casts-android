@@ -18,7 +18,9 @@ enum class SourceView(val analyticsValue: String) {
     ENGAGE_SDK_SIGN_IN("engage_sdk_sign_in"),
     EPISODE_DETAILS("episode_details"),
     EPISODE_SWIPE_ACTION("episode_swipe_action"),
+    EPISODE_TRANSCRIPT("episode_transcript"),
     FILES("files"),
+    FILES_SETTINGS("files_settings"),
     FILTERS("filters"),
     FULL_SCREEN_VIDEO("full_screen_video"),
     LISTENING_HISTORY("listening_history"),
@@ -29,9 +31,6 @@ enum class SourceView(val analyticsValue: String) {
     MULTI_SELECT("multi_select"),
     NOTIFICATION("notification"),
     NOTIFICATION_BOOKMARK("notification_bookmark"),
-    NOVA_LAUNCHER_RECENTLY_PLAYED("nova_launcher_recently_played"),
-    NOVA_LAUNCHER_SUBSCRIBED_PODCASTS("nova_launcher_subscribed_podcasts"),
-    NOVA_LAUNCHER_TRENDING_PODCASTS("nova_launcher_trending_podcasts"),
     ONBOARDING_RECOMMENDATIONS("onboarding_recommendations"),
     ONBOARDING_RECOMMENDATIONS_SEARCH("onboarding_recommendations_search"),
     PLAYER("player"),
@@ -50,7 +49,10 @@ enum class SourceView(val analyticsValue: String) {
     TASKER("tasker"),
     UNKNOWN("unknown"),
     UP_NEXT("up_next"),
+    UP_NEXT_HISTORY("up_next_history"),
     WHATS_NEW("whats_new"),
+    ABOUT("about"),
+    APPEARANCE("appearance_settings"),
     STORAGE_AND_DATA_USAGE("storage_and_data_usage"),
     WIDGET_PLAYER_LARGE("widget_player_large"),
     WIDGET_PLAYER_MEDIUM("widget_player_medium"),
@@ -61,7 +63,6 @@ enum class SourceView(val analyticsValue: String) {
     fun skipTracking() = this in listOf(AUTO_PLAY, AUTO_PAUSE)
 
     companion object {
-        fun fromString(source: String?) =
-            SourceView.entries.find { it.analyticsValue == source } ?: UNKNOWN
+        fun fromString(source: String?) = SourceView.entries.find { it.analyticsValue == source } ?: UNKNOWN
     }
 }

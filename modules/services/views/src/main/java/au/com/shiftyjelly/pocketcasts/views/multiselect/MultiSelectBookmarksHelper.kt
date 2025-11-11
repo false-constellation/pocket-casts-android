@@ -4,13 +4,16 @@ import android.content.res.Resources
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.map
+import androidx.lifecycle.asFlow
+import androidx.lifecycle.liveData
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.localization.extensions.getStringPlural
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
+import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
+import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.views.R
 import au.com.shiftyjelly.pocketcasts.views.dialog.ConfirmationDialog
 import javax.inject.Inject
@@ -26,6 +29,7 @@ import au.com.shiftyjelly.pocketcasts.ui.R as UR
 class MultiSelectBookmarksHelper @Inject constructor(
     private val bookmarkManager: BookmarkManager,
     private val analyticsTracker: AnalyticsTracker,
+    var episodeManager: EpisodeManager,
 ) : MultiSelectHelper<Bookmark>() {
     override val maxToolbarIcons = 3
 
@@ -34,22 +38,24 @@ class MultiSelectBookmarksHelper @Inject constructor(
 
     override var source by bookmarkManager::sourceView
 
-    override val toolbarActions: LiveData<List<MultiSelectAction>> = _selectedListLive
-        .map {
-            Timber.d("MultiSelectBookmarksHelper toolbarActions updated, ${it.size} bookmarks from $source")
-            listOf(
+    override val toolbarActions: LiveData<List<MultiSelectAction>> = liveData {
+        _selectedListLive.asFlow().collect { selectedList ->
+            Timber.d("MultiSelectBookmarksHelper toolbarActions updated, ${selectedList.size} bookmarks from $source")
+
+            val actions = listOf(
                 MultiSelectBookmarkAction.ShareBookmark(
-                    isVisible = source != SourceView.FILES &&
-                        it.count() == 1,
+                    isVisible = source != SourceView.FILES && selectedList.count() == 1 && isEligibleToShare(),
                 ),
-                MultiSelectBookmarkAction.EditBookmark(isVisible = it.count() == 1),
+                MultiSelectBookmarkAction.EditBookmark(isVisible = selectedList.count() == 1),
                 MultiSelectBookmarkAction.DeleteBookmark,
                 MultiSelectAction.SelectAll,
             )
-        }
 
-    override fun isSelected(multiSelectable: Bookmark) =
-        selectedList.count { it.uuid == multiSelectable.uuid } > 0
+            emit(actions)
+        }
+    }
+
+    override fun isSelected(multiSelectable: Bookmark) = selectedList.count { it.uuid == multiSelectable.uuid } > 0
 
     override fun onMenuItemSelected(
         itemId: Int,
@@ -109,6 +115,11 @@ class MultiSelectBookmarksHelper @Inject constructor(
             return
         }
 
+        analyticsTracker.track(
+            AnalyticsEvent.BOOKMARK_DELETE_FORM_SHOWN,
+            mapOf("source" to source.analyticsValue),
+        )
+
         val count = bookmarks.size
         ConfirmationDialog()
             .setForceDarkTheme(source == SourceView.PLAYER)
@@ -133,6 +144,11 @@ class MultiSelectBookmarksHelper @Inject constructor(
             .setIconTint(UR.attr.support_05)
             .setOnConfirm {
                 launch {
+                    analyticsTracker.track(
+                        AnalyticsEvent.BOOKMARK_DELETE_FORM_SUBMITTED,
+                        mapOf("source" to source.analyticsValue),
+                    )
+
                     bookmarks.forEach {
                         bookmarkManager.deleteToSync(it.uuid)
                         analyticsTracker.track(
@@ -153,6 +169,13 @@ class MultiSelectBookmarksHelper @Inject constructor(
                 closeMultiSelect()
             }
             .show(fragmentManager, "delete_bookmarks_warning")
+    }
+
+    private suspend fun isEligibleToShare(): Boolean {
+        val bookmark = selectedList.first()
+
+        val episode = episodeManager.findEpisodeByUuid(bookmark.episodeUuid)
+        return episode is PodcastEpisode
     }
 
     sealed class NavigationState {

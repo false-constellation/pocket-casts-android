@@ -16,9 +16,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.text.HtmlCompat
 import androidx.work.ListenableWorker
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.deeplink.ShowEpisodeDeepLink
 import au.com.shiftyjelly.pocketcasts.localization.BuildConfig
+import au.com.shiftyjelly.pocketcasts.models.db.AppDatabase
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast.AutoAddUpNext
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
@@ -27,34 +28,35 @@ import au.com.shiftyjelly.pocketcasts.models.type.EpisodeViewSource
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.NewEpisodeNotificationAction
 import au.com.shiftyjelly.pocketcasts.repositories.R
-import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
+import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadHelper
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
 import au.com.shiftyjelly.pocketcasts.repositories.file.FileStorage
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
 import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationHelper
+import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationOpenReceiverActivity
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playlist.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.FolderManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.ratings.RatingsManager
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.repositories.sync.NotificationBroadcastReceiver
-import au.com.shiftyjelly.pocketcasts.repositories.sync.PodcastSyncProcess
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
+import au.com.shiftyjelly.pocketcasts.repositories.sync.data.DataSyncProcess
 import au.com.shiftyjelly.pocketcasts.repositories.user.StatsManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
 import au.com.shiftyjelly.pocketcasts.servers.RefreshResponse
 import au.com.shiftyjelly.pocketcasts.servers.ServerResponseException
 import au.com.shiftyjelly.pocketcasts.servers.ServiceManager
-import au.com.shiftyjelly.pocketcasts.servers.podcast.PodcastCacheServiceManagerImpl
 import au.com.shiftyjelly.pocketcasts.servers.sync.exception.RefreshTokenExpiredException
+import au.com.shiftyjelly.pocketcasts.utils.AppPlatform
 import au.com.shiftyjelly.pocketcasts.utils.Network
+import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import coil.executeBlocking
 import coil.imageLoader
-import com.automattic.android.tracks.crashlogging.CrashLogging
 import dagger.hilt.EntryPoint
 import dagger.hilt.EntryPoints
 import dagger.hilt.InstallIn
@@ -62,7 +64,6 @@ import dagger.hilt.components.SingletonComponent
 import java.util.Date
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -70,7 +71,6 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 class RefreshPodcastsThread(
     private val context: Context,
-    private val applicationScope: CoroutineScope,
     private val runNow: Boolean,
 ) {
 
@@ -80,10 +80,8 @@ class RefreshPodcastsThread(
         fun serviceManager(): ServiceManager
         fun podcastManager(): PodcastManager
         fun playlistManager(): PlaylistManager
-        fun bookmarkManager(): BookmarkManager
         fun statsManager(): StatsManager
         fun fileStorage(): FileStorage
-        fun podcastCacheServiceManager(): PodcastCacheServiceManagerImpl
         fun userEpisodeManager(): UserEpisodeManager
         fun subscriptionManager(): SubscriptionManager
         fun folderManager(): FolderManager
@@ -95,8 +93,7 @@ class RefreshPodcastsThread(
         fun userManager(): UserManager
         fun syncManager(): SyncManager
         fun ratingsManager(): RatingsManager
-        fun crashLogging(): CrashLogging
-        fun analyticsTracker(): AnalyticsTracker
+        fun appDatabase(): AppDatabase
     }
 
     @Volatile
@@ -223,7 +220,7 @@ class RefreshPodcastsThread(
             podcastManager.checkForUnusedPodcastsBlocking(playbackManager)
             LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - checkForUnusedPodcasts - ${String.format("%d ms", SystemClock.elapsedRealtime() - startTime)}")
             startTime = SystemClock.elapsedRealtime()
-            playlistManager.checkForEpisodesToDownloadBlocking(episodeManager, playbackManager)
+            checkForEpisodesToDownloadBlocking(playlistManager, downloadManager, episodeManager)
             LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - playlist checkForEpisodesToDownload - ${String.format("%d ms", SystemClock.elapsedRealtime() - startTime)}")
             startTime = SystemClock.elapsedRealtime()
             podcastManager.checkForEpisodesToDownloadBlocking(addedEpisodes.episodeUuidsAdded, downloadManager)
@@ -245,41 +242,34 @@ class RefreshPodcastsThread(
         val userManager = entryPoint.userManager()
         val playbackManager = entryPoint.playbackManager()
 
-        val sync = PodcastSyncProcess(
-            context = context,
-            applicationScope = applicationScope,
-            settings = entryPoint.settings(),
-            episodeManager = entryPoint.episodeManager(),
-            podcastManager = entryPoint.podcastManager(),
-            playlistManager = entryPoint.playlistManager(),
-            bookmarkManager = entryPoint.bookmarkManager(),
-            statsManager = entryPoint.statsManager(),
-            fileStorage = entryPoint.fileStorage(),
-            playbackManager = playbackManager,
-            podcastCacheServiceManager = entryPoint.podcastCacheServiceManager(),
-            userEpisodeManager = entryPoint.userEpisodeManager(),
-            subscriptionManager = entryPoint.subscriptionManager(),
-            folderManager = entryPoint.folderManager(),
+        val process = DataSyncProcess(
             syncManager = entryPoint.syncManager(),
+            podcastManager = entryPoint.podcastManager(),
+            episodeManager = entryPoint.episodeManager(),
+            userEpisodeManager = entryPoint.userEpisodeManager(),
+            folderManager = entryPoint.folderManager(),
+            playbackManager = entryPoint.playbackManager(),
+            statsManager = entryPoint.statsManager(),
+            subscriptionManager = entryPoint.subscriptionManager(),
             ratingsManager = entryPoint.ratingsManager(),
-            crashLogging = entryPoint.crashLogging(),
-            analyticsTracker = entryPoint.analyticsTracker(),
+            appDatabase = entryPoint.appDatabase(),
+            settings = entryPoint.settings(),
+            fileStorage = entryPoint.fileStorage(),
+            context = context,
         )
-        val startTime = SystemClock.elapsedRealtime()
-        val syncCompletable = sync.run()
-        LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - sync complete - ${String.format("%d ms", SystemClock.elapsedRealtime() - startTime)}")
-        val throwable = syncCompletable.blockingGet()
-        if (throwable != null) {
-            LogBuffer.e(LogBuffer.TAG_BACKGROUND_TASKS, throwable, "SyncProcess: Sync failed")
-
-            if (throwable is RefreshTokenExpiredException) {
-                LogBuffer.e(LogBuffer.TAG_BACKGROUND_TASKS, "Signing out user because server post failed to log in")
-                userManager.signOut(playbackManager, wasInitiatedByUser = false)
-            } else {
-                return RefreshState.Failed("Sync threw an error: ${throwable.message}")
-            }
+        val result = runBlocking {
+            process.sync()
         }
-        return RefreshState.Success(Date(System.currentTimeMillis()))
+        return result
+            .onFailure { error ->
+                if (error is RefreshTokenExpiredException) {
+                    userManager.signOut(playbackManager, wasInitiatedByUser = false)
+                }
+            }
+            .map { RefreshState.Success(Date()) }
+            .getOrElse { error ->
+                RefreshState.Failed("Sync threw an error: ${error.message}")
+            }
     }
 
     private fun refreshFailedOrCancelled(message: String) {
@@ -292,6 +282,7 @@ class RefreshPodcastsThread(
     }
 
     private data class AddedEpisodes(val episodeUuidsAdded: List<String>, val episodesToAddToUpNext: List<Pair<AutoAddUpNext, PodcastEpisode>>)
+
     private fun updatePodcasts(result: RefreshResponse?): AddedEpisodes {
         if (result == null) {
             return AddedEpisodes(emptyList(), emptyList())
@@ -473,16 +464,21 @@ class RefreshPodcastsThread(
             val sortKey = String.format("%04d", episodeIndex)
             var intentId = intentId
             val manager = NotificationManagerCompat.from(context)
-
-            val intent = ShowEpisodeDeepLink(
+            val showEpisodeDeepLink = ShowEpisodeDeepLink(
                 episodeUuid = episode.uuid,
                 podcastUuid = podcast.uuid,
                 sourceView = EpisodeViewSource.NOTIFICATION.value,
                 autoPlay = false,
-            ).toIntent(context).apply {
-                action = action + System.currentTimeMillis() + intentId
+            )
+
+            val intent = showEpisodeDeepLink.toIntent(context).apply {
+                action += System.currentTimeMillis() + intentId
             }
-            val pendingIntent = PendingIntent.getActivity(context, intentId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val pendingIntent = if (Util.getAppPlatform(context) == AppPlatform.Phone) {
+                PendingIntent.getActivity(context, intentId, NotificationOpenReceiverActivity.toEpisodeIntentRelay(context, intent), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            } else {
+                PendingIntent.getActivity(context, intentId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            }
             intentId += 1
 
             val notificationTag = if (isGroupNotification) {
@@ -608,7 +604,11 @@ class RefreshPodcastsThread(
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
                 action = Settings.INTENT_OPEN_APP_NEW_EPISODES
             }
-            val pendingIntent = PendingIntent.getActivity(context, intentIndex, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val pendingIntent = if (Util.getAppPlatform(context) == AppPlatform.Phone && intent != null) {
+                PendingIntent.getActivity(context, intentIndex, NotificationOpenReceiverActivity.toPodcastIntentRelay(context, intent), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            } else {
+                PendingIntent.getActivity(context, intentIndex, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            }
             intentIndex += 1
 
             val inboxStyle = NotificationCompat.InboxStyle()
@@ -702,12 +702,30 @@ class RefreshPodcastsThread(
             )
         }
     }
+
+    private fun checkForEpisodesToDownloadBlocking(
+        playlistManager: PlaylistManager,
+        downloadManager: DownloadManager,
+        episodeManager: EpisodeManager,
+    ) {
+        val autoDownloadEpisodes = runBlocking { playlistManager.getAutoDownloadEpisodes() }
+        for (episode in autoDownloadEpisodes) {
+            DownloadHelper.addAutoDownloadedEpisodeToQueue(
+                episode = episode,
+                from = "playlist",
+                downloadManager = downloadManager,
+                episodeManager = episodeManager,
+                source = SourceView.FILTERS,
+            )
+        }
+    }
 }
 
-private val NewEpisodeNotificationAction.notificationAction: String get() = when (this) {
-    NewEpisodeNotificationAction.Play -> NotificationBroadcastReceiver.INTENT_ACTION_PLAY_EPISODE
-    NewEpisodeNotificationAction.PlayNext -> NotificationBroadcastReceiver.INTENT_ACTION_PLAY_NEXT
-    NewEpisodeNotificationAction.PlayLast -> NotificationBroadcastReceiver.INTENT_ACTION_PLAY_LAST
-    NewEpisodeNotificationAction.Archive -> NotificationBroadcastReceiver.INTENT_ACTION_ARCHIVE
-    NewEpisodeNotificationAction.Download -> NotificationBroadcastReceiver.INTENT_ACTION_DOWNLOAD_EPISODE
-}
+private val NewEpisodeNotificationAction.notificationAction: String
+    get() = when (this) {
+        NewEpisodeNotificationAction.Play -> NotificationBroadcastReceiver.INTENT_ACTION_PLAY_EPISODE
+        NewEpisodeNotificationAction.PlayNext -> NotificationBroadcastReceiver.INTENT_ACTION_PLAY_NEXT
+        NewEpisodeNotificationAction.PlayLast -> NotificationBroadcastReceiver.INTENT_ACTION_PLAY_LAST
+        NewEpisodeNotificationAction.Archive -> NotificationBroadcastReceiver.INTENT_ACTION_ARCHIVE
+        NewEpisodeNotificationAction.Download -> NotificationBroadcastReceiver.INTENT_ACTION_DOWNLOAD_EPISODE
+    }

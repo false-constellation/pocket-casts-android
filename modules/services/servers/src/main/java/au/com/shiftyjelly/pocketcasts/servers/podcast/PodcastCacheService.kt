@@ -2,6 +2,8 @@ package au.com.shiftyjelly.pocketcasts.servers.podcast
 
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastRatings
 import au.com.shiftyjelly.pocketcasts.models.to.EpisodeItem
+import au.com.shiftyjelly.pocketcasts.servers.search.CombinedSearchRequest
+import au.com.shiftyjelly.pocketcasts.servers.search.CombinedSearchResponse
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import io.reactivex.Single
@@ -16,29 +18,31 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Url
 
-@JsonClass(generateAdapter = true)
-data class SearchBody(@field:Json(name = "podcastuuid") val podcastuuid: String, @field:Json(name = "searchterm") val searchterm: String)
+typealias SuggestedFoldersResponse = Map<String, List<String>>
 
 @JsonClass(generateAdapter = true)
-data class SearchResultBody(@field:Json(name = "episodes") val episodes: List<SearchResult>)
+data class SearchBody(@Json(name = "podcastuuid") val podcastuuid: String, @Json(name = "searchterm") val searchterm: String)
 
 @JsonClass(generateAdapter = true)
-data class SearchResult(@field:Json(name = "uuid") val uuid: String)
+data class SearchResultBody(@Json(name = "episodes") val episodes: List<SearchResult>)
 
 @JsonClass(generateAdapter = true)
-data class SearchEpisodesBody(@field:Json(name = "term") val term: String)
+data class SearchResult(@Json(name = "uuid") val uuid: String)
 
 @JsonClass(generateAdapter = true)
-data class SearchEpisodesResultBody(@field:Json(name = "episodes") val episodes: List<SearchEpisodeResult>)
+data class SearchEpisodesBody(@Json(name = "term") val term: String)
+
+@JsonClass(generateAdapter = true)
+data class SearchEpisodesResultBody(@Json(name = "episodes") val episodes: List<SearchEpisodeResult>)
 
 @JsonClass(generateAdapter = true)
 data class SearchEpisodeResult(
-    @field:Json(name = "uuid") val uuid: String,
-    @field:Json(name = "title") val title: String?,
-    @field:Json(name = "duration") val duration: Double?,
-    @field:Json(name = "published_date") val publishedAt: Date?,
-    @field:Json(name = "podcast_uuid") val podcastUuid: String,
-    @field:Json(name = "podcast_title") val podcastTitle: String?,
+    @Json(name = "uuid") val uuid: String,
+    @Json(name = "title") val title: String?,
+    @Json(name = "duration") val duration: Double?,
+    @Json(name = "published_date") val publishedAt: Date?,
+    @Json(name = "podcast_uuid") val podcastUuid: String,
+    @Json(name = "podcast_title") val podcastTitle: String?,
 ) {
     fun toEpisodeItem(): EpisodeItem {
         return EpisodeItem(
@@ -54,8 +58,8 @@ data class SearchEpisodeResult(
 
 @JsonClass(generateAdapter = true)
 data class PodcastRatingsResponse(
-    @field:Json(name = "average") val average: Double?,
-    @field:Json(name = "total") val total: Int?,
+    @Json(name = "average") val average: Double?,
+    @Json(name = "total") val total: Int?,
 ) {
     fun toPodcastRatings(podcastUuid: String) = PodcastRatings(
         podcastUuid = podcastUuid,
@@ -63,6 +67,11 @@ data class PodcastRatingsResponse(
         total = total ?: 0,
     )
 }
+
+@JsonClass(generateAdapter = true)
+data class SuggestedFoldersRequest(
+    @Json(name = "uuids") val uuids: List<String>,
+)
 
 interface PodcastCacheService {
     @GET("/mobile/podcast/full/{podcastUuid}")
@@ -109,4 +118,12 @@ interface PodcastCacheService {
     @GET("/podcast/rating/{podcastUuid}")
     @Headers("Cache-Control: no-cache")
     suspend fun getPodcastRatingsNoCache(@Path("podcastUuid") podcastUuid: String): PodcastRatingsResponse
+
+    @POST("/podcast/suggest_folders")
+    suspend fun suggestedFolders(@Body request: SuggestedFoldersRequest): SuggestedFoldersResponse
+
+    @POST("/search/combined")
+    suspend fun combinedSearch(
+        @Body request: CombinedSearchRequest,
+    ): CombinedSearchResponse
 }

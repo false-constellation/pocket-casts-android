@@ -8,10 +8,10 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import au.com.shiftyjelly.pocketcasts.filters.databinding.FilterOptionsFragmentBinding
-import au.com.shiftyjelly.pocketcasts.models.entity.Playlist
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
+import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistProperty
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistUpdateSource
+import au.com.shiftyjelly.pocketcasts.repositories.podcast.SmartPlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserPlaylistUpdate
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getColor
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
@@ -29,9 +29,11 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 private const val ARG_PLAYLIST_UUID = "playlist_uuid"
 
 @AndroidEntryPoint
-class EpisodeOptionsFragment : BaseFragment(), CoroutineScope {
+class EpisodeOptionsFragment :
+    BaseFragment(),
+    CoroutineScope {
     companion object {
-        fun newInstance(playlist: Playlist): EpisodeOptionsFragment {
+        fun newInstance(playlist: PlaylistEntity): EpisodeOptionsFragment {
             val bundle = Bundle()
             bundle.putString(ARG_PLAYLIST_UUID, playlist.uuid)
             val fragment = EpisodeOptionsFragment()
@@ -43,9 +45,9 @@ class EpisodeOptionsFragment : BaseFragment(), CoroutineScope {
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Main
 
-    @Inject lateinit var playlistManager: PlaylistManager
+    @Inject lateinit var smartPlaylistManager: SmartPlaylistManager
 
-    var playlist: Playlist? = null
+    var playlist: PlaylistEntity? = null
     private var binding: FilterOptionsFragmentBinding? = null
     private var userChanged = false
 
@@ -73,7 +75,7 @@ class EpisodeOptionsFragment : BaseFragment(), CoroutineScope {
         launch {
             val uuid = requireArguments().getString(ARG_PLAYLIST_UUID)!!
             Timber.d("Loading playlist $uuid")
-            val playlist = playlistManager.findByUuid(uuid) ?: return@launch
+            val playlist = smartPlaylistManager.findByUuid(uuid) ?: return@launch
             this@EpisodeOptionsFragment.playlist = playlist
 
             val unplayedOption = FilterOption(LR.string.unplayed, playlist.unplayed, { v, _ ->
@@ -89,7 +91,7 @@ class EpisodeOptionsFragment : BaseFragment(), CoroutineScope {
                 userChanged = true
             })
 
-            val color = playlist.getColor(context)
+            val color = playlist.icon.getColor(requireContext())
             val filterTintColor = ThemeColor.filterInteractive01(theme.activeTheme, color)
             btnSave.setBackgroundColor(filterTintColor)
             btnSave.setTextColor(ThemeColor.filterInteractive02(theme.activeTheme, color))
@@ -106,7 +108,7 @@ class EpisodeOptionsFragment : BaseFragment(), CoroutineScope {
         btnSave.setOnClickListener {
             playlist?.let { playlist ->
                 launch(Dispatchers.Default) {
-                    playlist.syncStatus = Playlist.SYNC_STATUS_NOT_SYNCED
+                    playlist.syncStatus = PlaylistEntity.SYNC_STATUS_NOT_SYNCED
 
                     val userPlaylistUpdate = if (userChanged) {
                         UserPlaylistUpdate(
@@ -116,7 +118,7 @@ class EpisodeOptionsFragment : BaseFragment(), CoroutineScope {
                     } else {
                         null
                     }
-                    playlistManager.updateBlocking(playlist, userPlaylistUpdate)
+                    smartPlaylistManager.updateBlocking(playlist, userPlaylistUpdate)
 
                     launch(Dispatchers.Main) { (activity as FragmentHostListener).closeModal(this@EpisodeOptionsFragment) }
                 }

@@ -25,8 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.fragment.compose.content
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
@@ -34,6 +33,7 @@ import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRow
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRowToggle
 import au.com.shiftyjelly.pocketcasts.compose.components.TextP50
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.compose.preview.ThemePreviewParameterProvider
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -63,7 +63,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         val bottomInset = settings.bottomInset.collectAsStateWithLifecycle(initialValue = 0)
         AppThemeWithBackground(theme.activeTheme) {
             val previousAction = settings.headphoneControlsPreviousAction.flow.collectAsState().value
@@ -74,7 +74,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
                 previousAction = previousAction,
                 nextAction = nextAction,
                 confirmationSound = confirmationSound,
-                onBackPressed = {
+                onBackPress = {
                     @Suppress("DEPRECATION")
                     activity?.onBackPressed()
                 },
@@ -85,12 +85,12 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
 
     @Composable
     private fun HeadphoneControlsSettingsPage(
-        viewModel: HeadphoneControlsSettingsPageViewModel = hiltViewModel(),
         previousAction: HeadphoneAction,
         nextAction: HeadphoneAction,
         confirmationSound: Boolean,
-        onBackPressed: () -> Unit,
         bottomInset: Dp,
+        onBackPress: () -> Unit,
+        viewModel: HeadphoneControlsSettingsPageViewModel = hiltViewModel(),
     ) {
         val state by viewModel.state.collectAsState()
 
@@ -112,8 +112,8 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
                 viewModel.onConfirmationSoundChanged(newValue)
             },
             confirmationSound = confirmationSound,
-            onBackPressed = onBackPressed,
-            onOptionsDialogShown = { viewModel.onOptionsDialogShown() },
+            onBackPress = onBackPress,
+            onShowOptionsDialog = { viewModel.onOptionsDialogShown() },
             bottomInset = bottomInset,
         )
 
@@ -127,19 +127,19 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
         state: HeadphoneControlsSettingsPageViewModel.UiState,
         previousAction: HeadphoneAction,
         nextAction: HeadphoneAction,
+        confirmationSound: Boolean,
+        bottomInset: Dp,
         onPreviousActionSave: (HeadphoneAction) -> Unit,
         onNextActionSave: (HeadphoneAction) -> Unit,
-        confirmationSound: Boolean,
         onConfirmationSoundSave: (Boolean) -> Unit,
-        onBackPressed: () -> Unit,
-        onOptionsDialogShown: () -> Unit,
-        bottomInset: Dp,
+        onBackPress: () -> Unit,
+        onShowOptionsDialog: () -> Unit,
     ) {
         Column {
             ThemedTopAppBar(
                 title = stringResource(LR.string.settings_title_headphone_controls),
                 bottomShadow = true,
-                onNavigationClick = { onBackPressed() },
+                onNavigationClick = { onBackPress() },
             )
             LazyColumn(
                 contentPadding = PaddingValues(bottom = bottomInset),
@@ -156,7 +156,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
                         state = state,
                         saved = previousAction,
                         onSave = onPreviousActionSave,
-                        onOptionsDialogShown = onOptionsDialogShown,
+                        onShowOptionsDialog = onShowOptionsDialog,
                     )
                 }
                 item {
@@ -164,7 +164,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
                         state = state,
                         saved = nextAction,
                         onSave = onNextActionSave,
-                        onOptionsDialogShown = onOptionsDialogShown,
+                        onShowOptionsDialog = onShowOptionsDialog,
                     )
                 }
                 if (previousAction == HeadphoneAction.ADD_BOOKMARK || nextAction == HeadphoneAction.ADD_BOOKMARK) {
@@ -184,7 +184,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
         state: HeadphoneControlsSettingsPageViewModel.UiState,
         saved: HeadphoneAction,
         onSave: (HeadphoneAction) -> Unit,
-        onOptionsDialogShown: () -> Unit,
+        onShowOptionsDialog: () -> Unit,
     ) {
         val iconColor = state.addBookmarkIconColor.toArgb()
         SettingRow(
@@ -193,7 +193,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
             icon = painterResource(IR.drawable.ic_skip_forward),
             modifier = Modifier
                 .clickable {
-                    onOptionsDialogShown()
+                    onShowOptionsDialog()
                     val optionsDialog = OptionsDialog()
                         .setTitle(getString(LR.string.settings_headphone_controls_action_next))
                         .setIconColor(iconColor)
@@ -226,7 +226,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
         state: HeadphoneControlsSettingsPageViewModel.UiState,
         saved: HeadphoneAction,
         onSave: (HeadphoneAction) -> Unit,
-        onOptionsDialogShown: () -> Unit,
+        onShowOptionsDialog: () -> Unit,
     ) {
         val iconColor = state.addBookmarkIconColor.toArgb()
         SettingRow(
@@ -235,7 +235,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
             icon = painterResource(IR.drawable.ic_skip_back),
             modifier = Modifier
                 .clickable {
-                    onOptionsDialogShown()
+                    onShowOptionsDialog()
                     val optionsDialog = OptionsDialog()
                         .setTitle(getString(LR.string.settings_headphone_controls_action_previous))
                         .setIconColor(iconColor)
@@ -281,7 +281,7 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
         val onboardingFlow = OnboardingFlow.Upsell(
             source = OnboardingUpgradeSource.HEADPHONE_CONTROLS_SETTINGS,
         )
-        OnboardingLauncher.openOnboardingFlow(activity, onboardingFlow)
+        OnboardingLauncher.openOnboardingFlow(requireActivity(), onboardingFlow)
     }
 
     @StringRes
@@ -307,8 +307,8 @@ class HeadphoneControlsSettingsFragment : BaseFragment() {
                 onNextActionSave = {},
                 confirmationSound = true,
                 onConfirmationSoundSave = {},
-                onBackPressed = {},
-                onOptionsDialogShown = {},
+                onBackPress = {},
+                onShowOptionsDialog = {},
                 bottomInset = 0.dp,
             )
         }

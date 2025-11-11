@@ -2,7 +2,7 @@ package au.com.shiftyjelly.pocketcasts.repositories.sync
 
 import android.accounts.Account
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
-import au.com.shiftyjelly.pocketcasts.models.entity.Playlist
+import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.HistorySyncRequest
 import au.com.shiftyjelly.pocketcasts.models.to.HistorySyncResponse
@@ -25,21 +25,26 @@ import au.com.shiftyjelly.pocketcasts.servers.sync.UpNextSyncResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.UserChangeResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.history.HistoryYearResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.login.ExchangeSonosResponse
-import au.com.shiftyjelly.pocketcasts.servers.sync.update.SyncUpdateResponse
 import au.com.shiftyjelly.pocketcasts.utils.Optional
 import com.jakewharton.rxrelay2.BehaviorRelay
+import com.pocketcasts.service.api.BookmarksResponse
+import com.pocketcasts.service.api.EpisodesResponse
 import com.pocketcasts.service.api.PodcastRatingResponse
 import com.pocketcasts.service.api.PodcastRatingsResponse
+import com.pocketcasts.service.api.PodcastsEpisodesRequest
 import com.pocketcasts.service.api.ReferralCodeResponse
 import com.pocketcasts.service.api.ReferralRedemptionResponse
 import com.pocketcasts.service.api.ReferralValidationResponse
+import com.pocketcasts.service.api.SyncUpdateRequest
+import com.pocketcasts.service.api.SyncUpdateResponse
+import com.pocketcasts.service.api.UserPlaylistListResponse
 import com.pocketcasts.service.api.UserPodcastListResponse
+import com.pocketcasts.service.api.WinbackResponse
 import io.reactivex.Completable
 import io.reactivex.Flowable
 import io.reactivex.Maybe
 import io.reactivex.Single
 import java.io.File
-import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import retrofit2.Response
 
@@ -64,6 +69,7 @@ interface SyncManager : NamedSettingsCaller {
     suspend fun emailChange(newEmail: String, password: String): UserChangeResponse
     fun deleteAccountRxSingle(): Single<UserChangeResponse>
     suspend fun updatePassword(newPassword: String, oldPassword: String)
+    suspend fun <T> getCacheTokenOrLogin(serverCall: suspend (token: AccessToken) -> T): T
 
     // User Episodes / Files
     fun getFilesRxSingle(): Single<Response<FilesResponse>>
@@ -82,18 +88,21 @@ interface SyncManager : NamedSettingsCaller {
     suspend fun historyYear(year: Int, count: Boolean): HistoryYearResponse
 
     // Subscription
-    fun subscriptionStatusRxSingle(): Single<SubscriptionStatusResponse>
     suspend fun subscriptionStatus(): SubscriptionStatusResponse
-    fun subscriptionPurchaseRxSingle(request: SubscriptionPurchaseRequest): Single<SubscriptionStatusResponse>
+    suspend fun subscriptionPurchase(request: SubscriptionPurchaseRequest): SubscriptionStatusResponse
     fun redeemPromoCodeRxSingle(code: String): Single<PromoCodeResponse>
     fun validatePromoCodeRxSingle(code: String): Single<PromoCodeResponse>
 
     // Sync
     fun getLastSyncAtRxSingle(): Single<String>
-    suspend fun getHomeFolder(): UserPodcastListResponse
+    suspend fun getLastSyncAtOrThrow(): String
+    suspend fun getHomeFolderOrThrow(): UserPodcastListResponse
+    suspend fun getPlaylistsOrThrow(): UserPlaylistListResponse
+    suspend fun getBookmarksOrThrow(): BookmarksResponse
+    suspend fun getEpisodesOrThrow(request: PodcastsEpisodesRequest): EpisodesResponse
     fun getPodcastEpisodesRxSingle(podcastUuid: String): Single<PodcastEpisodesResponse>
 
-    suspend fun syncUpdate(data: String, lastSyncTime: Instant): SyncUpdateResponse
+    suspend fun syncUpdateOrThrow(request: SyncUpdateRequest): SyncUpdateResponse
 
     fun episodeSyncRxCompletable(request: EpisodeSyncRequest): Completable
 
@@ -104,7 +113,7 @@ interface SyncManager : NamedSettingsCaller {
 
     // Other
     suspend fun exchangeSonos(): ExchangeSonosResponse
-    fun getFiltersRxSingle(): Single<List<Playlist>>
+    suspend fun getFilters(): List<PlaylistEntity>
     suspend fun loadStats(): StatsBundle
     suspend fun upNextSync(request: UpNextSyncRequest): UpNextSyncResponse
     suspend fun getBookmarks(): List<Bookmark>
@@ -113,6 +122,7 @@ interface SyncManager : NamedSettingsCaller {
 
     // Referral
     suspend fun getReferralCode(): Response<ReferralCodeResponse>
+    suspend fun getWinbackOffer(): Response<WinbackResponse>
     suspend fun validateReferralCode(code: String): Response<ReferralValidationResponse>
     suspend fun redeemReferralCode(code: String): Response<ReferralRedemptionResponse>
 }

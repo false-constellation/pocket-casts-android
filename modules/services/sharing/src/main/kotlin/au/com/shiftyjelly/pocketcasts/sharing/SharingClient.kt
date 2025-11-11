@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.sharing
 
+import android.R.attr.text
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -23,7 +24,6 @@ import au.com.shiftyjelly.pocketcasts.localization.helper.StatsHelper
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.Story
-import au.com.shiftyjelly.pocketcasts.models.type.ReferralsOfferInfo
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
 import au.com.shiftyjelly.pocketcasts.sharing.BuildConfig.META_APP_ID
 import au.com.shiftyjelly.pocketcasts.sharing.BuildConfig.SERVER_SHORT_URL
@@ -76,7 +76,7 @@ class SharingClient(
             request.tryShare()
         } catch (error: Throwable) {
             SharingResponse(
-                isSuccsessful = false,
+                isSuccessful = false,
                 feedbackMessage = context.getString(LR.string.share_error_message),
                 error = error,
             )
@@ -96,7 +96,7 @@ class SharingClient(
                     .addFlags(FLAG_GRANT_READ_URI_PERMISSION or FLAG_ACTIVITY_NEW_TASK)
                     .share()
                 SharingResponse(
-                    isSuccsessful = true,
+                    isSuccessful = true,
                     feedbackMessage = null,
                     error = null,
                 )
@@ -105,7 +105,7 @@ class SharingClient(
             PocketCasts -> {
                 shareStarter.copyLink(context, ClipData.newPlainText(context.getString(data.linkDescription()), data.sharingUrl(hostUrl)))
                 SharingResponse(
-                    isSuccsessful = true,
+                    isSuccessful = true,
                     feedbackMessage = if (showCustomCopyFeedback) context.getString(LR.string.share_link_copied_feedback) else null,
                     error = null,
                 )
@@ -126,7 +126,7 @@ class SharingClient(
                     .toChooserIntent()
                     .share()
                 SharingResponse(
-                    isSuccsessful = true,
+                    isSuccessful = true,
                     feedbackMessage = null,
                     error = null,
                 )
@@ -134,8 +134,8 @@ class SharingClient(
         }
 
         is SharingRequest.Data.ReferralLink -> {
-            val shareText = "${context.getString(LR.string.referrals_share_text, data.referralsOfferInfo.localizedOfferDurationAdjective.lowercase())}\n\n${data.sharingUrl(webBasedHost)}"
-            val shareSubject = context.getString(LR.string.referrals_share_subject, data.referralsOfferInfo.localizedOfferDurationNoun)
+            val shareText = "${context.getString(LR.string.referrals_share_text, data.offerName)}\n\n${data.sharingUrl(webBasedHost)}"
+            val shareSubject = context.getString(LR.string.referrals_share_subject, data.offerDuration)
             Intent()
                 .setAction(Intent.ACTION_SEND)
                 .setType("text/plain")
@@ -145,7 +145,7 @@ class SharingClient(
                 .toChooserIntent()
                 .share()
             SharingResponse(
-                isSuccsessful = true,
+                isSuccessful = true,
                 feedbackMessage = null,
                 error = null,
             )
@@ -161,26 +161,44 @@ class SharingClient(
                     .toChooserIntent()
                     .share()
                 SharingResponse(
-                    isSuccsessful = true,
+                    isSuccessful = true,
                     feedbackMessage = null,
                     error = null,
                 )
             } else {
                 SharingResponse(
-                    isSuccsessful = false,
+                    isSuccessful = false,
                     feedbackMessage = context.getString(LR.string.share_error_message),
                     error = null,
                 )
             }
         }
 
-        is SharingRequest.Data.ClipLink -> {
-            shareStarter.copyLink(context, ClipData.newPlainText(context.getString(data.linkDescription()), data.sharingUrl(hostUrl)))
-            SharingResponse(
-                isSuccsessful = true,
-                feedbackMessage = if (showCustomCopyFeedback) context.getString(LR.string.share_link_copied_feedback) else null,
-                error = null,
-            )
+        is SharingRequest.Data.ClipLink -> when (platform) {
+            PocketCasts -> {
+                shareStarter.copyLink(context, ClipData.newPlainText(context.getString(data.linkDescription()), data.sharingUrl(hostUrl)))
+                SharingResponse(
+                    isSuccessful = true,
+                    feedbackMessage = if (showCustomCopyFeedback) context.getString(LR.string.share_link_copied_feedback) else null,
+                    error = null,
+                )
+            }
+
+            Instagram, WhatsApp, Telegram, X, Tumblr, More -> {
+                Intent()
+                    .setAction(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(EXTRA_TEXT, data.sharingUrl(hostUrl))
+                    .putExtra(EXTRA_TITLE, data.sharingTitle())
+                    .setPackage(platform.packageId)
+                    .toChooserIntent()
+                    .share()
+                SharingResponse(
+                    isSuccessful = true,
+                    feedbackMessage = null,
+                    error = null,
+                )
+            }
         }
 
         is SharingRequest.Data.ClipAudio -> {
@@ -193,7 +211,7 @@ class SharingClient(
                 .toChooserIntent()
                 .share()
             SharingResponse(
-                isSuccsessful = true,
+                isSuccessful = true,
                 feedbackMessage = null,
                 error = null,
             )
@@ -211,7 +229,7 @@ class SharingClient(
                     .addFlags(FLAG_GRANT_READ_URI_PERMISSION or FLAG_ACTIVITY_NEW_TASK)
                     .share()
                 SharingResponse(
-                    isSuccsessful = true,
+                    isSuccessful = true,
                     feedbackMessage = null,
                     error = null,
                 )
@@ -229,7 +247,7 @@ class SharingClient(
                     .toChooserIntent()
                     .share()
                 SharingResponse(
-                    isSuccsessful = true,
+                    isSuccessful = true,
                     feedbackMessage = null,
                     error = null,
                 )
@@ -260,17 +278,44 @@ class SharingClient(
                     .toChooserIntent(pendingIntent.intentSender)
                     .share()
                 SharingResponse(
-                    isSuccsessful = true,
+                    isSuccessful = true,
                     feedbackMessage = null,
                     error = null,
                 )
             } else {
                 SharingResponse(
-                    isSuccsessful = false,
+                    isSuccessful = false,
                     feedbackMessage = context.getString(LR.string.end_of_year_cant_share_message),
                     error = null,
                 )
             }
+        }
+
+        is SharingRequest.Data.Transcript -> {
+            val fileName = FileUtil.createSafeFileName(text = data.episodeTitle, fallback = "Transcript")
+
+            val file = FileUtil.writeTextToTempFile(
+                fileName = "$fileName.txt",
+                text = data.transcript,
+                context = context,
+            ) ?: return SharingResponse(
+                isSuccessful = false,
+                feedbackMessage = context.getString(LR.string.share_error_message),
+                error = null,
+            )
+
+            Intent()
+                .setAction(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .setExtraStream(file)
+                .addFlags(FLAG_GRANT_READ_URI_PERMISSION)
+                .toChooserIntent()
+                .share()
+            SharingResponse(
+                isSuccessful = true,
+                feedbackMessage = null,
+                error = null,
+            )
         }
     }
 
@@ -379,13 +424,9 @@ data class SharingRequest internal constructor(
 
         fun referralLink(
             referralCode: String,
-            referralsOfferInfo: ReferralsOfferInfo,
-        ) = Builder(
-            Data.ReferralLink(
-                referralCode = referralCode,
-                referralsOfferInfo = referralsOfferInfo,
-            ),
-        )
+            offerName: String,
+            offerDuration: String,
+        ) = Builder(Data.ReferralLink(referralCode, offerName, offerDuration))
             .setAnalyticsEvent(AnalyticsEvent.REFERRAL_PASS_SHARED)
             .addAnalyticsProperty("code", referralCode)
 
@@ -397,6 +438,16 @@ data class SharingRequest internal constructor(
             .setAnalyticsEvent(AnalyticsEvent.END_OF_YEAR_STORY_SHARE)
             .addAnalyticsProperty("story", story.analyticsValue)
             .addAnalyticsProperty("year", year.value)
+
+        fun transcript(
+            podcastUuid: String?,
+            episodeUuid: String,
+            episodeTitle: String,
+            transcript: String,
+        ) = Builder(Data.Transcript(episodeUuid, episodeTitle, transcript))
+            .setAnalyticsEvent(AnalyticsEvent.TRANSCRIPT_SHARED)
+            .addAnalyticsProperty("podcast_uuid", podcastUuid.orEmpty())
+            .addAnalyticsProperty("episode_uuid", episodeUuid)
     }
 
     class Builder internal constructor(
@@ -464,6 +515,7 @@ data class SharingRequest internal constructor(
             is Data.ClipVideo -> "clip_video"
             is Data.ReferralLink -> "referral_link"
             is Data.EndOfYearStory -> "end_of_year_story"
+            is Data.Transcript -> "transcript"
         }
 
         private val SocialPlatform.analyticsValue get() = when (this) {
@@ -497,7 +549,8 @@ data class SharingRequest internal constructor(
 
         class Podcast internal constructor(
             override val podcast: PodcastModel,
-        ) : Data, Sociable {
+        ) : Data,
+            Sociable {
             override fun sharingUrl(host: String) = "$host/podcast/${podcast.uuid}"
 
             override fun sharingTitle() = podcast.title
@@ -510,7 +563,8 @@ data class SharingRequest internal constructor(
         class Episode internal constructor(
             override val podcast: PodcastModel,
             val episode: EpisodeModel,
-        ) : Data, Sociable {
+        ) : Data,
+            Sociable {
             override fun sharingUrl(host: String) = "$host/episode/${episode.uuid}"
 
             override fun sharingTitle() = episode.title
@@ -525,7 +579,8 @@ data class SharingRequest internal constructor(
             val episode: EpisodeModel,
             val position: Duration,
             val type: TimestampType,
-        ) : Data, Sociable {
+        ) : Data,
+            Sociable {
             override fun sharingUrl(host: String) = "$host/episode/${episode.uuid}?t=${position.inWholeSeconds}"
 
             override fun sharingTitle() = episode.title
@@ -552,6 +607,8 @@ data class SharingRequest internal constructor(
         ) : Data {
             fun sharingUrl(host: String) = "$host/episode/${episode.uuid}?t=${range.start.toSecondsWithSingleMilli()},${range.end.toSecondsWithSingleMilli()}"
 
+            fun sharingTitle() = episode.title
+
             fun linkDescription() = LR.string.share_link_clip
 
             override fun toString() = "ClipLink(title=${episode.title}, uuid=${episode.uuid}, start=${range.start.toSecondsWithSingleMilli()}, end=${range.end.toSecondsWithSingleMilli()})"
@@ -575,7 +632,8 @@ data class SharingRequest internal constructor(
 
         class ReferralLink internal constructor(
             val referralCode: String,
-            val referralsOfferInfo: ReferralsOfferInfo,
+            val offerName: String,
+            val offerDuration: String,
         ) : Data {
             override val podcast = null
 
@@ -668,11 +726,21 @@ data class SharingRequest internal constructor(
 
             override fun toString() = "EndOfYearStory(story=$story, year=$year)"
         }
+
+        class Transcript internal constructor(
+            val episodeUuid: String,
+            val episodeTitle: String,
+            val transcript: String,
+        ) : Data {
+            override val podcast: PodcastModel? = null
+
+            override fun toString() = "Transcript(episodeUuid=$episodeUuid)"
+        }
     }
 }
 
 data class SharingResponse(
-    val isSuccsessful: Boolean,
+    val isSuccessful: Boolean,
     val feedbackMessage: String?,
     val error: Throwable?,
 )

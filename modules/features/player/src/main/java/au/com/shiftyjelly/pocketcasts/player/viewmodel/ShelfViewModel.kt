@@ -5,15 +5,12 @@ import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
-import au.com.shiftyjelly.pocketcasts.models.to.Transcript
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.ShelfSharedViewModel.Companion.MIN_SHELF_ITEMS_SIZE
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.ShelfItem
 import au.com.shiftyjelly.pocketcasts.preferences.model.ShelfRowItem
 import au.com.shiftyjelly.pocketcasts.preferences.model.ShelfTitle
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.TranscriptsManager
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import au.com.shiftyjelly.pocketcasts.repositories.transcript.TranscriptManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -22,7 +19,6 @@ import java.util.Collections
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -33,7 +29,7 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 class ShelfViewModel @AssistedInject constructor(
     @Assisted private val episodeId: String,
     @Assisted private val isEditable: Boolean,
-    private val transcriptsManager: TranscriptsManager,
+    private val transcriptManager: TranscriptManager,
     private val analyticsTracker: AnalyticsTracker,
     private val settings: Settings,
 ) : ViewModel() {
@@ -42,11 +38,10 @@ class ShelfViewModel @AssistedInject constructor(
 
     init {
         viewModelScope.launch {
-            transcriptsManager.observerTranscriptForEpisode(episodeId)
-                .distinctUntilChangedBy { it?.episodeUuid }
+            transcriptManager.observeIsTranscriptAvailable(episodeId)
                 .stateIn(viewModelScope)
-                .collectLatest { transcript ->
-                    _uiState.update { it.copy(transcript = transcript) }
+                .collectLatest { isAvailable ->
+                    _uiState.update { it.copy(isTranscriptAvailable = isAvailable) }
                 }
         }
     }
@@ -81,8 +76,10 @@ class ShelfViewModel @AssistedInject constructor(
         toPosition: Int,
     ) {
         val listData = _uiState.value.shelfRowItems.toMutableList()
-        if (toPosition !in listData.indices || fromPosition !in listData.indices ||
-            listData[fromPosition] is ShelfTitle || listData[toPosition] is ShelfTitle
+        if (toPosition !in listData.indices ||
+            fromPosition !in listData.indices ||
+            listData[fromPosition] is ShelfTitle ||
+            listData[toPosition] is ShelfTitle
         ) {
             throw IllegalArgumentException("$ERROR_SHELF_ITEM_INVALID_MOVE_POSITION from: $fromPosition to: $toPosition")
         }
@@ -122,8 +119,7 @@ class ShelfViewModel @AssistedInject constructor(
         settings.shelfItems.set(_uiState.value.shelfRowItems.filterIsInstance<ShelfItem>(), updateModifiedAt = true)
     }
 
-    private fun sectionTitleAt(position: Int) =
-        if (position < _uiState.value.shelfRowItems.indexOf(moreActionsTitle)) AnalyticsProp.Value.SHELF else AnalyticsProp.Value.OVERFLOW_MENU
+    private fun sectionTitleAt(position: Int) = if (position < _uiState.value.shelfRowItems.indexOf(moreActionsTitle)) AnalyticsProp.Value.SHELF else AnalyticsProp.Value.OVERFLOW_MENU
 
     fun onEditButtonClick() {
         analyticsTracker.track(AnalyticsEvent.PLAYER_SHELF_OVERFLOW_MENU_REARRANGE_STARTED)
@@ -157,11 +153,8 @@ class ShelfViewModel @AssistedInject constructor(
         val isEditable: Boolean = false,
         val shelfRowItems: List<ShelfRowItem> = emptyList(),
         val episode: BaseEpisode? = null,
-        val transcript: Transcript? = null,
-    ) {
-        val isTranscriptAvailable: Boolean
-            get() = FeatureFlag.isEnabled(Feature.TRANSCRIPTS) && transcript != null
-    }
+        val isTranscriptAvailable: Boolean = false,
+    )
 
     companion object {
         const val ERROR_MINIMUM_SHELF_ITEMS = "Minimum 4 shelf items should be present"

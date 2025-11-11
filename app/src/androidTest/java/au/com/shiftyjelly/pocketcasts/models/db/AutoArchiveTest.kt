@@ -105,7 +105,7 @@ class AutoArchiveTest {
     }
 
     private fun upNextQueueFor(db: AppDatabase, episodeManager: EpisodeManager): UpNextQueue {
-        val settings = mock<Settings>() {
+        val settings = mock<Settings> {
             on { autoDownloadUpNext } doReturn UserSetting.Mock(false, mock())
         }
         val context = mock<Context>()
@@ -539,7 +539,7 @@ class AutoArchiveTest {
         val updatedNewEpisode = episodeDao.findByUuid(newUUID)!!
         assertTrue("Episode should be archived as it was archive modified 8 day ago (inactive setting = 7d)", updatedNewEpisode.isArchived)
 
-        runBlocking { upNext.playLastBlocking(updatedNewEpisode, downloadManager, null) }
+        runBlocking { upNext.playLast(updatedNewEpisode, downloadManager, null) }
 
         val updatedNewEpisodeInUpNext = episodeDao.findByUuid(newUUID)!!
         assertTrue("Episode should not be archived as it was added to up next", !updatedNewEpisodeInUpNext.isArchived)

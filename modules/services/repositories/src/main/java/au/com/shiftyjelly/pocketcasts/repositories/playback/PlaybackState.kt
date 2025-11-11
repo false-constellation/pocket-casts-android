@@ -26,16 +26,13 @@ data class PlaybackState(
     val isVolumeBoosted: Boolean = false,
     // when transientLoss is true the foreground service won't be stopped
     val transientLoss: Boolean = false,
-    val lastListenedState: LastListenedState = LastListenedState(),
 ) {
-
-    data class LastListenedState(
-        val chapterUuid: String? = null,
-        val episodeUuid: String? = null,
-    )
-
     enum class State {
-        EMPTY, PAUSED, PLAYING, STOPPED, ERROR
+        EMPTY,
+        PAUSED,
+        PLAYING,
+        STOPPED,
+        ERROR,
     }
 
     val isEmpty: Boolean
@@ -84,7 +81,6 @@ data class PlaybackState(
                 trimMode = playbackEffects.trimMode,
                 isVolumeBoosted = playbackEffects.isVolumeBoosted,
                 lastChangeFrom = lastChangeFrom.value,
-                lastListenedState = previousPlaybackState?.lastListenedState ?: LastListenedState(),
             )
         }
     }

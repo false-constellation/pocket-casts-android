@@ -3,6 +3,8 @@ package au.com.shiftyjelly.pocketcasts.servers.di
 import android.accounts.AccountManager
 import android.content.Context
 import au.com.shiftyjelly.pocketcasts.models.entity.AnonymousBumpStat
+import au.com.shiftyjelly.pocketcasts.models.type.BlazeAdLocation
+import au.com.shiftyjelly.pocketcasts.models.type.BlazeAdLocationMoshiAdapter
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodePlayingStatus
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodePlayingStatusMoshiAdapter
 import au.com.shiftyjelly.pocketcasts.models.type.PodcastsSortType
@@ -17,13 +19,12 @@ import au.com.shiftyjelly.pocketcasts.servers.model.DisplayStyleMoshiAdapter
 import au.com.shiftyjelly.pocketcasts.servers.model.ExpandedStyleMoshiAdapter
 import au.com.shiftyjelly.pocketcasts.servers.model.ListTypeMoshiAdapter
 import au.com.shiftyjelly.pocketcasts.servers.podcast.PodcastCacheService
-import au.com.shiftyjelly.pocketcasts.servers.podcast.TranscriptCacheService
-import au.com.shiftyjelly.pocketcasts.servers.server.ListRepository
+import au.com.shiftyjelly.pocketcasts.servers.podcast.TranscriptService
+import au.com.shiftyjelly.pocketcasts.servers.search.AutoCompleteResult
+import au.com.shiftyjelly.pocketcasts.servers.search.AutoCompleteSearchService
+import au.com.shiftyjelly.pocketcasts.servers.search.CombinedResult
 import au.com.shiftyjelly.pocketcasts.servers.server.ListWebService
 import au.com.shiftyjelly.pocketcasts.servers.sync.LoginIdentity
-import au.com.shiftyjelly.pocketcasts.servers.sync.update.SyncUpdateResponse
-import au.com.shiftyjelly.pocketcasts.servers.sync.update.SyncUpdateResponseParser
-import au.com.shiftyjelly.pocketcasts.utils.Util
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapters.Rfc3339DateJsonAdapter
 import dagger.Module
@@ -72,11 +73,13 @@ class ServersModule {
         return Moshi.Builder()
             .add(InstantAdapter())
             .add(Date::class.java, Rfc3339DateJsonAdapter().nullSafe())
-            .add(SyncUpdateResponse::class.java, SyncUpdateResponseParser())
             .add(EpisodePlayingStatus::class.java, EpisodePlayingStatusMoshiAdapter())
             .add(PodcastsSortType::class.java, PodcastsSortTypeMoshiAdapter())
             .add(AccessToken::class.java, AccessToken.Adapter)
             .add(RefreshToken::class.java, RefreshToken.Adapter)
+            .add(BlazeAdLocation::class.java, BlazeAdLocationMoshiAdapter())
+            .add(AutoCompleteResult.jsonAdapter)
+            .add(CombinedResult.jsonAdapter)
             .add(AnonymousBumpStat.Adapter)
             .add(LoginIdentity.Adapter)
             .add(ListTypeMoshiAdapter())
@@ -202,6 +205,18 @@ class ServersModule {
     }
 
     @Provides
+    @Singleton
+    @Artwork
+    fun provideArtworkClient(
+        @Raw client: OkHttpClient,
+        @Artwork interceptors: List<@JvmSuppressWildcards OkHttpInterceptor>,
+    ): OkHttpClient {
+        return client.newBuilder()
+            .addInterceptors(interceptors)
+            .build()
+    }
+
+    @Provides
     @SyncServiceRetrofit
     @Singleton
     internal fun provideApiRetrofit(@Cached okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
@@ -268,16 +283,6 @@ class ServersModule {
     }
 
     @Provides
-    @Singleton
-    internal fun provideDiscoverRepository(listWebService: ListWebService, @ApplicationContext context: Context): ListRepository {
-        val platform = if (Util.isAutomotive(context)) "automotive" else "android"
-        return ListRepository(
-            listWebService,
-            platform,
-        )
-    }
-
-    @Provides
     @TranscriptRetrofit
     @Singleton
     internal fun provideTranscriptRetrofit(@Transcripts okHttpClient: OkHttpClient): Retrofit {
@@ -286,6 +291,21 @@ class ServersModule {
             .baseUrl("http://localhost/") // Base URL is required but will be set using the annotation @Url
             .build()
     }
+
+    @Provides
+    @Singleton
+    @SearchRetrofit
+    internal fun provideSearchApiRetrofit(@Cached okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
+        return Retrofit.Builder()
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .baseUrl(Settings.SEARCH_API_URL)
+            .client(okHttpClient)
+            .build()
+    }
+
+    @Singleton
+    @Provides
+    internal fun provideAutoCompleteSearchService(@SearchRetrofit retrofit: Retrofit): AutoCompleteSearchService = retrofit.create(AutoCompleteSearchService::class.java)
 
     @Provides
     @Singleton
@@ -299,7 +319,7 @@ class ServersModule {
 
     @Provides
     @Singleton
-    fun provideTranscriptCacheServer(@TranscriptRetrofit retrofit: Retrofit): TranscriptCacheService = retrofit.create()
+    fun provideTranscriptCacheServer(@TranscriptRetrofit retrofit: Retrofit): TranscriptService = retrofit.create()
 }
 
 @Qualifier
@@ -328,11 +348,19 @@ annotation class TokenInterceptor
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
+annotation class I18nInterceptor
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
 annotation class Transcripts
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class Player
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class Artwork
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -369,3 +397,7 @@ annotation class DiscoverServiceRetrofit
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class TranscriptRetrofit
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class SearchRetrofit

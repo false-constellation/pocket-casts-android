@@ -14,6 +14,7 @@ import android.provider.OpenableColumns
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
@@ -40,8 +41,6 @@ import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.deeplink.CloudFilesDeepLink
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeStatusEnum
 import au.com.shiftyjelly.pocketcasts.models.type.UserEpisodeServerStatus
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -58,6 +57,7 @@ import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSourc
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
 import au.com.shiftyjelly.pocketcasts.utils.Util
+import au.com.shiftyjelly.pocketcasts.views.extensions.setSystemWindowInsetToPadding
 import au.com.shiftyjelly.pocketcasts.views.extensions.setup
 import au.com.shiftyjelly.pocketcasts.views.helper.NavigationIcon
 import au.com.shiftyjelly.pocketcasts.views.helper.UiUtil
@@ -199,9 +199,12 @@ class AddFileActivity :
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         theme.setupThemeForConfig(this, resources.configuration)
+        enableEdgeToEdge(navigationBarStyle = theme.getNavigationBarStyle(this))
+        theme.updateWindowStatusBarIcons(window = window)
 
         binding = ActivityAddFileBinding.inflate(layoutInflater)
         val view = binding.root
+        view.setSystemWindowInsetToPadding(right = true, left = true)
         setContentView(view)
 
         colorAdapter = AddFileColourAdapter(
@@ -217,8 +220,7 @@ class AddFileActivity :
 
         updateForm(readOnly = true, loading = true)
         viewModel.signInState.observe(this) { signInState ->
-            freeSubscription = (signInState is SignInState.SignedOut) ||
-                (signInState is SignInState.SignedIn && signInState.subscriptionStatus is SubscriptionStatus.Free)
+            freeSubscription = signInState.isNoAccountOrFree
             updateForm(freeSubscription, false)
 
             if (!freeSubscription) {
@@ -234,6 +236,7 @@ class AddFileActivity :
 
         val upgradeLayout = binding.upgradeLayout.root
         upgradeLayout.findViewById<View>(R.id.btnClose).setOnClickListener {
+            analyticsTracker.track(AnalyticsEvent.UPGRADE_BANNER_DISMISSED, mapOf("source" to OnboardingUpgradeSource.FILES.analyticsValue))
             settings.setUpgradeClosedAddFile(true)
             upgradeLayout.isVisible = false
         }
@@ -260,6 +263,8 @@ class AddFileActivity :
         if (launchedFileChooser) {
             // do nothing as we are returning from the file chooser
         } else if (existingUuid == null) {
+            setupToolbar(title = LR.string.profile_cloud_add_file)
+
             if (isFileChooserMode) {
                 launchFileChooser()
                 return
@@ -272,14 +277,14 @@ class AddFileActivity :
             }
             setupForNewFile(dataUri)
         } else {
+            setupToolbar(title = LR.string.profile_cloud_edit_file)
+
             launch {
                 val userEpisode = getUserEpisode(existingUuid)
                 if (userEpisode == null) {
                     finish()
                     return@launch
                 }
-
-                setupToolbar(title = LR.string.profile_cloud_edit_file)
 
                 binding.lblFilename.text = ""
                 binding.lblFilesize.text = Util.formattedBytes(bytes = userEpisode.sizeInBytes, context = binding.lblFilesize.context)
@@ -318,12 +323,16 @@ class AddFileActivity :
         openOnboardingFlow(OnboardingFlow.Upsell(OnboardingUpgradeSource.FILES))
     }
 
+    override fun launchIntent(onboardingFlow: OnboardingFlow): Intent {
+        return OnboardingActivity.newInstance(this, onboardingFlow)
+    }
+
     override fun openOnboardingFlow(onboardingFlow: OnboardingFlow) {
         // Just starting the activity without registering for a result because
         // we don't need the result since we don't want to break the user's flow
         // by sending them back to the Discover screen with an
         // OnboardingFinish.DoneGoToDiscover result.
-        startActivity(OnboardingActivity.newInstance(this, onboardingFlow))
+        startActivity(launchIntent(onboardingFlow))
     }
 
     @UnstableApi
@@ -459,6 +468,7 @@ class AddFileActivity :
     override fun onMenuItemClick(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.menu_save -> {
+                analyticsTracker.track(AnalyticsEvent.USER_FILE_EDIT_SAVE)
                 saveFile()
                 true
             }
@@ -612,8 +622,7 @@ class AddFileActivity :
         }
     }
 
-    private suspend fun getUserEpisode(existingUuid: String) =
-        withContext(Dispatchers.Default) { userEpisodeManager.findEpisodeByUuid(existingUuid) }
+    private suspend fun getUserEpisode(existingUuid: String) = withContext(Dispatchers.Default) { userEpisodeManager.findEpisodeByUuid(existingUuid) }
 
     private fun saveBitmapToFile(): File? {
         val bitmap = this.bitmap ?: return null

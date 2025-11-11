@@ -25,26 +25,25 @@ import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavHostState
 import androidx.wear.tooling.preview.devices.WearDevices
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
+import au.com.shiftyjelly.pocketcasts.models.type.SignInState
 import au.com.shiftyjelly.pocketcasts.wear.theme.WearAppTheme
 import au.com.shiftyjelly.pocketcasts.wear.ui.FilesScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.LoggingInScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.ScrollToTop
 import au.com.shiftyjelly.pocketcasts.wear.ui.WatchListScreen
+import au.com.shiftyjelly.pocketcasts.wear.ui.authentication.AUTHENTICATION_SUB_GRAPH
 import au.com.shiftyjelly.pocketcasts.wear.ui.authentication.RequirePlusScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.authentication.authenticationNavGraph
-import au.com.shiftyjelly.pocketcasts.wear.ui.authentication.authenticationSubGraph
 import au.com.shiftyjelly.pocketcasts.wear.ui.component.NowPlayingPager
 import au.com.shiftyjelly.pocketcasts.wear.ui.downloads.DownloadsScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.episode.EpisodeScreenFlow
 import au.com.shiftyjelly.pocketcasts.wear.ui.episode.EpisodeScreenFlow.episodeGraph
-import au.com.shiftyjelly.pocketcasts.wear.ui.filter.FilterScreen
-import au.com.shiftyjelly.pocketcasts.wear.ui.filters.FiltersScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.player.EffectsScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.player.NowPlayingScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.player.PCVolumeScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.player.StreamingConfirmationScreen
+import au.com.shiftyjelly.pocketcasts.wear.ui.playlist.PlaylistScreen
+import au.com.shiftyjelly.pocketcasts.wear.ui.playlists.PlaylistsScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.podcast.PodcastScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.podcasts.PodcastsScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.settings.settingsRoutes
@@ -66,11 +65,9 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
 
                 WearApp(
-                    email = state.email,
                     signInState = state.signInState,
-                    subscriptionStatus = state.subscriptionStatus,
                     showLoggingInScreen = state.showLoggingInScreen,
-                    onLoggingInScreenShown = viewModel::onSignInConfirmationActionHandled,
+                    onShowLoginScreen = viewModel::onSignInConfirmationActionHandled,
                     signOut = viewModel::signOut,
                 )
             }
@@ -84,12 +81,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun WearApp(
-    email: String?,
-    signInState: SignInState?,
-    subscriptionStatus: SubscriptionStatus?,
+private fun WearApp(
+    signInState: SignInState,
     showLoggingInScreen: Boolean,
-    onLoggingInScreenShown: () -> Unit,
+    onShowLoginScreen: () -> Unit,
     signOut: () -> Unit,
 ) {
     val navController = rememberSwipeDismissableNavController()
@@ -97,24 +92,18 @@ fun WearApp(
     val navState = rememberSwipeDismissableNavHostState(swipeToDismissState)
 
     if (showLoggingInScreen) {
-        navController.navigate(LoggingInScreen.routeWithDelay)
-        onLoggingInScreenShown()
+        navController.navigate(LoggingInScreen.ROUTE_WITH_DELAY)
+        onShowLoginScreen()
     }
 
-    val userCanAccessWatch = when (subscriptionStatus) {
-        is SubscriptionStatus.Free,
-        null,
-        -> false
-
-        is SubscriptionStatus.Paid -> true
-    }
+    val userCanAccessWatch = signInState.isSignedInAsPlusOrPatron
 
     val waitingForSignIn = remember { mutableStateOf(false) }
     if (!userCanAccessWatch) {
         waitingForSignIn.value = true
     }
 
-    val startDestination = if (userCanAccessWatch) WatchListScreen.route else RequirePlusScreen.route
+    val startDestination = if (userCanAccessWatch) WatchListScreen.ROUTE else RequirePlusScreen.ROUTE
 
     AppScaffold {
         SwipeDismissableNavHost(
@@ -123,15 +112,15 @@ fun WearApp(
             state = navState,
         ) {
             composable(
-                route = RequirePlusScreen.route,
+                route = RequirePlusScreen.ROUTE,
             ) {
                 RequirePlusScreen(
-                    onContinueToLogin = { navController.navigate(authenticationSubGraph) },
+                    onContinueToLogin = { navController.navigate(AUTHENTICATION_SUB_GRAPH) },
                 )
             }
 
             composable(
-                route = WatchListScreen.route,
+                route = WatchListScreen.ROUTE,
             ) {
                 NowPlayingPager(
                     allowSwipeToDismiss = false,
@@ -144,7 +133,7 @@ fun WearApp(
                         navigateToRoute = navController::navigate,
                         toNowPlaying = {
                             scope.launch {
-                                pagerState.animateScrollToPage(NowPlayingScreen.pagerIndex)
+                                pagerState.animateScrollToPage(NowPlayingScreen.PAGER_INDEX)
                             }
                         },
                     )
@@ -152,18 +141,18 @@ fun WearApp(
             }
 
             composable(
-                route = PCVolumeScreen.route,
+                route = PCVolumeScreen.ROUTE,
             ) {
                 PCVolumeScreen()
             }
 
             composable(
-                route = StreamingConfirmationScreen.route,
+                route = StreamingConfirmationScreen.ROUTE,
             ) {
                 StreamingConfirmationScreen(
-                    onFinished = { result ->
+                    onFinish = { result ->
                         navController.previousBackStackEntry?.savedStateHandle?.set(
-                            StreamingConfirmationScreen.resultKey,
+                            StreamingConfirmationScreen.RESULT_KEY,
                             result,
                         )
                         navController.popBackStack()
@@ -172,7 +161,7 @@ fun WearApp(
             }
 
             composable(
-                route = PodcastsScreen.routeHomeFolder,
+                route = PodcastsScreen.ROUTE_HOME_FOLDER,
             ) {
                 PodcastsScreenContent(
                     navController = navController,
@@ -181,9 +170,9 @@ fun WearApp(
             }
 
             composable(
-                route = PodcastsScreen.routeFolder,
+                route = PodcastsScreen.ROUTE_FOLDER,
                 arguments = listOf(
-                    navArgument(PodcastsScreen.argumentFolderUuid) {
+                    navArgument(PodcastsScreen.ARGUMENT_FOLDER_UUID) {
                         type = NavType.StringType
                     },
                 ),
@@ -195,9 +184,9 @@ fun WearApp(
             }
 
             composable(
-                route = PodcastScreen.route,
+                route = PodcastScreen.ROUTE,
                 arguments = listOf(
-                    navArgument(PodcastScreen.argument) {
+                    navArgument(PodcastScreen.ARGUMENT) {
                         type = NavType.StringType
                     },
                 ),
@@ -223,14 +212,14 @@ fun WearApp(
                 swipeToDismissState = swipeToDismissState,
             )
 
-            composable(FiltersScreen.route) {
+            composable(PlaylistsScreen.ROUTE) {
                 NowPlayingPager(
                     navController = navController,
                     swipeToDismissState = swipeToDismissState,
                 ) {
-                    FiltersScreen(
-                        onFilterTap = { filterUuid ->
-                            navController.navigate(FilterScreen.navigateRoute(filterUuid))
+                    PlaylistsScreen(
+                        onClickPlaylist = { playlist ->
+                            navController.navigate(PlaylistScreen.navigateRoute(playlist.uuid, playlist.type))
                         },
                         columnState = columnState,
                     )
@@ -238,9 +227,12 @@ fun WearApp(
             }
 
             composable(
-                route = FilterScreen.route,
+                route = PlaylistScreen.ROUTE,
                 arguments = listOf(
-                    navArgument(FilterScreen.argumentFilterUuid) {
+                    navArgument(PlaylistScreen.ARGUMENT_PLAYLIST_UUID) {
+                        type = NavType.StringType
+                    },
+                    navArgument(PlaylistScreen.ARGUMENT_PLAYLIST_TYPE) {
                         type = NavType.StringType
                     },
                 ),
@@ -249,7 +241,7 @@ fun WearApp(
                     navController = navController,
                     swipeToDismissState = swipeToDismissState,
                 ) {
-                    FilterScreen(
+                    PlaylistScreen(
                         onEpisodeTap = { episode ->
                             navController.navigate(EpisodeScreenFlow.navigateRoute(episodeUuid = episode.uuid))
                         },
@@ -258,7 +250,7 @@ fun WearApp(
                 }
             }
 
-            composable(DownloadsScreen.route) {
+            composable(DownloadsScreen.ROUTE) {
                 NowPlayingPager(
                     navController = navController,
                     swipeToDismissState = swipeToDismissState,
@@ -273,7 +265,7 @@ fun WearApp(
                 }
             }
 
-            composable(FilesScreen.route) {
+            composable(FilesScreen.ROUTE) {
                 NowPlayingPager(
                     navController = navController,
                     swipeToDismissState = swipeToDismissState,
@@ -292,12 +284,12 @@ fun WearApp(
             authenticationNavGraph(
                 navController = navController,
                 onEmailSignInSuccess = {
-                    navController.navigate(LoggingInScreen.route)
+                    navController.navigate(LoggingInScreen.ROUTE)
                 },
-                googleSignInSuccessScreen = { googleSignInAccount ->
+                googleSignInSuccessScreen = { googleAccount ->
                     LoggingInScreen(
-                        avatarUrl = googleSignInAccount?.photoUrl?.toString(),
-                        name = googleSignInAccount?.givenName,
+                        avatarUrl = googleAccount.avatarUrl,
+                        name = googleAccount.name,
                         onClose = {},
                     )
                 },
@@ -306,9 +298,9 @@ fun WearApp(
             loggingInScreens(
                 onClose = {
                     when (startDestination) {
-                        WatchListScreen.route -> {
+                        WatchListScreen.ROUTE -> {
                             val popped = navController.popBackStack(
-                                route = WatchListScreen.route,
+                                route = WatchListScreen.ROUTE,
                                 inclusive = false,
                             )
                             if (popped) {
@@ -316,9 +308,9 @@ fun WearApp(
                             }
                         }
 
-                        RequirePlusScreen.route -> {
+                        RequirePlusScreen.ROUTE -> {
                             navController.popBackStack(
-                                route = RequirePlusScreen.route,
+                                route = RequirePlusScreen.ROUTE,
                                 inclusive = false,
                             )
                         }
@@ -329,59 +321,49 @@ fun WearApp(
             )
 
             composable(
-                route = PCVolumeScreen.route,
+                route = PCVolumeScreen.ROUTE,
             ) {
                 PCVolumeScreen()
             }
 
             composable(
-                route = EffectsScreen.route,
+                route = EffectsScreen.ROUTE,
             ) {
                 EffectsScreen()
             }
         }
     }
 
-    // We cannot use the subscription status contained in the SignInState object because the subscription status
-    // gets updated to the correct value a bit after the user signs in—there is a delay in getting the updated and
-    // correct subscription status. For example, immediately after a user signs in with a plus account, their
-    // sign in state does not report that it is a Plus subscription until after the subscription call completes.
-    // This has to happen after the WearNavScaffold so that the new start destination has been processed,
-    // otherwise the new start destination will replace any navigation we do here to the LoggingInScreen.
-    val previousSubscriptionStatus = remember { mutableStateOf<SubscriptionStatus?>(null) }
-    when (subscriptionStatus) {
-        null -> {
-            /* do nothing */
-        }
+    when (signInState) {
+        is SignInState.SignedOut -> Unit // Do nothing
 
-        is SubscriptionStatus.Free -> {
-            // This gets the user back to the start destination if they logged in as free. The
-            // start destination should have been reset to the RequirePlusScreen already.
-            signOut()
-            val popped = navController.popBackStack(startDestination, inclusive = false)
-            if (popped) {
-                ScrollToTop.initiate(navController)
-            }
-            val message = if (email != null) {
-                stringResource(LR.string.log_in_free_acccount, email)
-            } else {
-                stringResource(LR.string.log_in_with_plus)
-            }
-            Toast.makeText(LocalContext.current, message, Toast.LENGTH_LONG).show()
-        }
-
-        is SubscriptionStatus.Paid -> {
-            if (waitingForSignIn.value &&
-                signInState is SignInState.SignedIn &&
-                previousSubscriptionStatus.value != subscriptionStatus
-            ) {
-                navController.navigate(LoggingInScreen.route)
+        is SignInState.SignedIn -> {
+            val subscription = signInState.subscription
+            if (subscription == null) {
+                // This gets the user back to the start destination if they logged in as free. The
+                // start destination should have been reset to the RequirePlusScreen already.
+                signOut()
+                val popped = navController.popBackStack(startDestination, inclusive = false)
+                if (popped) {
+                    ScrollToTop.initiate(navController)
+                }
+                val email = if (signInState.email.length > 16) {
+                    buildString {
+                        append(signInState.email.substring(0, 6))
+                        append("…")
+                        append(signInState.email.takeLast(6))
+                    }
+                } else {
+                    signInState.email
+                }
+                val message = stringResource(LR.string.log_in_free_account, email)
+                Toast.makeText(LocalContext.current, message, Toast.LENGTH_LONG).show()
+            } else if (waitingForSignIn.value) {
+                navController.navigate(LoggingInScreen.ROUTE)
                 waitingForSignIn.value = false
             }
         }
     }
-
-    previousSubscriptionStatus.value = subscriptionStatus
 }
 
 @Composable
@@ -408,11 +390,11 @@ fun PodcastsScreenContent(
 private fun NavGraphBuilder.loggingInScreens(
     onClose: () -> Unit,
 ) {
-    composable(LoggingInScreen.route) {
+    composable(LoggingInScreen.ROUTE) {
         LoggingInScreen(onClose = onClose)
     }
 
-    composable(LoggingInScreen.routeWithDelay) {
+    composable(LoggingInScreen.ROUTE_WITH_DELAY) {
         LoggingInScreen(
             onClose = onClose,
             // Because this login is not triggered by the user, make sure that the
@@ -427,11 +409,9 @@ private fun NavGraphBuilder.loggingInScreens(
 @Composable
 private fun DefaultPreview() {
     WearApp(
-        email = "",
-        signInState = null,
-        subscriptionStatus = null,
+        signInState = SignInState.SignedOut,
         showLoggingInScreen = false,
-        onLoggingInScreenShown = {},
+        onShowLoginScreen = {},
         signOut = {},
     )
 }

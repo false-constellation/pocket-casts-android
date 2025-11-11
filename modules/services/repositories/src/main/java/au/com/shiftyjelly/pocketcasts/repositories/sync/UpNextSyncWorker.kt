@@ -5,8 +5,10 @@ import android.os.SystemClock
 import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Operation
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
@@ -17,6 +19,7 @@ import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.UpNextChange
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
+import au.com.shiftyjelly.pocketcasts.repositories.history.upnext.UpNextHistoryManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
@@ -32,7 +35,6 @@ import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.Locale
-import java.util.UUID
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.rx2.await
 import kotlinx.coroutines.rx2.awaitSingleOrNull
@@ -51,30 +53,28 @@ class UpNextSyncWorker @AssistedInject constructor(
     private val syncManager: SyncManager,
     private val upNextQueue: UpNextQueue,
     private val userEpisodeManager: UserEpisodeManager,
+    private val upNextHistoryManager: UpNextHistoryManager,
 ) : CoroutineWorker(context, workerParams) {
 
     companion object {
-        private const val UP_NEXT_SYNC_WORKER_TAG = "pocket_casts_up_next_sync_worker_tag"
+        private const val WORKER_TAG = "pocket_casts_up_next_sync_worker_tag"
 
-        fun enqueue(syncManager: SyncManager, context: Context): UUID? {
+        fun enqueue(syncManager: SyncManager, context: Context): Operation? {
             // Don't run the job if Up Next syncing is turned off
             if (!syncManager.isLoggedIn()) {
                 return null
             }
             LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "UpNextSyncWorker - scheduled")
 
-            WorkManager.getInstance(context).cancelAllWorkByTag(UP_NEXT_SYNC_WORKER_TAG)
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
 
             val workRequest = OneTimeWorkRequestBuilder<UpNextSyncWorker>()
-                .addTag(UP_NEXT_SYNC_WORKER_TAG)
+                .addTag(WORKER_TAG)
                 .setConstraints(constraints)
                 .build()
-            WorkManager.getInstance(context).enqueue(workRequest)
-
-            return workRequest.id
+            return WorkManager.getInstance(context).enqueueUniqueWork(WORKER_TAG, ExistingWorkPolicy.APPEND_OR_REPLACE, workRequest)
         }
     }
 
@@ -197,6 +197,23 @@ class UpNextSyncWorker @AssistedInject constructor(
                 null
             }
         } ?: emptyList()
+
+        val localEpisodes = listOfNotNull(upNextQueue.currentEpisode)
+            .plus(upNextQueue.queueEpisodes)
+            .distinct()
+        val allMatch = response.episodes?.let { episodes ->
+            episodes.size == localEpisodes.size &&
+                episodes.all { episode ->
+                    localEpisodes.any { queueEpisode ->
+                        episode.uuid == queueEpisode.uuid
+                    }
+                }
+        } == true
+
+        if (!allMatch) {
+            // if the server up next episodes not match local up next episodes, snapshot local up next queue
+            upNextHistoryManager.snapshotUpNext()
+        }
 
         // import the server Up Next into the database
         upNextQueue.importServerChangesBlocking(episodes, playbackManager, downloadManager)

@@ -31,6 +31,7 @@ dependencies {
     api(libs.lottie)
     api(libs.material)
     api(libs.navigation.runtime)
+    api(libs.play.cast)
     api(libs.play.review)
     api(libs.rx2.java)
     api(libs.rx2.relay)
@@ -56,7 +57,6 @@ dependencies {
     implementation(libs.fragment.ktx)
     implementation(libs.lifecycle.reactivestreams.ktx)
     implementation(libs.okhttp)
-    implementation(libs.play.cast)
     implementation(libs.rx2.android)
     implementation(libs.rx2.kotlin)
     implementation(libs.timber)
@@ -64,7 +64,11 @@ dependencies {
     implementation(projects.modules.services.images)
     implementation(projects.modules.services.localization)
 
+    testImplementation(libs.coroutines.test)
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.turbine)
+
+    testImplementation(projects.modules.services.sharedtest)
 }

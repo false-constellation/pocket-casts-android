@@ -3,6 +3,7 @@ package au.com.shiftyjelly.pocketcasts.servers.podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastRatings
+import au.com.shiftyjelly.pocketcasts.models.entity.SuggestedFolder
 import au.com.shiftyjelly.pocketcasts.servers.discover.EpisodeSearch
 import io.reactivex.Single
 import javax.inject.Inject
@@ -69,18 +70,32 @@ class PodcastCacheServiceManagerImpl @Inject constructor(
         }
     }
 
-    override suspend fun getEpisodeUrl(episode: PodcastEpisode): String? =
-        withContext(Dispatchers.IO) {
-            try {
-                val response = service.getEpisodeUrl(episode.podcastUuid, episode.uuid)
-                if (response.isSuccessful) {
-                    response.body()?.string()
-                } else {
-                    null
-                }
-            } catch (e: Exception) {
-                Timber.e(e)
+    override suspend fun getEpisodeUrl(episode: PodcastEpisode): String? = withContext(Dispatchers.IO) {
+        try {
+            val response = service.getEpisodeUrl(episode.podcastUuid, episode.uuid)
+            if (response.isSuccessful) {
+                response.body()?.string()
+            } else {
                 null
             }
+        } catch (e: Exception) {
+            Timber.e(e)
+            null
         }
+    }
+
+    override suspend fun suggestedFolders(request: SuggestedFoldersRequest): List<SuggestedFolder> {
+        return service.suggestedFolders(request).toSuggestedFolders()
+    }
+
+    private fun Map<String, List<String>>.toSuggestedFolders(): List<SuggestedFolder> {
+        return this.flatMap { (folderName, podcastList) ->
+            podcastList.map { podcastUuid ->
+                SuggestedFolder(
+                    name = folderName,
+                    podcastUuid = podcastUuid,
+                )
+            }
+        }
+    }
 }

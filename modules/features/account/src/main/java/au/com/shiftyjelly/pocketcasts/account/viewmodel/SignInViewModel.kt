@@ -69,7 +69,7 @@ class SignInViewModel
         }
         signInState.postValue(SignInState.Loading)
 
-        subscriptionManager.clearCachedStatus()
+        subscriptionManager.clearCachedMembership()
         viewModelScope.launch {
             val result = syncManager.loginWithEmailAndPassword(
                 email = emailString,

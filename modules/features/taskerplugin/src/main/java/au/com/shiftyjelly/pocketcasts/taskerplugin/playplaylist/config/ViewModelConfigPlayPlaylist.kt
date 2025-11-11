@@ -18,13 +18,14 @@ import au.com.shiftyjelly.pocketcasts.images.R as RD
 @HiltViewModel
 class ViewModelConfigPlayPlaylist @Inject constructor(
     application: Application,
-) : ViewModelBase<InputPlayPlaylist, Unit, ActionHelperPlayPlaylist>(application), TaskerPluginConfig<InputPlayPlaylist> {
+) : ViewModelBase<InputPlayPlaylist, Unit, ActionHelperPlayPlaylist>(application),
+    TaskerPluginConfig<InputPlayPlaylist> {
     override fun getNewHelper(pluginConfig: TaskerPluginConfig<InputPlayPlaylist>) = ActionHelperPlayPlaylist(pluginConfig)
 
     private inner class InputField constructor(@StringRes labelResId: Int, @DrawableRes iconResId: Int, valueGetter: InputPlayPlaylist.() -> String?, valueSetter: InputPlayPlaylist.(String?) -> Unit) : InputFieldBase<String>(labelResId, iconResId, valueGetter, valueSetter) {
         override val askFor get() = true
-        override fun getPossibleValues(): Flow<List<String>>? {
-            return context.playlistManager.findAllFlow().map { playlist -> playlist.map { it.title } }
+        override fun getPossibleValues(): Flow<List<String>> {
+            return context.playlistManager.playlistPreviewsFlow().map { playlist -> playlist.map { it.title } }
         }
     }
 

@@ -3,14 +3,20 @@ package au.com.shiftyjelly.pocketcasts.podcasts.view.share
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.Modifier
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import dagger.hilt.android.AndroidEntryPoint
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
@@ -22,22 +28,26 @@ class ShareListCreateFragment : BaseFragment() {
     private var navHostController: NavHostController? = null
 
     private object NavRoutes {
-        const val podcasts = "share_podcasts"
-        const val title = "share_tile"
-        const val building = "building"
-        const val failed = "failed"
+        const val PODCASTS = "share_podcasts"
+        const val TITLE = "share_tile"
+        const val BUILDING = "building"
+        const val FAILED = "failed"
     }
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         AppThemeWithBackground(theme.activeTheme) {
             navHostController = rememberNavController()
             val navController = navHostController ?: return@AppThemeWithBackground
-            NavHost(navController = navController, startDestination = NavRoutes.podcasts) {
-                composable(NavRoutes.podcasts) {
+            NavHost(
+                navController = navController,
+                startDestination = NavRoutes.PODCASTS,
+                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)),
+            ) {
+                composable(NavRoutes.PODCASTS) {
                     ShareListCreatePodcastsPage(
                         onCloseClick = { activity?.finish() },
                         onNextClick = { selectedPodcastsCount ->
@@ -45,25 +55,25 @@ class ShareListCreateFragment : BaseFragment() {
                                 AnalyticsEvent.SHARE_PODCASTS_PODCASTS_SELECTED,
                                 AnalyticsProp.countMap(selectedPodcastsCount),
                             )
-                            navController.navigate(NavRoutes.title)
+                            navController.navigate(NavRoutes.TITLE)
                         },
                         viewModel = viewModel,
                     )
                 }
-                composable(NavRoutes.title) {
+                composable(NavRoutes.TITLE) {
                     ShareListCreateTitlePage(
-                        onBackClick = { navController.popBackStack() },
+                        onBackPress = { navController.popBackStack() },
                         onNextClick = { createShareLink(navController) },
                         viewModel = viewModel,
                     )
                 }
-                composable(NavRoutes.building) {
+                composable(NavRoutes.BUILDING) {
                     ShareListCreateBuildingPage(
                         onCloseClick = { activity?.finish() },
                         viewModel = viewModel,
                     )
                 }
-                composable(NavRoutes.failed) {
+                composable(NavRoutes.FAILED) {
                     ShareListCreateFailedPage(
                         onCloseClick = { activity?.finish() },
                         onRetryClick = { createShareLink(navController) },
@@ -81,9 +91,9 @@ class ShareListCreateFragment : BaseFragment() {
         viewModel.sharePodcasts(
             context = requireContext(),
             label = getString(LR.string.podcasts_share_via),
-            onBefore = { navController.navigate(NavRoutes.building) },
+            onBefore = { navController.navigate(NavRoutes.BUILDING) },
             onSuccess = { activity?.finish() },
-            onFailure = { navController.navigate(NavRoutes.failed) },
+            onFailure = { navController.navigate(NavRoutes.FAILED) },
         )
     }
 
@@ -94,6 +104,6 @@ class ShareListCreateFragment : BaseFragment() {
 }
 
 private object AnalyticsProp {
-    private const val count = "count"
-    fun countMap(count: Int) = mapOf(this.count to count)
+    private const val COUNT = "count"
+    fun countMap(count: Int) = mapOf(this.COUNT to count)
 }

@@ -8,20 +8,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.fragment.compose.content
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
 import au.com.shiftyjelly.pocketcasts.settings.whatsnew.WhatsNewViewModel.NavigationState
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarIconColor
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -32,11 +30,14 @@ class WhatsNewFragment : BaseFragment() {
     @Inject
     lateinit var analyticsTracker: AnalyticsTracker
 
+    override var statusBarIconColor: StatusBarIconColor = StatusBarIconColor.ThemeNoToolbar
+    override var backgroundTransparent: Boolean = true
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         AppTheme(theme.activeTheme) {
             CallOnce {
                 analyticsTracker.track(
@@ -95,14 +96,8 @@ class WhatsNewFragment : BaseFragment() {
     private fun startUpsellFlow(source: OnboardingUpgradeSource) {
         val onboardingFlow = OnboardingFlow.Upsell(
             source = source,
-            showPatronOnly = when (source) {
-                OnboardingUpgradeSource.WHATS_NEW_SKIP_CHAPTERS -> FeatureFlag.isEnabled(Feature.DESELECT_CHAPTERS) &&
-                    SubscriptionTier.fromFeatureTier(Feature.DESELECT_CHAPTERS) == SubscriptionTier.PATRON
-
-                else -> false
-            },
         )
-        OnboardingLauncher.openOnboardingFlow(activity, onboardingFlow)
+        OnboardingLauncher.openOnboardingFlow(requireActivity(), onboardingFlow)
     }
 
     companion object {

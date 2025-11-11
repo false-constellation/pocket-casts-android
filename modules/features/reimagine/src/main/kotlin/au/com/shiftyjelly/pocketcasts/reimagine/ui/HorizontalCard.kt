@@ -29,7 +29,6 @@ import au.com.shiftyjelly.pocketcasts.compose.components.TextH70
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.sharing.CardType
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 import dev.shreyaspatil.capturable.capturable
 import dev.shreyaspatil.capturable.controller.CaptureController
 import dev.shreyaspatil.capturable.controller.rememberCaptureController
@@ -80,10 +79,9 @@ internal fun HorizontalEpisodeCard(
     modifier = modifier,
 )
 
-@ShowkaseComposable(name = "Horizontal podcast card", group = "Sharing")
 @Preview(name = "HorizontalPodcastCardDark")
 @Composable
-fun HorizontalPodcastCardDarkPreview() = HorizontalPodcastCardPreview(
+private fun HorizontalPodcastCardDarkPreview() = HorizontalPodcastCardPreview(
     baseColor = Color(0xFFEC0404),
 )
 
@@ -122,6 +120,7 @@ private fun HorizontalCard(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.matchParentSize(),
         ) {
             Spacer(
                 modifier = Modifier.width(height * 0.15f),
@@ -183,10 +182,9 @@ private fun HorizontalPodcastCardLightPreview() = HorizontalPodcastCardPreview(
     baseColor = Color(0xFFFBCB04),
 )
 
-@ShowkaseComposable(name = "Horizontal episode card", group = "Sharing")
 @Preview(name = "HorizontalEpisodeCardDark")
 @Composable
-fun HorizontalEpisodeCardDarkPreview() = HorizontalEpisodeCardPreview(
+private fun HorizontalEpisodeCardDarkPreview() = HorizontalEpisodeCardPreview(
     baseColor = Color(0xFFEC0404),
 )
 

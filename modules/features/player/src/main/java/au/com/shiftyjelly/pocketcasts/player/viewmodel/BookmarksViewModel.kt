@@ -1,22 +1,21 @@
 package au.com.shiftyjelly.pocketcasts.player.viewmodel
 
+import androidx.compose.material.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
-import au.com.shiftyjelly.pocketcasts.compose.bookmark.BookmarkRowColors
-import au.com.shiftyjelly.pocketcasts.compose.buttons.TimePlayButtonStyle
+import au.com.shiftyjelly.pocketcasts.compose.PodcastColors
+import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarkArguments
-import au.com.shiftyjelly.pocketcasts.player.view.bookmark.components.HeaderRowColors
-import au.com.shiftyjelly.pocketcasts.player.view.bookmark.components.MessageViewColors
-import au.com.shiftyjelly.pocketcasts.player.view.bookmark.components.NoBookmarksViewColors
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.search.BookmarkSearchHandler
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.UserSetting
@@ -31,8 +30,6 @@ import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.extensions.combine
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.BookmarkFeatureControl
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.UserTier
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectBookmarksHelper
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectHelper
@@ -63,7 +60,6 @@ class BookmarksViewModel
     private val settings: Settings,
     private val playbackManager: PlaybackManager,
     private val theme: Theme,
-    private val bookmarkFeature: BookmarkFeatureControl,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val bookmarkSearchHandler: BookmarkSearchHandler,
 ) : ViewModel() {
@@ -169,12 +165,12 @@ class BookmarksViewModel
             bookmarksFlow,
             isMultiSelectingFlow,
             selectedListFlow,
-            settings.cachedSubscriptionStatus.flow,
+            settings.cachedSubscription.flow,
             settings.artworkConfiguration.flow,
             bookmarkSearchResults,
-        ) { bookmarks, isMultiSelecting, selectedList, cachedSubscriptionStatus, artworkConfiguration, searchResults ->
-            val userTier = (cachedSubscriptionStatus as? SubscriptionStatus.Paid)?.tier?.toUserTier() ?: UserTier.Free
-            _uiState.value = if (!bookmarkFeature.isAvailable(userTier)) {
+        ) { bookmarks, isMultiSelecting, selectedList, subscription, artworkConfiguration, searchResults ->
+            val isPaidUser = subscription != null
+            _uiState.value = if (!isPaidUser) {
                 UiState.Upsell(sourceView)
             } else if (bookmarks.isEmpty()) {
                 UiState.Empty(sourceView)
@@ -231,7 +227,8 @@ class BookmarksViewModel
                         episode = it,
                         sortType = sortType as BookmarksSortTypeDefault,
                     )
-                } ?: run { // This shouldn't happen in the ideal world
+                } ?: run {
+                    // This shouldn't happen in the ideal world
                     LogBuffer.e(LogBuffer.TAG_INVALID_STATE, "Episode not found.")
                     flowOf(emptyList())
                 }
@@ -317,29 +314,16 @@ class BookmarksViewModel
         }
     }
 
-    fun buildBookmarkArguments(onSuccess: (BookmarkArguments) -> Unit) {
-        (_uiState.value as? UiState.Loaded)?.let {
-            val bookmark =
-                it.bookmarks.firstOrNull { bookmark -> multiSelectHelper.isSelected(bookmark) }
-            bookmark?.let {
-                val episodeUuid = bookmark.episodeUuid
-                viewModelScope.launch(ioDispatcher) {
-                    val podcast = podcastManager.findPodcastByUuid(bookmark.podcastUuid)
-                    val backgroundColor =
-                        if (podcast == null) 0xFF000000.toInt() else theme.playerBackgroundColor(podcast)
-                    val tintColor =
-                        if (podcast == null) 0xFFFFFFFF.toInt() else theme.playerHighlightColor(podcast)
-                    val arguments = BookmarkArguments(
-                        bookmarkUuid = bookmark.uuid,
-                        episodeUuid = episodeUuid,
-                        timeSecs = bookmark.timeSecs,
-                        backgroundColor = backgroundColor,
-                        tintColor = tintColor,
-                    )
-                    onSuccess(arguments)
-                }
-            }
-        }
+    suspend fun createBookmarkArguments(): BookmarkArguments? {
+        val loadedState = _uiState.value as? UiState.Loaded ?: return null
+        val bookmark = loadedState.bookmarks.firstOrNull(multiSelectHelper::isSelected) ?: return null
+        val podcast = podcastManager.findPodcastByUuid(bookmark.podcastUuid)
+        return BookmarkArguments(
+            bookmarkUuid = bookmark.uuid,
+            episodeUuid = bookmark.episodeUuid,
+            timeSecs = bookmark.timeSecs,
+            podcastColors = podcast?.let(::PodcastColors) ?: PodcastColors.ForUserEpisode,
+        )
     }
 
     private fun SourceView.mapToBookmarksSortTypeUserSetting(): UserSetting<BookmarksSortType> {
@@ -352,15 +336,30 @@ class BookmarksViewModel
         return sortType as UserSetting<BookmarksSortType>
     }
 
-    sealed class UiState {
-        data class Empty(val sourceView: SourceView) : UiState() {
-            val colors: NoBookmarksViewColors
-                get() = when (sourceView) {
-                    SourceView.PLAYER -> NoBookmarksViewColors.Player
-                    else -> NoBookmarksViewColors.Default
-                }
-        }
+    fun searchBarClearButtonTapped() {
+        analyticsTracker.track(AnalyticsEvent.BOOKMARKS_SEARCHBAR_CLEAR_BUTTON_TAPPED)
+    }
 
+    fun onHeadphoneControlsButtonTapped() {
+        analyticsTracker.track(
+            AnalyticsEvent.BOOKMARKS_EMPTY_GO_TO_HEADPHONE_SETTINGS,
+            mapOf("source" to sourceView.analyticsValue),
+        )
+    }
+
+    fun onGetBookmarksButtonTapped() {
+        analyticsTracker.track(
+            AnalyticsEvent.BOOKMARKS_GET_BOOKMARKS_BUTTON_TAPPED,
+            mapOf("source" to sourceView.analyticsValue),
+        )
+    }
+
+    fun onShare(podcastUuid: String, episodeUuid: String, source: SourceView) {
+        analyticsTracker.track(AnalyticsEvent.BOOKMARK_SHARE_TAPPED, mapOf("podcast_uuid" to podcastUuid, "episode_uuid" to episodeUuid, "source" to source.analyticsValue))
+    }
+
+    sealed class UiState {
+        data class Empty(val sourceView: SourceView) : UiState()
         data object Loading : UiState()
         data class Loaded(
             val bookmarks: List<Bookmark> = emptyList(),
@@ -374,26 +373,10 @@ class BookmarksViewModel
             val searchText: String = "",
             val searchEnabled: Boolean = false,
             val showEpisodeTitle: Boolean = false,
-        ) : UiState() {
-            val headerRowColors: HeaderRowColors
-                get() = when (sourceView) {
-                    SourceView.PLAYER -> HeaderRowColors.Player
-                    else -> HeaderRowColors.Default
-                }
-            val bookmarkRowColors: BookmarkRowColors
-                get() = when (sourceView) {
-                    SourceView.PLAYER -> BookmarkRowColors.Player
-                    else -> BookmarkRowColors.Default
-                }
-            val timePlayButtonStyle: TimePlayButtonStyle
-                get() = when (sourceView) {
-                    SourceView.PLAYER -> TimePlayButtonStyle.Solid
-                    else -> TimePlayButtonStyle.Outlined
-                }
-        }
+        ) : UiState()
 
         data class Upsell(val sourceView: SourceView) : UiState() {
-            val colors: MessageViewColors
+            internal val colors: MessageViewColors
                 get() = when (sourceView) {
                     SourceView.PLAYER -> MessageViewColors.Player
                     else -> MessageViewColors.Default
@@ -404,5 +387,38 @@ class BookmarksViewModel
     sealed class BookmarkMessage {
         data object BookmarkEpisodeNotFound : BookmarkMessage()
         data class PlayingBookmark(val bookmarkTitle: String) : BookmarkMessage()
+    }
+}
+
+internal sealed class MessageViewColors {
+    @Composable
+    abstract fun backgroundColor(): Color
+
+    @Composable
+    abstract fun textColor(): Color
+
+    @Composable
+    abstract fun buttonTextColor(): Color
+
+    object Default : MessageViewColors() {
+        @Composable
+        override fun backgroundColor(): Color = MaterialTheme.theme.colors.primaryUi01Active
+
+        @Composable
+        override fun textColor(): Color = MaterialTheme.theme.colors.primaryText02
+
+        @Composable
+        override fun buttonTextColor(): Color = MaterialTheme.theme.colors.primaryInteractive01
+    }
+
+    object Player : MessageViewColors() {
+        @Composable
+        override fun backgroundColor(): Color = MaterialTheme.theme.colors.playerContrast06
+
+        @Composable
+        override fun textColor(): Color = MaterialTheme.theme.colors.playerContrast02
+
+        @Composable
+        override fun buttonTextColor(): Color = MaterialTheme.theme.colors.playerContrast01
     }
 }

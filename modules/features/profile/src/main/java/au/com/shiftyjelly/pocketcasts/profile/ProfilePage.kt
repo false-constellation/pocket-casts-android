@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,8 +12,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.AppBarDefaults
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -34,15 +37,21 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
-import au.com.shiftyjelly.pocketcasts.compose.OrientationPreview
+import au.com.shiftyjelly.pocketcasts.compose.PreviewOrientation
+import au.com.shiftyjelly.pocketcasts.compose.components.Banner
 import au.com.shiftyjelly.pocketcasts.compose.components.HorizontalDivider
 import au.com.shiftyjelly.pocketcasts.compose.preview.ThemePreviewParameterProvider
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.endofyear.ui.EndOfYearPromptCard
 import au.com.shiftyjelly.pocketcasts.images.R
 import au.com.shiftyjelly.pocketcasts.models.to.RefreshState
-import au.com.shiftyjelly.pocketcasts.models.type.ReferralsOfferInfoMock
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.BillingCycle
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionOffer
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionPlans
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.flatMap
+import au.com.shiftyjelly.pocketcasts.payment.getOrNull
+import au.com.shiftyjelly.pocketcasts.referrals.ReferralSubscriptionPlan
 import au.com.shiftyjelly.pocketcasts.referrals.ReferralsClaimGuestPassBannerCard
 import au.com.shiftyjelly.pocketcasts.referrals.ReferralsIconWithTooltip
 import au.com.shiftyjelly.pocketcasts.referrals.ReferralsViewModel
@@ -50,6 +59,8 @@ import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import java.util.Date
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import au.com.shiftyjelly.pocketcasts.images.R as IR
+import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @Composable
 internal fun ProfilePage(
@@ -57,111 +68,160 @@ internal fun ProfilePage(
     themeType: Theme.ThemeType,
     onSendReferralsClick: () -> Unit,
     onReferralsTooltipClick: () -> Unit,
-    onReferralsTooltipShown: () -> Unit,
+    onReferralsTooltipShow: () -> Unit,
     onSettingsClick: () -> Unit,
     onHeaderClick: () -> Unit,
+    onCreateFreeAccountBannerClick: () -> Unit,
+    onDismissCreateFreeAccountBannerClick: () -> Unit,
     onPlaybackClick: () -> Unit,
     onClaimReferralsClick: () -> Unit,
     onHideReferralsCardClick: () -> Unit,
-    onReferralsCardShown: () -> Unit,
-    onShowReferralsSheet: () -> Unit,
+    onReferralsCardShow: () -> Unit,
+    onReferralsSheetShow: () -> Unit,
     onSectionClick: (ProfileSection) -> Unit,
     onRefreshClick: () -> Unit,
     onUpgradeProfileClick: () -> Unit,
     onCloseUpgradeProfileClick: () -> Unit,
     modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
 ) {
+    val isPortrait = LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE
     AppTheme(themeType) {
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .background(MaterialTheme.theme.colors.primaryUi02)
-                .verticalScroll(rememberScrollState()),
+                .background(MaterialTheme.theme.colors.primaryUi02),
         ) {
             Toolbar(
-                showReferralsIcon = state.isSendReferralsEnabled,
                 state = state.referralsState,
                 onSendReferralsClick = onSendReferralsClick,
                 onReferralsTooltipClick = onReferralsTooltipClick,
-                onReferralsTooltipShown = onReferralsTooltipShown,
+                onReferralsTooltipShow = onReferralsTooltipShow,
                 onSettingsClick = onSettingsClick,
             )
-            VerticalSpacer()
-            HeaderWithStats(
-                headerState = state.headerState,
-                statsState = state.statsState,
-                onHeaderClick = onHeaderClick,
-            )
-            VerticalSpacer()
-            if (state.isPlaybackEnabled) {
-                EndOfYearPromptCard(
-                    onClick = onPlaybackClick,
-                    modifier = Modifier.padding(horizontal = horizontalPadding),
-                )
-                VerticalSpacer()
-            }
-            if (state.isClaimReferralsEnabled) {
-                ReferralsClaimGuestPassBannerCard(
-                    state = state.referralsState,
-                    onClick = onClaimReferralsClick,
-                    onHideBannerClick = onHideReferralsCardClick,
-                    onBannerShown = onReferralsCardShown,
-                    onShowReferralsSheet = onShowReferralsSheet,
-                    modifier = Modifier.padding(horizontal = horizontalPadding),
-                )
-                if ((state.referralsState as? ReferralsViewModel.UiState.Loaded)?.showProfileBanner == true) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                item {
                     VerticalSpacer()
                 }
+                headerWithStats(
+                    headerState = state.headerState,
+                    statsState = state.statsState,
+                    onHeaderClick = onHeaderClick,
+                    isPortrait = isPortrait,
+                )
+                item {
+                    VerticalSpacer()
+                }
+                if (state.isFreeAccountBannerVisible) {
+                    item {
+                        Banner(
+                            title = stringResource(LR.string.encourage_account_sync_banner_title),
+                            description = stringResource(LR.string.encourage_account_sync_banner_description),
+                            actionLabel = stringResource(LR.string.encourage_account_banner_action_label),
+                            icon = painterResource(IR.drawable.ic_heart_2),
+                            onActionClick = onCreateFreeAccountBannerClick,
+                            onDismiss = onDismissCreateFreeAccountBannerClick,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = horizontalPadding),
+                        )
+                    }
+                    item {
+                        VerticalSpacer()
+                    }
+                }
+                if (state.isPlaybackEnabled) {
+                    item {
+                        EndOfYearPromptCard(
+                            onClick = onPlaybackClick,
+                            modifier = Modifier.padding(horizontal = horizontalPadding),
+                        )
+                    }
+                    item {
+                        VerticalSpacer()
+                    }
+                }
+                item {
+                    ReferralsClaimGuestPassBannerCard(
+                        state = state.referralsState,
+                        onClick = onClaimReferralsClick,
+                        onHideBannerClick = onHideReferralsCardClick,
+                        onBannerShow = onReferralsCardShow,
+                        onShowReferralsSheet = onReferralsSheetShow,
+                        modifier = Modifier.padding(horizontal = horizontalPadding),
+                    )
+                }
+                if ((state.referralsState as? ReferralsViewModel.UiState.Loaded)?.showProfileBanner == true) {
+                    item {
+                        VerticalSpacer()
+                    }
+                }
+                item {
+                    HorizontalDivider()
+                }
+                item {
+                    ProfileSections(
+                        sections = ProfileSection.entries,
+                        onClick = onSectionClick,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item {
+                    VerticalSpacer()
+                }
+                item {
+                    var localRefreshState by remember(state.refreshState) { mutableStateOf(state.refreshState) }
+                    RefreshSection(
+                        refreshState = localRefreshState,
+                        onClick = {
+                            localRefreshState = RefreshState.Refreshing
+                            onRefreshClick()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = horizontalPadding),
+                    )
+                }
+                item {
+                    VerticalSpacer()
+                }
+                item {
+                    ProfileUpgradeSection(
+                        isVisible = state.isUpgradeBannerVisible,
+                        contentPadding = PaddingValues(
+                            horizontal = 64.dp,
+                            vertical = verticalSpacing,
+                        ),
+                        onClick = onUpgradeProfileClick,
+                        onCloseClick = onCloseUpgradeProfileClick,
+                        modifier = Modifier
+                            .background(MaterialTheme.colors.background)
+                            .fillMaxWidth(),
+                    )
+                }
+                item {
+                    MiniPlayerPadding(
+                        padding = state.miniPlayerPadding,
+                        isUpgradeBannerVisible = state.isUpgradeBannerVisible,
+                    )
+                }
             }
-            HorizontalDivider()
-            ProfileSections(
-                sections = ProfileSection.entries,
-                onClick = onSectionClick,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            VerticalSpacer()
-            var localRefreshState by remember(state.refreshState) { mutableStateOf(state.refreshState) }
-            RefreshSection(
-                refreshState = localRefreshState,
-                onClick = {
-                    localRefreshState = RefreshState.Refreshing
-                    onRefreshClick()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = horizontalPadding),
-            )
-            VerticalSpacer()
-            ProfileUpgradeSection(
-                isVisible = state.isUpgradeBannerVisible,
-                contentPadding = PaddingValues(
-                    horizontal = 64.dp,
-                    vertical = verticalSpacing,
-                ),
-                onClick = onUpgradeProfileClick,
-                onCloseClick = onCloseUpgradeProfileClick,
-                modifier = Modifier
-                    .background(MaterialTheme.colors.background)
-                    .fillMaxWidth(),
-            )
-            MiniPlayerPadding(
-                padding = state.miniPlayerPadding,
-                isUpgradeBannerVisible = state.isUpgradeBannerVisible,
-            )
         }
     }
 }
 
 internal data class ProfilePageState(
-    val isSendReferralsEnabled: Boolean,
     val isPlaybackEnabled: Boolean,
-    val isClaimReferralsEnabled: Boolean,
+    val isFreeAccountBannerVisible: Boolean,
     val isUpgradeBannerVisible: Boolean,
     val miniPlayerPadding: Dp,
     val headerState: ProfileHeaderState,
     val statsState: ProfileStatsState,
     val referralsState: ReferralsViewModel.UiState,
-    val refreshState: RefreshState?,
+    val refreshState: RefreshState,
 )
 
 private val horizontalPadding = 16.dp
@@ -176,11 +236,10 @@ private fun VerticalSpacer() {
 
 @Composable
 private fun Toolbar(
-    showReferralsIcon: Boolean,
     state: ReferralsViewModel.UiState,
     onSendReferralsClick: () -> Unit,
     onReferralsTooltipClick: () -> Unit,
-    onReferralsTooltipShown: () -> Unit,
+    onReferralsTooltipShow: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
     Row(
@@ -188,18 +247,17 @@ private fun Toolbar(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
             .background(MaterialTheme.theme.colors.secondaryUi01)
+            .windowInsetsPadding(AppBarDefaults.topAppBarWindowInsets)
+            .height(56.dp)
             .padding(horizontal = horizontalPadding),
     ) {
-        if (showReferralsIcon) {
-            ReferralsIconWithTooltip(
-                state = state,
-                onIconClick = onSendReferralsClick,
-                onTooltipClick = onReferralsTooltipClick,
-                onTooltipShown = onReferralsTooltipShown,
-            )
-        }
+        ReferralsIconWithTooltip(
+            state = state,
+            onIconClick = onSendReferralsClick,
+            onTooltipClick = onReferralsTooltipClick,
+            onTooltipShow = onReferralsTooltipShow,
+        )
         if (LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE) {
             Spacer(
                 modifier = Modifier.weight(1f),
@@ -217,46 +275,58 @@ private fun Toolbar(
     }
 }
 
-@Composable
-private fun ColumnScope.HeaderWithStats(
+private fun LazyListScope.headerWithStats(
     headerState: ProfileHeaderState,
     statsState: ProfileStatsState,
     onHeaderClick: () -> Unit,
+    isPortrait: Boolean,
 ) {
-    if (LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE) {
-        ProfileHeader(
-            state = headerState,
-            onClick = onHeaderClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = horizontalPadding),
-        )
-        VerticalSpacer()
-        ProfileStats(
-            state = statsState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = horizontalPadding),
-        )
-        VerticalSpacer()
-    } else {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = horizontalPadding),
-        ) {
+    if (isPortrait) {
+        item {
             ProfileHeader(
                 state = headerState,
                 onClick = onHeaderClick,
-                modifier = Modifier.weight(1f),
-            )
-            ProfileStats(
-                state = statsState,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = horizontalPadding),
             )
         }
-        VerticalSpacer()
+        item {
+            VerticalSpacer()
+        }
+        item {
+            ProfileStats(
+                state = statsState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = horizontalPadding),
+            )
+        }
+        item {
+            VerticalSpacer()
+        }
+    } else {
+        item {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = horizontalPadding),
+            ) {
+                ProfileHeader(
+                    state = headerState,
+                    onClick = onHeaderClick,
+                    modifier = Modifier.weight(1f),
+                )
+                ProfileStats(
+                    state = statsState,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        item {
+            VerticalSpacer()
+        }
     }
 }
 
@@ -273,7 +343,7 @@ private fun MiniPlayerPadding(
     )
 }
 
-@OrientationPreview
+@PreviewOrientation
 @Composable
 private fun ProfilePagePreview() {
     ProfilePageStub(Theme.ThemeType.ROSE)
@@ -293,15 +363,14 @@ private fun ProfilePageStub(
 ) {
     ProfilePage(
         state = ProfilePageState(
-            isSendReferralsEnabled = true,
             isPlaybackEnabled = true,
-            isClaimReferralsEnabled = true,
             isUpgradeBannerVisible = true,
+            isFreeAccountBannerVisible = true,
             miniPlayerPadding = 64.dp,
             headerState = ProfileHeaderState(
                 email = "noreply@pocketcasts.com",
                 imageUrl = null,
-                subscriptionTier = SubscriptionTier.NONE,
+                subscriptionTier = null,
                 expiresIn = null,
             ),
             statsState = ProfileStatsState(
@@ -310,25 +379,30 @@ private fun ProfilePageStub(
                 savedDuration = 35.minutes,
             ),
             referralsState = ReferralsViewModel.UiState.Loaded(
+                referralPlan = SubscriptionPlans.Preview
+                    .findOfferPlan(SubscriptionTier.Plus, BillingCycle.Yearly, SubscriptionOffer.Referral)
+                    .flatMap(ReferralSubscriptionPlan::create)
+                    .getOrNull()!!,
                 showIcon = true,
                 showTooltip = false,
                 showProfileBanner = true,
                 showHideBannerPopup = false,
-                referralsOfferInfo = ReferralsOfferInfoMock,
             ),
             refreshState = RefreshState.Success(Date()),
         ),
         themeType = theme,
         onClaimReferralsClick = {},
         onReferralsTooltipClick = {},
-        onReferralsTooltipShown = {},
+        onReferralsTooltipShow = {},
         onSettingsClick = {},
         onHeaderClick = {},
+        onCreateFreeAccountBannerClick = {},
+        onDismissCreateFreeAccountBannerClick = {},
         onPlaybackClick = {},
         onSendReferralsClick = {},
         onHideReferralsCardClick = {},
-        onReferralsCardShown = {},
-        onShowReferralsSheet = {},
+        onReferralsCardShow = {},
+        onReferralsSheetShow = {},
         onSectionClick = {},
         onRefreshClick = {},
         onUpgradeProfileClick = {},

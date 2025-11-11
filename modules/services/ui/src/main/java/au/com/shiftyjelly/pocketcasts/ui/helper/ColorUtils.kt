@@ -4,6 +4,7 @@ import android.graphics.Color
 import androidx.annotation.ColorInt
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.core.graphics.ColorUtils as AndroidColorUtils
 
 object ColorUtils {
     @ColorInt fun calculateCombinedColor(@ColorInt originalColor: Int, @ColorInt overlayColor: Int): Int {
@@ -49,8 +50,19 @@ object ColorUtils {
         hsv[2] = (factor * targetValue).coerceIn(0f, 1f)
         return ComposeColor(Color.HSVToColor(hsv))
     }
+
+    fun calculateContrast(backgroundColor: ComposeColor, foregroundColor: ComposeColor): Double {
+        return AndroidColorUtils.calculateContrast(foregroundColor.toArgb(), backgroundColor.toArgb())
+    }
 }
 
 fun Int.colorIntWithAlpha(alpha: Int): Int {
     return ColorUtils.colorWithAlpha(this, alpha)
+}
+
+fun ComposeColor.modifyHsv(
+    block: (h: Float, s: Float, v: Float) -> ComposeColor,
+): ComposeColor {
+    val hsv = FloatArray(3).also { Color.colorToHSV(toArgb(), it) }
+    return block(hsv[0], hsv[1], hsv[2])
 }

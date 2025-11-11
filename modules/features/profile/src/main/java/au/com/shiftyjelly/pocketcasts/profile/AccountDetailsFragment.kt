@@ -12,23 +12,23 @@ import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import au.com.shiftyjelly.pocketcasts.account.ChangeEmailFragment
 import au.com.shiftyjelly.pocketcasts.account.ChangePwdFragment
-import au.com.shiftyjelly.pocketcasts.account.viewmodel.ProfileUpgradeBannerViewModel
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.profile.champion.PocketCastsChampionBottomSheetDialog
+import au.com.shiftyjelly.pocketcasts.profile.winback.WinbackFragment
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.FolderManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.searchhistory.SearchHistoryManager
@@ -46,7 +46,6 @@ import au.com.shiftyjelly.pocketcasts.views.dialog.ConfirmationDialog
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import au.com.shiftyjelly.pocketcasts.cartheme.R as CR
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -68,8 +67,6 @@ class AccountDetailsFragment : BaseFragment() {
 
     @Inject lateinit var folderManager: FolderManager
 
-    @Inject lateinit var playlistManager: PlaylistManager
-
     @Inject lateinit var playbackManager: PlaybackManager
 
     @Inject lateinit var podcastManager: PodcastManager
@@ -87,27 +84,20 @@ class AccountDetailsFragment : BaseFragment() {
     @Inject lateinit var syncManager: SyncManager
 
     private val accountViewModel by viewModels<AccountDetailsViewModel>()
-    private val upgradeBannerViewModel by viewModels<ProfileUpgradeBannerViewModel>()
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
-        val upgradeBannerState = remember {
-            combine(
-                accountViewModel.showUpgradeBanner,
-                upgradeBannerViewModel.state,
-            ) { showBanner, state -> state.takeIf { showBanner } }
-        }
-
+    ) = contentWithoutConsumedInsets {
         val state = AccountDetailsPageState(
             isAutomotive = remember { Util.isAutomotive(requireContext()) },
             miniPlayerPadding = accountViewModel.miniPlayerInset.collectAsState().value.pxToDp(requireContext()).dp,
             headerState = accountViewModel.headerState.collectAsState().value,
-            upgradeBannerState = upgradeBannerState.collectAsState(null).value,
+            upgradeBannerState = accountViewModel.upgradeBannerState.collectAsState().value,
             sectionsState = accountViewModel.sectionsState.collectAsState().value,
         )
+
         AccountDetailsPage(
             state = state,
             theme = theme.activeTheme,
@@ -120,19 +110,20 @@ class AccountDetailsFragment : BaseFragment() {
                     PocketCastsChampionBottomSheetDialog().show(childFragmentManager, "pocket_casts_champion_dialog")
                 }
             },
-            onClickUpgradeBanner = {
+            onClickSubscribe = { planKey ->
                 analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_UPGRADE_BUTTON_TAPPED)
                 val source = OnboardingUpgradeSource.PROFILE
-                val onboardingFlow = OnboardingFlow.PlusAccountUpgrade(source)
-                OnboardingLauncher.openOnboardingFlow(activity, onboardingFlow)
+                val onboardingFlow = OnboardingFlow.PlusAccountUpgrade(source, planKey.tier, planKey.billingCycle)
+                OnboardingLauncher.openOnboardingFlow(requireActivity(), onboardingFlow)
             },
-            onFeatureCardChanged = { featureCard ->
-                upgradeBannerViewModel.onFeatureCardChanged(featureCard)
+            onChangeFeatureCard = { planKey ->
+                analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_SUBSCRIPTION_TIER_CHANGED, mapOf("value" to planKey.tier.analyticsValue))
+                accountViewModel.changeSelectedFeatureCard(planKey)
             },
             onChangeAvatar = { email ->
                 analyticsTracker.track(AnalyticsEvent.ACCOUNT_DETAILS_CHANGE_AVATAR)
                 Gravatar.refreshGravatarTimestamp()
-                requireActivity().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Gravatar.getGravatarChangeAvatarUrl(email))))
+                requireActivity().startActivity(Intent(Intent.ACTION_VIEW, Gravatar.getGravatarChangeAvatarUrl(email).toUri()))
             },
             onChangeEmail = {
                 (requireActivity() as FragmentHostListener).addFragment(ChangeEmailFragment.newInstance())
@@ -143,13 +134,13 @@ class AccountDetailsFragment : BaseFragment() {
             onUpgradeToPatron = {
                 val source = OnboardingUpgradeSource.ACCOUNT_DETAILS
                 val onboardingFlow = OnboardingFlow.PatronAccountUpgrade(source)
-                OnboardingLauncher.openOnboardingFlow(activity, onboardingFlow)
+                OnboardingLauncher.openOnboardingFlow(requireActivity(), onboardingFlow)
             },
-            onCancelSubscription = {
+            onCancelSubscription = { winbackParams ->
                 analyticsTracker.track(AnalyticsEvent.ACCOUNT_DETAILS_CANCEL_TAPPED)
-                CancelConfirmationFragment
-                    .newInstance()
-                    .show(childFragmentManager, "cancel_subscription_confirmation_dialog")
+                WinbackFragment
+                    .create(winbackParams)
+                    .show(childFragmentManager, "subscription_winback")
             },
             onChangeNewsletterSubscription = { isChecked ->
                 accountViewModel.updateNewsletter(isChecked)
@@ -164,6 +155,11 @@ class AccountDetailsFragment : BaseFragment() {
             },
             onSignOut = { signOut() },
             onDeleteAccount = { deleteAccount() },
+            onAccountUpgradeClick = {
+                analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_UPGRADE_BUTTON_TAPPED, mapOf("version" to "1"))
+                val onboardingFlow = OnboardingFlow.NewOnboardingAccountUpgrade
+                OnboardingLauncher.openOnboardingFlow(requireActivity(), onboardingFlow)
+            },
         )
     }
 
@@ -223,6 +219,7 @@ class AccountDetailsFragment : BaseFragment() {
                 accountViewModel.clearDeleteAccountState()
                 performSignOut()
             }
+
             is DeleteAccountState.Failure -> {
                 accountViewModel.clearDeleteAccountState()
                 AlertDialog.Builder(requireContext())
@@ -231,6 +228,7 @@ class AccountDetailsFragment : BaseFragment() {
                     .setPositiveButton(getString(LR.string.ok)) { dialog, _ -> dialog.dismiss() }
                     .show()
             }
+
             is DeleteAccountState.Empty -> {}
         }
     }
@@ -268,7 +266,6 @@ class AccountDetailsFragment : BaseFragment() {
         userManager.signOutAndClearData(
             playbackManager = playbackManager,
             upNextQueue = upNextQueue,
-            playlistManager = playlistManager,
             folderManager = folderManager,
             searchHistoryManager = searchHistoryManager,
             episodeManager = episodeManager,

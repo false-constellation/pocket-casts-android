@@ -12,6 +12,8 @@ import au.com.shiftyjelly.pocketcasts.models.to.PodcastFolder
 import au.com.shiftyjelly.pocketcasts.models.type.PodcastsSortType
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.PodcastGridLayoutType
+import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationManager
+import au.com.shiftyjelly.pocketcasts.repositories.notification.OnboardingNotificationType
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.FolderManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.utils.extensions.pxToDp
@@ -40,7 +42,9 @@ class FolderEditViewModel
     private val folderManager: FolderManager,
     private val settings: Settings,
     private val analyticsTracker: AnalyticsTracker,
-) : ViewModel(), CoroutineScope {
+    private val notificationManager: NotificationManager,
+) : ViewModel(),
+    CoroutineScope {
 
     data class State(
         val podcastsWithFolders: List<PodcastFolder> = emptyList(),
@@ -90,17 +94,17 @@ class FolderEditViewModel
                     .asObservable(coroutineContext)
                     .toFlowable(BackpressureStrategy.LATEST)
                     .switchMap { podcastSortOrder ->
-                        if (podcastSortOrder == PodcastsSortType.EPISODE_DATE_NEWEST_TO_OLDEST) {
-                            podcastManager.podcastsOrderByLatestEpisodeRxFlowable()
-                        } else {
-                            podcastManager.subscribedRxFlowable()
+                        when (podcastSortOrder) {
+                            PodcastsSortType.EPISODE_DATE_NEWEST_TO_OLDEST -> podcastManager.podcastsOrderByLatestEpisodeRxFlowable()
+                            PodcastsSortType.RECENTLY_PLAYED -> podcastManager.podcastsOrderByRecentlyPlayedEpisodeRxFlowable()
+                            else -> podcastManager.subscribedRxFlowable()
                         }
                     }
                     .asFlow<List<Podcast>>(),
                 searchText,
                 selectedUuids,
                 settings.selectPodcastSortTypeObservable.asFlow(),
-                folderManager.findFoldersFlow().combine(folderUuid) { folders, uuidOptional ->
+                folderManager.observeFolders().combine(folderUuid) { folders, uuidOptional ->
                     val foldersSorted = folders.sortedBy { it.name.lowercase(Locale.getDefault()) }
                     // find the current open folder
                     val uuid = uuidOptional.orElse(null)
@@ -127,10 +131,10 @@ class FolderEditViewModel
                     filteredPodcasts = filterSortPodcasts(
                         searchText = searchText,
                         sortType = sortOrder,
-                        podcastsSortedByReleaseDate = podcastsWithFolders,
+                        defaultSortedPodcasts = podcastsWithFolders,
                         currentFolderUuid = folder?.uuid,
                     ),
-                    selectedUuids = sortPodcasts(podcastsSortedByReleaseDate = podcastsSelected).map { it.uuid },
+                    selectedUuids = sortPodcasts(defaultSortedPodcasts = podcastsSelected).map { it.uuid },
                     searchText = searchText,
                     folders = folders,
                     folder = folder,
@@ -142,18 +146,19 @@ class FolderEditViewModel
         }
     }
 
-    private fun filterSortPodcasts(searchText: String, sortType: PodcastsSortType, podcastsSortedByReleaseDate: List<PodcastFolder>, currentFolderUuid: String?): List<PodcastFolder> {
-        val filtered = PodcastFolderHelper.filter(searchText = searchText, list = podcastsSortedByReleaseDate)
-        return PodcastFolderHelper.sortForSelectingPodcasts(sortType = sortType, podcastsSortedByReleaseDate = filtered, currentFolderUuid = currentFolderUuid)
+    private fun filterSortPodcasts(searchText: String, sortType: PodcastsSortType, defaultSortedPodcasts: List<PodcastFolder>, currentFolderUuid: String?): List<PodcastFolder> {
+        val filtered = PodcastFolderHelper.filter(searchText = searchText, list = defaultSortedPodcasts)
+        return PodcastFolderHelper.sortForSelectingPodcasts(sortType = sortType, defaultSortedPodcasts = filtered, currentFolderUuid = currentFolderUuid)
     }
 
-    private fun sortPodcasts(podcastsSortedByReleaseDate: List<Podcast>): List<Podcast> {
-        val podcasts = podcastsSortedByReleaseDate
+    private fun sortPodcasts(defaultSortedPodcasts: List<Podcast>): List<Podcast> {
+        val podcasts = defaultSortedPodcasts
         return when (settings.podcastsSortType.value) {
-            PodcastsSortType.EPISODE_DATE_NEWEST_TO_OLDEST -> podcastsSortedByReleaseDate
+            PodcastsSortType.EPISODE_DATE_NEWEST_TO_OLDEST -> defaultSortedPodcasts
             PodcastsSortType.DATE_ADDED_NEWEST_TO_OLDEST -> podcasts.sortedWith(compareBy { it.addedDate })
             PodcastsSortType.DRAG_DROP -> podcasts.sortedWith(compareBy { it.sortPosition })
             PodcastsSortType.NAME_A_TO_Z -> podcasts.sortedWith(compareBy { PodcastsSortType.cleanStringForSort(it.title) })
+            PodcastsSortType.RECENTLY_PLAYED -> defaultSortedPodcasts
         }
     }
 
@@ -306,12 +311,21 @@ class FolderEditViewModel
         properties[NUMBER_OF_PODCASTS_KEY] = state.value.selectedCount
         properties.putAll(props)
         analyticsTracker.track(analyticsEvent, properties)
+        viewModelScope.launch {
+            if (analyticsEvent == AnalyticsEvent.FOLDER_SAVED) {
+                notificationManager.updateUserFeatureInteraction(OnboardingNotificationType.Filters)
+            }
+        }
     }
 
     fun trackDismiss() {
         if (state.value.isEditFolder) {
             analyticsTracker.track(AnalyticsEvent.FOLDER_CHOOSE_PODCASTS_DISMISSED, mapOf(CHANGED_PODCASTS_KEY to state.value.selectedCount))
         }
+    }
+
+    fun trackShown(source: String) {
+        analyticsTracker.track(AnalyticsEvent.FOLDER_CREATE_SHOWN, mapOf("source" to source))
     }
 
     companion object {

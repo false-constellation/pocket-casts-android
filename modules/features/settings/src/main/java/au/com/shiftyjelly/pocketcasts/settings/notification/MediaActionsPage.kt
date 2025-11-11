@@ -35,28 +35,31 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 fun MediaActionsPage(
     bottomInset: Dp,
     state: State,
-    onBackClick: () -> Unit,
-    onShowCustomActionsChanged: (Boolean) -> Unit,
-    onActionsOrderChanged: (List<MenuAction>) -> Unit,
+    onBackPress: () -> Unit,
+    onShowCustomActionsChange: (Boolean) -> Unit,
+    onNextPreviousTrackSkipButtonsChange: (Boolean) -> Unit,
+    onActionsOrderChange: (List<MenuAction>) -> Unit,
     modifier: Modifier = Modifier,
-    onActionMoved: (fromIndex: Int, toIndex: Int, action: MenuAction) -> Unit = { _, _, _ -> },
+    onActionMove: (fromIndex: Int, toIndex: Int, action: MenuAction) -> Unit = { _, _, _ -> },
 ) {
     Column(modifier = modifier.background(MaterialTheme.theme.colors.primaryUi02)) {
         ThemedTopAppBar(
             title = stringResource(LR.string.settings_media_actions_customise),
-            onNavigationClick = onBackClick,
+            onNavigationClick = onBackPress,
         )
 
         MenuActionRearrange(
             header = {
                 PageHeader(
                     customActionsVisibility = state.customActionsVisibility,
-                    onShowCustomActionsChanged = onShowCustomActionsChanged,
+                    onShowCustomActionsChange = onShowCustomActionsChange,
+                    nextPreviousTrackSkipButtons = state.nextPreviousTrackSkipButtons,
+                    onNextPreviousTrackSkipButtonsChange = onNextPreviousTrackSkipButtonsChange,
                 )
             },
             menuActions = state.actions,
-            onActionsOrderChanged = onActionsOrderChanged,
-            onActionMoved = onActionMoved,
+            onChangeOrder = onActionsOrderChange,
+            onMoveAction = onActionMove,
             chooseCount = 3,
             enabled = state.customActionsVisibility,
             otherActionsTitle = stringResource(LR.string.settings_other_media_actions),
@@ -68,13 +71,19 @@ fun MediaActionsPage(
 @Composable
 private fun PageHeader(
     customActionsVisibility: Boolean,
-    onShowCustomActionsChanged: (Boolean) -> Unit,
+    nextPreviousTrackSkipButtons: Boolean,
+    onShowCustomActionsChange: (Boolean) -> Unit,
+    onNextPreviousTrackSkipButtonsChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         ShowCustomActionsSettings(
             customActionsVisibility = customActionsVisibility,
-            onShowCustomActionsChanged = onShowCustomActionsChanged,
+            onShowCustomActionsChange = onShowCustomActionsChange,
+        )
+        PixelWatchSKipButtonsSetting(
+            nextPreviousTrackSkipButtons = nextPreviousTrackSkipButtons,
+            onNextPreviousTrackSkipButtonsChange = onNextPreviousTrackSkipButtonsChange,
         )
         Spacer(Modifier.height(16.dp))
         SettingRow(
@@ -92,7 +101,7 @@ private fun PageHeader(
 @Composable
 private fun ShowCustomActionsSettings(
     customActionsVisibility: Boolean,
-    onShowCustomActionsChanged: (Boolean) -> Unit,
+    onShowCustomActionsChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     SettingRow(
@@ -106,14 +115,36 @@ private fun ShowCustomActionsSettings(
                 value = customActionsVisibility,
                 role = Role.Switch,
             ) {
-                onShowCustomActionsChanged(it)
+                onShowCustomActionsChange(it)
+            },
+    )
+}
+
+@Composable
+private fun PixelWatchSKipButtonsSetting(
+    nextPreviousTrackSkipButtons: Boolean,
+    onNextPreviousTrackSkipButtonsChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = stringResource(LR.string.settings_pixel_watch_title),
+        secondaryText = stringResource(LR.string.settings_pixel_watch_subtitle),
+        toggle = SettingRowToggle.Switch(checked = nextPreviousTrackSkipButtons),
+        indent = false,
+        modifier = modifier
+            .padding(top = 8.dp)
+            .toggleable(
+                value = nextPreviousTrackSkipButtons,
+                role = Role.Switch,
+            ) {
+                onNextPreviousTrackSkipButtonsChange(it)
             },
     )
 }
 
 @Preview
 @Composable
-fun MediaActionsPagePreview(@PreviewParameter(ThemePreviewParameterProvider::class) themeType: Theme.ThemeType) {
+private fun MediaActionsPagePreview(@PreviewParameter(ThemePreviewParameterProvider::class) themeType: Theme.ThemeType) {
     AppTheme(themeType) {
         MediaActionsPage(
             bottomInset = 0.dp,
@@ -127,9 +158,10 @@ fun MediaActionsPagePreview(@PreviewParameter(ThemePreviewParameterProvider::cla
                 ),
                 customActionsVisibility = true,
             ),
-            onBackClick = {},
-            onShowCustomActionsChanged = {},
-            onActionsOrderChanged = {},
+            onBackPress = {},
+            onShowCustomActionsChange = {},
+            onNextPreviousTrackSkipButtonsChange = {},
+            onActionsOrderChange = {},
         )
     }
 }

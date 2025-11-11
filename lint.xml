@@ -2,7 +2,6 @@
 <lint>
     <issue id="ObsoleteSdkInt" severity="error" />
     <issue id="PrivateResource" severity="error" />
-    <issue id="UnusedResources" severity="error" />
     <issue id="RequiredSize" severity="error" />
     <issue id="Registered" severity="error" />
 
@@ -21,5 +20,8 @@
 
     <!-- This issue causes nondeterministic results when generating baseline files -->
     <issue id="ConvertToWebp" severity="ignore"/>
+
+    <!-- We use only adaptive window info from Material3 which doesn't collide with Material -->
+    <issue id="UsingMaterialAndMaterial3Libraries" severity="ignore"/>
 
 </lint>

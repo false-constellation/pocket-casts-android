@@ -10,7 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
@@ -22,15 +22,15 @@ import com.google.android.horologist.compose.layout.ScalingLazyColumnState
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 object FilesScreen {
-    const val route = "files_screen"
+    const val ROUTE = "files_screen"
 }
 
 @Composable
 fun FilesScreen(
     columnState: ScalingLazyColumnState,
+    viewModel: FilesViewModel = hiltViewModel(),
     navigateToEpisode: (episodeUuid: String) -> Unit,
 ) {
-    val viewModel = hiltViewModel<FilesViewModel>()
     val userEpisodesState = viewModel.userEpisodes.collectAsState(null)
     val userEpisodes = userEpisodesState.value
     val artworkCollection by viewModel.artworkConfiguration.collectAsState()

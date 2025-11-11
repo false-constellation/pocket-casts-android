@@ -21,6 +21,8 @@
     <string name="playing_bookmark">Playing \"%s\"</string>
     <string name="skipping_to">Skipping to %s</string>
     <string name="add_to_up_next">Add to Up Next</string>
+    <string name="add_to_up_next_top">Add to Up Next top</string>
+    <string name="add_to_up_next_bottom">Add to Up Next bottom</string>
     <string name="add_to_up_next_question">Add to up next?</string>
     <string name="archive">Archive</string>
     <string name="unarchive">Unarchive</string>
@@ -36,6 +38,10 @@
     <string name="close">Close</string>
     <string name="create_account">Create account</string>
     <string name="delete">Delete</string>
+    <!-- Verb, as in to clear something  -->
+    <string name="clear">Clear</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="donate">Donate</string>
     <string name="done">Done</string>
     <string name="download">Download</string>
     <string name="downloads">Downloads</string>
@@ -46,12 +52,13 @@
     <string name="go_to_podcast">Go to podcast</string>
     <string name="go_to_files">Go to files</string>
     <string name="in_progress">In progress</string>
+    <string name="in_progress_uppercase">In Progress</string>
     <string name="log_in">Log in</string>
     <string name="log_in_subtitle">Start listening to your favorite podcasts</string>
     <string name="log_out">Log out</string>
     <string name="log_in_watch_requires_plus">Log in with a Plus account to use this app or upgrade visiting</string>
     <string name="log_in_with_plus">Please log in with a Plus account</string>
-    <string name="log_in_free_acccount">%s is using a free account</string>
+    <string name="log_in_free_account">%s is using a free account</string>
     <string name="mark_as_played">Mark as played</string>
     <string name="mark_as_unplayed">Mark as unplayed</string>
     <string name="mark_played">Mark played</string>
@@ -78,12 +85,15 @@
     <string name="played">Played</string>
     <string name="podcast_and_episode">Podcast &amp; Episode</string>
     <string name="remove_from_up_next">Remove from Up Next</string>
+    <string name="remove_from_playlist">Remove from playlist</string>
     <string name="renew_your_subscription">Renew your Subscription</string>
     <string name="removed">Removed</string>
+    <string name="restore">Restore</string>
     <string name="search">Search</string>
     <string name="search_episodes_not_found_title">No episodes found</string>
     <string name="search_episodes_not_found_summary">We couldn\'t find any episode for that search. Try another keyword.</string>
     <string name="selected">Selected</string>
+    <string name="you_might_like">You might like</string>
     <string name="sort_newest_to_oldest">Newest to oldest</string>
     <string name="sort_oldest_to_newest">Oldest to newest</string>
     <string name="not_selected">Not selected</string>
@@ -105,10 +115,14 @@
     <string name="sort_by">Sort by</string>
     <string name="star">Star</string>
     <string name="star_episode">Star episode</string>
+    <string name="clean_history">Remove from history</string>
     <string name="try_again">Try again</string>
+    <string name="skip_for_now">Skip for now</string>
     <string name="token_refresh_sign_in_error_title">Sign In Error</string>
     <string name="token_refresh_sign_in_error_description">There was a problem and you\'ve been signed out. Tap here to sign back in.</string>
+    <string name="view_transcript">View transcript</string>
     <string name="transcript">Transcript</string>
+    <string name="episode_description">Episode Description</string>
     <string name="unstar">Unstar</string>
     <string name="unstar_episode">Unstar episode</string>
     <string name="starred">Starred</string>
@@ -130,6 +144,7 @@
     <string name="error">Error</string>
     <string name="error_generic_message">Something went wrong. Please try again later.</string>
     <string name="are_you_sure">Are you sure?</string>
+    <string name="sharing_is_not_available_for_private_podcasts">Sharing is not available for private podcasts</string>
     <string name="back">Back</string>
     <string name="retry">Retry</string>
     <string name="queue_for_later">Queue for later</string>
@@ -153,12 +168,16 @@
     <string name="on">On</string>
     <string name="expanded">Expanded</string>
     <string name="collapsed">Collapsed</string>
+    <string name="database">Database</string>
     <string name="details">Details</string>
     <string name="episode">Episode</string>
     <string name="episodes">Episodes</string>
     <string name="none">None</string>
+    <string name="normalized">Normalized</string>
+    <string name="not_normalized">Not normalized</string>
+    <string name="normalization_started">Normalization started</string>
     <string name="expand_details">Expand details</string>
-    <string name="add_podcasts">Add podcasts</string>
+    <string name="add_podcasts">Add Podcasts</string>
     <string name="please_try_again">Please try again</string>
     <string name="next">Next</string>
     <string name="select_podcasts">Select podcasts</string>
@@ -170,13 +189,14 @@
     <string name="go_to_next">Go to next</string>
     <string name="got_it">Got it</string>
     <string name="submit">Submit</string>
-    <string name="report">Report</string>
-    <string name="report_subtitle">Report inappropriate content</string>
     <string name="widget">Widget</string>
-    <string name="medium_player_classic_widget_label">Medium Player (Classic)</string>
-    <string name="small_player_widget_label">Small Player</string>
-    <string name="medium_player_widget_label">Medium Player</string>
-    <string name="large_player_widget_label">Large Player</string>
+    <string name="medium_player_classic_widget_label">Podcast Playback Controls (Classic)</string>
+    <string name="small_player_widget_label">Podcast Play Button</string>
+    <string name="small_player_widget_description">Play or pause your episode with one tap</string>
+    <string name="medium_player_widget_label">Podcast Playback Controls</string>
+    <string name="medium_player_widget_description">Play, pause, or skip through your episode</string>
+    <string name="large_player_widget_label">Podcast Controls &amp; Up Next Queue</string>
+    <string name="large_player_widget_description">Control playback or switch episodes</string>
     <string name="widget_no_episode_playing">No episode playing</string>
     <string name="widget_nothing_in_up_next">Nothing in Up Next</string>
     <string name="widget_check_out_discover">Check out Discover for more</string>
@@ -188,6 +208,38 @@
     <string name="widget_preview_time_left_4">1h 36m left</string>
     <string name="move_up">Move up</string>
     <string name="move_down">Move down</string>
+    <string name="see_more">See more</string>
+    <string name="maybe_later">Maybe later</string>
+    <!-- %1$.2f is price with 2 decimal points precision, %1$s is the currency -->
+    <string name="price_per_week">%1$.2f %2$s/week</string>
+    <!-- %1$.2f is price with 2 decimal points precision, \u0024 is a dollar sign -->
+    <string name="price_per_week_usd">\u0024%1$.2f/week</string>
+    <!-- %1$.2f is price with 2 decimal points precision, %1$s is the currency -->
+    <string name="price_per_month">%1$.2f %2$s/month</string>
+    <!-- %1$.2f is price with 2 decimal points precision, \u0024 is a dollar sign -->
+    <string name="price_per_month_usd">\u0024%1$.2f/month</string>
+    <string name="best_value">Best Value</string>
+    <!-- "Ad" means here advertisement. It should be a short form if possible. -->
+    <string name="ad">Ad</string>
+    <string name="ad_options">Advertisement options</string>
+    <string name="ad_image">Advertisement image</string>
+    <string name="go_to_ad">Go to advertisement: %1$s</string>
+    <string name="remove_ads">Remove ads</string>
+    <string name="report_ad">Report ad</string>
+    <string name="ad_report_reason_question">Why are you reporting this ad?</string>
+    <string name="ad_report_reason_broken">This ad seems broken</string>
+    <string name="ad_report_reason_malicious">This is a malicious ad</string>
+    <string name="ad_report_reason_too_often">See this ad too often</string>
+    <string name="ad_report_reason_other">Other</string>
+    <string name="banner_ad_plus_prompt">Say goodbye to banner ads and more with Pocket Casts Plus</string>
+    <string name="ad_report_confirmation">You reported this ad.</string>
+    <string name="other_options">Other options</string>
+    <string name="add_episodes">Add episodes</string>
+    <string name="your_podcasts">Your podcasts</string>
+    <string name="unavailable">Unavailable</string>
+    <string name="browse_podcasts">Browse podcasts</string>
+    <!-- "View" is used as a verb here. As in "view this object" -->
+    <string name="view">View</string>
 
     <string name="multiselect_actions_shown">Shortcut in toolbar</string>
     <string name="multiselect_actions_hidden">In overflow</string>
@@ -242,9 +294,16 @@
     <string name="unstarred_episodes_singular">1 episode unstarred</string>
     <string name="unstarred_episodes_plural">%1$d episodes unstarred</string>
 
+    <string name="remove_listening_history_episodes_singular">Removed 1 episode from listening history</string>
+    <string name="remove_listening_history_episodes_plural">Removed %1$d episodes from listening history</string>
+
     <string name="download_warning_button">Download %1$d episodes</string>
     <string name="download_warning_title">Download All</string>
     <string name="download_warning_limit_summary">Bulk downloads are limited to %1$d.</string>
+
+    <string name="delete_download_warning_button">Remove %1$d downloads</string>
+    <string name="delete_download_warning_title">Remove downloaded episodes</string>
+    <string name="delete_download_warning_summary">Are you sure you want to remove these downloads? You won\'t be able to play offline.</string>
 
     <string name="episode_was_removed">Episode was removed</string>
     <string name="episode_queued_for_download">Episode queued for download</string>
@@ -299,6 +358,11 @@
     <string name="time_short_seconds">%ds</string>
     <string name="time_left">%s left</string>
 
+    <string name="tracking_consent_dialog_title">Allow "Pocket Casts" to track your activity across other companies\' apps and websites?</string>
+    <string name="tracking_consent_dialog_message">We use analytics to make the app better and to measure if our ad campaigns are successful.</string>
+    <string name="tracking_consent_dialog_allow">Allow</string>
+    <string name="tracking_consent_dialog_reject">Ask App Not to Track</string>
+
     <!-- Player -->
 
     <string name="player_action_next_chapter">Next chapter</string>
@@ -310,8 +374,6 @@
     <string name="player_chapters" translatable="false">@string/chapters</string>
     <string name="player_close">Close player</string>
     <string name="player_effects">Player effects</string>
-    <string name="player_effects_clear">CLEAR</string>
-    <string name="player_effects_custom_effects_applied">Custom effects applied</string>
     <string name="player_effects_speed">Speed</string>
     <string name="player_effects_speed_down">Speed Down</string>
     <string name="player_effects_speed_up">Speed Up</string>
@@ -343,18 +405,19 @@
     <string name="player_sleep_chapter_plus">Increase chapter count</string>
     <string name="player_sleep_episode_minus">Decrease episode count</string>
     <string name="player_sleep_episode_plus">Increase episode count</string>
-    <string name="player_sleep_end_of_episode">End of episode</string>
     <string name="player_sleep_timer_in_episode">In 1 episode</string>
+    <string name="player_sleep_timer_end_of_episode">End of episode</string>
     <string name="player_sleep_timer_in_episode_plural">In %d episodes</string>
     <string name="player_sleep_timer_in_chapter">In 1 chapter</string>
+    <string name="player_sleep_timer_end_of_chapter">End of chapter</string>
     <string name="player_sleep_timer_in_chapter_plural">In %d chapters</string>
     <string name="player_sleep_timer_title">Sleep Timer</string>
     <string name="player_sleep_timer">Sleep timer</string>
     <string name="player_sleep_timer_settings">Sleep timer Settings</string>
     <string name="player_sleep_timer_start_failed">Unable to start timer. Please allow \'Alarms &amp; reminders\' permission.</string>
-    <string name="player_sleep_in_one_episode">Sleeping in 1 episode</string>
+    <string name="player_sleep_in_one_episode">Sleeping at the end of the current episode</string>
     <string name="player_sleep_in_episodes">Sleeping in %d episodes</string>
-    <string name="player_sleep_in_one_chapter">Sleeping in 1 chapter</string>
+    <string name="player_sleep_in_one_chapter">Sleeping at the end of the current chapter</string>
     <string name="player_sleep_in_chapters">Sleeping in %d chapters</string>
     <string name="player_sleep_timer_restarted_after_device_shake">Sleep timer restarted after device shake</string>
     <string name="player_sleep_timer_stopped_your_podcast">Sleep timer stopped your podcast.</string>
@@ -375,14 +438,16 @@
     <string name="player_up_next_empty">Nothing in Up Next</string>
     <string name="player_up_next_empty_desc">You can queue episodes to play next by swiping right on episode rows, or tapping the icon on an episode card.</string>
     <string name="player_up_next_empty_desc_watch">You can queue episodes to play next in the episode details screen.</string>
+    <string name="player_up_next_empty_title">Curate your listening session</string>
+    <string name="player_up_next_empty_subtitle">You can queue episodes to play next by swiping right on episode rows, or tapping the icon on an episode card.</string>
     <string name="player_up_next_move_to_bottom">Move to bottom</string>
     <string name="player_up_next_move_to_top">Move to top</string>
     <string name="player_up_next_select">Select</string>
     <string name="player_up_next_time_remaining">Total time remaining %s</string>
     <string name="player_up_next_time_left" translatable="false">@string/time_left</string>
     <plurals name="player_up_next_header_title">
-        <item quantity="one" formatted="true">%1$d episode - %2$s left</item>
-        <item quantity="other" formatted="true">%1$d episodes - %2$s left</item>
+        <item formatted="true" quantity="one">%1$d episode - %2$s left</item>
+        <item formatted="true" quantity="other">%1$d episodes - %2$s left</item>
     </plurals>
     <string name="player_open_url_failed">Could not find a browser to open %s.</string>
     <string name="player_archive_title" translatable="false">@string/archive</string>
@@ -404,6 +469,7 @@
     <string name="player_played_up_to">Played up to %s</string>
     <string name="player_time_remaining">Time remaining %s</string>
     <string name="drag_down_to_dismiss_content_description">Drag down to dismiss</string>
+    <string name="player_up_next_sort">Sort Up Next</string>
 
     <!-- Chapters -->
 
@@ -417,7 +483,6 @@
     <string name="number_of_chapters_summary_plural">%1$d chapters &#x2022; %2$d hidden</string>
     <string name="number_of_chapters_summary_singular">1 chapter &#x2022; %d hidden</string>
     <string name="skip_chapters_plus_prompt">Preselect chapters and more with Pocket Casts Plus</string>
-    <string name="skip_chapters_patron_prompt">Preselect chapters and more with Pocket Casts Patron</string>
     <!-- %1$d is the current selected chapter. %2$d is the total number of chapters. -->
     <string name="chapter_count_summary">%1$d of %2$d</string>
     <plurals name="chapter">
@@ -487,12 +552,15 @@
     <string name="podcasts_sort_by_date_added">Date added</string>
     <string name="podcasts_sort_by_drag_drop">Drag &amp; Drop</string>
     <string name="podcasts_sort_by_duration_asc">"Shortest to longest"</string>
+    <string name="podcasts_sort_by_recently_played">Recently played</string>
     <string name="podcasts_sort_by_release_date">Episode release date</string>
     <string name="podcasts_sort_by_title">"Title (A - Z)"</string>
+    <string name="podcasts_sort_by_tooltip_title">Sort by \“Recently Played\”</string>
+    <string name="podcasts_sort_by_tooltip_message">You can now sort by Recently Played and quickly pick up where you left off.</string>
     <string name="podcasts_sort_order">Sort order</string>
     <string name="podcasts_subscribe_on_phone">Follow podcasts on your phone and they\'ll appear here.</string>
     <string name="podcasts_time_to_add_some_podcasts">Time to add some Podcasts!</string>
-    <string name="podcasts_time_to_add_some_podcasts_summary">You can add podcasts by searching above or if you are looking for some inspiration try the Discover tab.</string>
+    <string name="podcasts_time_to_add_some_podcasts_summary">Coming from another app? Import your podcasts via Profile > Settings > Import and Export.\n\nIf you’re looking for inspiration try the Discover tab.</string>
     <string name="podcasts_empty_folder">Your folder is empty</string>
     <string name="podcasts_empty_folder_summary">Add podcasts to your folder and they’ll appear here.</string>
     <string name="podcasts_unarchive">Unarchive</string>
@@ -520,8 +588,10 @@
     <string name="remove_from_folder">Remove from folder</string>
     <string name="change_folder">Change folder</string>
     <string name="go_to_folder">Go to folder</string>
+    <string name="go_to_discover">Go to Discover</string>
     <string name="number_stepper_plus_content_description">Plus</string>
     <string name="number_stepper_minus_content_description">Minus</string>
+    <string name="discover_collection_header_content_description">%s header</string>
 
     <!-- Podcast -->
 
@@ -529,6 +599,15 @@
     <plurals name="podcast">
         <item quantity="one">Podcast</item>
         <item quantity="other">Podcasts</item>
+    </plurals>
+    <plurals name="podcasts_count">
+        <item quantity="one">%d podcast</item>
+        <item quantity="other">%d podcasts</item>
+    </plurals>
+    <string name="podcasts_selected_all">All podcasts selected</string>
+    <plurals name="podcasts_selected_count">
+        <item quantity="one">%1$d podcast selected</item>
+        <item quantity="other">%1$d podcasts selected</item>
     </plurals>
     <string name="podcast_archive_all">Archive all</string>
     <string name="podcast_archive_all_played">Archive all played</string>
@@ -561,6 +640,8 @@
     <string name="podcast_group_unplayed" translatable="false">@string/unplayed</string>
     <string name="podcast_hide_archived">Hide archived</string>
     <string name="podcast_load_error">There was an error loading the podcast.</string>
+    <string name="podcast_feed_update_tooltip_title">Fresh episodes, coming right up!</string>
+    <string name="podcast_feed_update_tooltip_subtitle">Pull down or use this menu to see if there\'s something new.</string>
     <string name="podcast_loading">Loading your podcasts</string>
     <string name="podcast_next_episode_any_day_now">Next episode any day now</string>
     <string name="podcast_next_episode_today">Next episode today</string>
@@ -570,8 +651,8 @@
     <string name="podcast_no_episodes_found">No episodes found</string>
     <string name="podcast_no_episodes">There are no episodes in this podcast</string>
     <string name="podcast_no_episodes_all_archived">All %d episodes of this podcast have been archived</string>
-    <string name="podcast_no_bookmarks_matching">This podcast has no bookmarks matching your search criteria.</string>
-    <string name="podcast_no_episodes_matching">This podcast has no episodes matching your search criteria.</string>
+    <string name="podcast_no_bookmarks_matching">This podcast has no bookmarks matching your search criteria. Try another keyword.</string>
+    <string name="podcast_no_episodes_matching">We couldn’t find any episode for that search. Try another keyword.</string>
     <string name="podcast_notification_new_episode" translatable="false"><![CDATA[<i>%1$s</i> %2$s]]></string>
     <string name="podcast_notifications">Notifications</string>
     <string name="podcast_notifications_on">Notifications on</string>
@@ -621,6 +702,10 @@
         <item quantity="other">End clip handle: %d seconds</item>
     </plurals>
     <string name="podcast_show_archived" translatable="false">@string/show_archived</string>
+    <string name="podcast_refresh_episodes">Refresh episode list</string>
+    <string name="podcast_refreshing_episode_list">Refreshing episode list…</string>
+    <string name="podcast_refresh_new_episode_found">New episode found!</string>
+    <string name="podcast_refresh_no_episodes_found">No episodes found.</string>
     <string name="podcast_sort_episodes">Sort episodes</string>
     <string name="podcast_subscribed">Following</string>
     <string name="podcast_not_subscribed">Not Following</string>
@@ -650,6 +735,7 @@
     <string name="podcast_effects_summary_default">Default</string>
     <string name="podcast_no_season">No season</string>
     <string name="podcast_season_x">Season %d</string>
+    <string name="podcast_artwork_description">Podcast artwork</string>
     <string name="podcast_refresh_artwork">Refresh artwork</string>
     <string name="podcast_rate">Rate %s</string>
     <string name="podcast_cover_description">Cover of %s podcast</string>
@@ -669,6 +755,54 @@
         <item quantity="one">second</item>
         <item quantity="other">seconds</item>
     </plurals>
+    <!-- A short form representing days. Some like 1 d, 2 d, etc. -->
+    <plurals name="day_short">
+        <item quantity="one">d</item>
+        <item quantity="other">d</item>
+    </plurals>
+    <!-- A short form representing hours. Some like 1 hr, 2 hrs, etc. -->
+    <plurals name="hour_short">
+        <item quantity="one">hr</item>
+        <item quantity="other">hrs</item>
+    </plurals>
+    <!-- A short form representing minutes. Some like 1 min, 2 mins, etc. -->
+    <plurals name="minute_short">
+        <item quantity="one">min</item>
+        <item quantity="other">mins</item>
+    </plurals>
+    <!-- A short form representing seconds. Some like 1 sec, 2 secs, etc. -->
+    <plurals name="second_short">
+        <item quantity="one">sec</item>
+        <item quantity="other">secs</item>
+    </plurals>
+    <!-- %1$s is a podcast's title -->
+    <string name="notifications_enabled_message">We’ll notify you with new episodes of %1$s.</string>
+    <string name="podcast_header_redesign_title">We’ve made some changes!</string>
+    <string name="podcast_header_redesign_message">Tap on the podcast title to collapse or expand its description and details</string>
+    <plurals name="year_with_count">
+        <item quantity="one">%1$d year</item>
+        <item quantity="other">%1$d years</item>
+    </plurals>
+    <plurals name="month_with_count">
+        <item quantity="one">%1$d month</item>
+        <item quantity="other">%1$d months</item>
+    </plurals>
+    <plurals name="week_with_count">
+        <item quantity="one">%1$d week</item>
+        <item quantity="other">%1$d weeks</item>
+    </plurals>
+    <plurals name="day_with_count">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="second_with_count">
+        <item quantity="one">%1$d second</item>
+        <item quantity="other">%1$d seconds</item>
+    </plurals>
+
+    <!-- Recommendations -->
+    <string name="you_might_like_empty_title">Couldn\'t load recommendations</string>
+    <string name="you_might_like_empty_button" translatable="false">@string/try_again</string>
 
     <!-- Give Rating -->
 
@@ -693,6 +827,7 @@
     <string name="episode_row_uploading">Uploading&#x2026; (%d%%)</string>
     <string name="episode_row_waiting_for_power">Waiting for power</string>
     <string name="episode_row_waiting_for_wifi">Waiting for WiFi</string>
+    <string name="episode_sort_custom_order">Custom order</string>
     <string name="episode_sort_long_to_short">Longest to shortest</string>
     <string name="episode_sort_title_a_z">Title (A–Z)</string>
     <string name="episode_sort_title_z_a">Title (Z–A)</string>
@@ -765,7 +900,7 @@
     <string name="filters_create_filter_by">FILTER BY</string>
     <string name="filters_create_filter_details">Filter details</string>
     <string name="filters_create_name">NAME</string>
-    <string name="filters_filter_name">Filter Name</string>
+    <string name="filters_filter_name">Playlist Name</string>
     <string name="filters_create_options">Filter options</string>
     <string name="filters_create_save_filter">Save filter</string>
     <string name="filters_create_select_criteria">Select your filter criteria using these buttons to create an up to date smart playlist of episodes.</string>
@@ -788,6 +923,7 @@
     <string name="filters_no_matching_episodes">The criteria you selected doesn&#x2019;t match any current episodes in your subscriptions.\n\nChoose different criteria, or save this filter if you think it will match episodes in the future.</string>
     <string name="filters_no_matching_episodes_title">No Matching Episodes</string>
     <string name="filters_not_found">No filters found</string>
+    <string name="playlists_not_found">No playlists found</string>
     <string name="filters_options_delete">Delete filter</string>
     <string name="filters_options_download_all">Download all</string>
     <string name="filters_options_play_all" translatable="false">@string/play_all</string>
@@ -808,13 +944,122 @@
     <string name="filters_time_anytime">Any time</string>
     <string name="filters_time_month">Last month</string>
     <string name="filters_time_week">Last week</string>
-    <string name="filters_title_in_progress" translatable="false">@string/in_progress</string>
+    <string name="filters_title_in_progress" translatable="false">@string/in_progress_uppercase</string>
     <string name="filters_title_new_releases">New Releases</string>
     <string name="filters_title_starred" translatable="false">@string/starred</string>
     <string name="filters_warning_delete_button" translatable="false">@string/filters_options_delete</string>
     <string name="filters_warning_delete_summary">This cannot be undone.</string>
     <string name="filters_release_date">Release Date</string>
     <string name="filters_download_options">Download Options</string>
+    <string name="filters_tooltip_title">Organize your episodes</string>
+    <string name="filters_tooltip_subtitle">Create smart filters to organize your episodes. Filter by duration, release date, media type, and more.</string>
+
+    <!-- Playlists -->
+
+    <!-- %1$s is a playlist title  -->
+    <string name="add_to_playlist">Add to “%1$s”</string>
+    <string name="add_to_playlist_description">Add to playlist</string>
+    <string name="add_to_playlist_find_playlist">Find playlist</string>
+    <string name="add_to_playlist_no_playlist_found_body">We couldn’t find any playlist for that search. Create a new playlist or try another keyword.</string>
+    <string name="add_to_playlist_no_playlist_found_title">Add to playlist</string>
+    <!-- %1$s is episode count like "1 episode", "7 episodes". %2$s is a playlist title  -->
+    <string name="added_to_playlist">%1$s added to “%2$s”</string>
+    <!-- Accessibility description. %1$s is an episode title-->
+    <string name="add_to_playlist_episode_desc">Add %1$s to playlist</string>
+    <string name="add_to_playlist_failure_message">This playlist is full. Remove a few episodes or start a new one.</string>
+    <string name="create_playlist">Create playlist</string>
+    <string name="create_smart_playlist">Create smart playlist</string>
+    <string name="decrement_longer_than_duration">Decrement \"longer than\" duration</string>
+    <string name="decrement_shorter_than_duration">Decrement \"shorter than\" duration</string>
+    <string name="delete_playlist">Delete playlist</string>
+    <string name="delete_playlist_confirmation_body">Are you sure you want to delete your playlist? There’s no way to undo this.</string>
+    <string name="delete_playlist_confirmation_title">Delete playlist?</string>
+    <string name="enabled_rules">Enabled rules</string>
+    <!-- %1$s is status like 'In Progress' and %2$d is count of other episode statuses -->
+    <string name="episode_status_rule_description">%1$s + %2$d</string>
+    <string name="increment_longer_than_duration">Increment \"longer than\" duration</string>
+    <string name="increment_shorter_than_duration">Increment \"shorter than\" duration</string>
+    <string name="manual_playlist_no_content_body">Swipe left on an episode to add it to your playlist.</string>
+    <string name="manual_playlist_no_content_title">Add episodes to your playlist</string>
+    <string name="manual_playlist_no_content_title_alternative">Start building your playlist</string>
+    <string name="manual_playlist_no_available_episode_body">Looks like you’ve added all episodes from this show.</string>
+    <string name="manual_playlist_no_available_episode_title">No available episodes</string>
+    <string name="manual_playlist_search_no_episode_body" translatable="false">@string/podcast_no_episodes_matching</string>
+    <string name="manual_playlist_search_no_episode_title" translatable="false">@string/podcast_no_episodes_found</string>
+    <string name="manual_playlist_search_no_podcast_body">We couldn’t find any podcast for that search. Try another keyword.</string>
+    <string name="manual_playlist_search_no_podcast_title">No podcast found</string>
+    <string name="manual_playlist_search_no_podcast_or_folder_body">We couldn’t find any podcast or folder for that search. Try another keyword.</string>
+    <string name="manual_playlist_search_no_podcast_or_folder_title" translatable="false">@string/manual_playlist_search_no_podcast_title</string>
+    <string name="new_playlist">New playlist</string>
+    <string name="new_playlists_title_placeholder">Playlist’s name</string>
+    <string name="new_smart_playlist_banner_body">Automatically add episodes based on rules</string>
+    <string name="new_smart_playlist_banner_title">Make into smart playlist</string>
+    <string name="play_all_no_episodes_message">All episodes archived. Add or unarchive to play.</string>
+    <string name="playlist_archive_all" translatable="false">@string/podcast_archive_all</string>
+    <string name="playlist_artwork_description">Playlist’s artwork</string>
+    <string name="playlist_download_all" translatable="false">@string/podcast_download_all</string>
+    <string name="playlist_edit_episodes">Rearrange episodes</string>
+    <string name="playlist_edit_episodes_title">Edit playlist</string>
+    <string name="playlist_episode_unavailable_title">Episode unavailable</string>
+    <string name="playlist_episode_unavailable_description">The podcast creator deleted this episode. It will stay in your playlist until you remove it.</string>
+    <string name="playlist_episode_unavailable_cta">Remove from playlist</string>
+    <string name="playlist_episodes_archived_count">%1$d archived</string>
+    <string name="playlist_episodes_archived_title">No episodes</string>
+    <plurals name="playlist_episodes_archived_description">
+        <item quantity="one">Your episode in this playlist has been archived</item>
+        <item quantity="other">All %1$d episodes of this playlist have been archived</item>
+    </plurals>
+    <string name="playlist_episodes_hide_archived" translatable="false">@string/podcast_hide_archived</string>
+    <string name="playlist_episodes_show_archived" translatable="false">@string/show_archived</string>
+    <string name="playlist_is_full_description" translatable="false">@string/add_to_playlist_failure_message</string>
+    <string name="playlist_options">Playlist options</string>
+    <string name="playlist_select_episodes">Select episodes</string>
+    <string name="playlist_setting_auto_download_description">Enable to auto download episodes in this playlist.</string>
+    <string name="playlist_sort_by">Sort by</string>
+    <string name="playlists">Playlists</string>
+    <string name="playlists_empty_state_body">Playlists let you organize episodes manually or automatically with smart rules.</string>
+    <string name="playlists_empty_state_title">Organize episodes your way</string>
+    <string name="playlists_onboarding_playlist_description">Want more control? Manual playlists let you build custom queues, great for trips, themes, or just your current vibe. Whether smart or manual, playlists work the way you do.</string>
+    <string name="playlists_onboarding_playlist_title">Introducing playlists</string>
+    <string name="playlists_onboarding_smart_playlist_description">They still work exactly the same, using rules to auto-add your episodes. All your existing filters are right here, nothing’s changed but the name.</string>
+    <string name="playlists_onboarding_smart_playlist_title">Filters are now smart playlists</string>
+    <string name="playlists_selected_all">All playlists selected</string>
+    <plurals name="playlists_selected_count">
+        <item quantity="one">%1$d playlist selected</item>
+        <item quantity="other">%1$d playlists selected</item>
+    </plurals>
+    <string name="podcast_not_in_playlists">Not included in any smart playlists</string>
+    <string name="premade_playlists_tooltip_body">We made these to help you get started.\nThey auto-update based on your listening.</string>
+    <string name="premade_playlists_tooltip_title">Smart playlists, ready to go</string>
+    <string name="rearrange_playlists_tooltip_body">Press and hold a playlist to move it.</string>
+    <string name="rearrange_playlists_tooltip_title">Reorder your playlists</string>
+    <!-- %1$s is playlist's title -->
+    <string name="preview_playlist">Preview %1$s</string>
+    <string name="save_smart_rule">Save smart rule</string>
+    <string name="select_smart_playlists">Select smart playlists</string>
+    <string name="smart_playlist">Smart playlist</string>
+    <string name="smart_playlists">Smart playlists</string>
+    <string name="smart_playlist_create_no_content_body">None of the episodes in your podcasts match these rules.\n\nTry adjusting the rules, or save this playlist for future episodes that might fit.</string>
+    <string name="smart_playlist_create_no_content_title">No matching episodes</string>
+    <string name="smart_playlist_no_content_body">Either it’s time to celebrate completing this list, or edit your rules to get some more.</string>
+    <string name="smart_playlist_no_content_title">No episodes</string>
+    <string name="smart_rule_podcasts_all_description">New podcasts you follow will be automatically added.</string>
+    <string name="smart_rule_podcasts_all_description_disabled">New podcasts you follow will not be automatically added.</string>
+    <string name="smart_rule_podcasts_all_label">All followed podcasts</string>
+    <string name="smart_rule_starred_description">Only include starred episodes that match your other rules.</string>
+    <string name="smart_rule_starred_description_disabled">Starred episodes can still appear if they match your other rules.</string>
+    <string name="smart_rule_starred_label">Starred episodes</string>
+    <string name="smart_rules">Smart rules</string>
+    <string name="smart_rules_description">Set up smart rules to automatically add episodes to your smart playlist.</string>
+    <string name="up_next_as_playlist_body">Your current Up Next will be replaced when you play this playlist. Save it first to keep it.</string>
+    <string name="up_next_as_playlist_button_primary">Save current queue</string>
+    <string name="up_next_as_playlist_button_secondary">Replace and play</string>
+    <string name="up_next_as_playlist_title">Save your Up Next queue?</string>
+    <string name="up_next_as_playlist_replace_body">This will clear your current Up Next queue and start playing this playlist.</string>
+    <string name="up_next_as_playlist_replace_button_primary" translatable="false">@string/up_next_as_playlist_button_secondary</string>
+    <string name="up_next_as_playlist_replace_button_secondary" translatable="false">@string/cancel</string>
+    <string name="up_next_as_playlist_replace_title">Replace current Up Next?</string>
+    <string name="up_next_as_playlist_saved">Up Next saved as a playlist</string>
 
     <!-- Profile -->
 
@@ -918,12 +1163,12 @@
     <string name="profile_email">Email</string>
     <string name="profile_email_address">Email Address</string>
     <string name="profile_email_address_changed">Email Address Changed</string>
-    <string name="profile_empty_downloaded">No Downloaded Episodes</string>
-    <string name="profile_empty_downloaded_summary">Oh no! You’re fresh out of downloads. Download some more and they’ll show up here.</string>
-    <string name="profile_empty_history">Nothing Played</string>
-    <string name="profile_empty_history_summary">You haven\'t listened to any episodes yet.</string>
-    <string name="profile_empty_starred">Nothing Starred</string>
-    <string name="profile_empty_starred_summary">You haven\'t starred any episodes yet.</string>
+    <string name="profile_empty_downloaded">Enjoy offline listening</string>
+    <string name="profile_empty_downloaded_summary">Save episodes for offline listening and never miss a moment.</string>
+    <string name="profile_empty_history">Let\'s get you listening!</string>
+    <string name="profile_empty_history_summary">Start listening to podcasts and revisit your listening history here.</string>
+    <string name="profile_empty_starred">Save your favorites</string>
+    <string name="profile_empty_starred_summary">Star episodes you love and come back to them at anytime.</string>
     <string name="profile_end_tour">END TOUR</string>
     <string name="profile_ended">Ended %s</string>
     <string name="profile_ends">Ends %s</string>
@@ -939,7 +1184,7 @@
     <string name="profile_files_delete" translatable="false">@string/delete</string>
     <string name="profile_files_edit" translatable="false">@string/edit</string>
     <string name="profile_files_empty_summary">Want to listen to your own files?\nTap the + button to open them in Pocket Casts, and they&#x2019;ll appear here.</string>
-    <string name="profile_files_empty_title">No Files</string>
+    <string name="profile_files_empty_title">Listen or watch your own files</string>
     <string name="profile_files_mark_as_played" translatable="false">@string/mark_as_played</string>
     <string name="profile_files_options" translatable="false">@string/options</string>
     <string name="profile_files_remove_image">Replace Image</string>
@@ -1063,14 +1308,14 @@
     <string name="profile_stats_auto_skipping">Auto Skipping</string>
     <string name="profile_stats_listened_for">You\'ve listened for</string>
     <string name="profile_stats_trim_silence">Trim Silence</string>
-    <string name="profile_stats_share_to">Share to..</string>
+    <string name="profile_stats_share_to">Share to ...</string>
     <string name="profile_stats_since_listened_for">Since %s you\'ve listened for</string>
     <string name="profile_stats_skipping">Skipping</string>
     <string name="profile_stats_time_saved_by">Time Saved By</string>
     <string name="profile_stats_total">TOTAL</string>
     <string name="profile_stats_variable_speed">Variable Speed</string>
     <string name="profile_status_error_internet">🤔\n\nUnable to load stats,\ncheck your internet connection.</string>
-    <string name="profile_start_free_trial">Start free trial</string>
+    <string name="profile_start_free_trial">Start Free Trial</string>
     <string name="profile_sub_android_goto">To cancel your subscription, you&#x2019;ll need to cancel via the Google Play Store.</string>
     <string name="profile_sub_cancel_hint0">Your current subscription will remain active until</string>
     <string name="profile_sub_cancel_hint1">Access to Pocket Casts Plus features will be locked</string>
@@ -1143,6 +1388,7 @@
     <string name="plus_renews_automatically_monthly">Renews automatically monthly</string>
     <string name="plus_year">year</string>
     <string name="plus_month">month</string>
+    <string name="plus_week">week</string>
     <string name="plus_day">day</string>
     <string name="plus_yearly">Yearly</string>
     <string name="plus_monthly">Monthly</string>
@@ -1199,6 +1445,7 @@
     <string name="settings_auto_download_charging">Only when charging</string>
     <string name="settings_auto_download_clear_errors">Clear all download errors</string>
     <string name="settings_auto_download_clearing_errors">Clearing all download errors</string>
+    <string name="settings_auto_download_playlists">Auto download playlists</string>
     <string name="settings_auto_download_filters">Auto download filters</string>
     <string name="settings_auto_download_filters_episodes">All filter episodes</string>
     <string name="settings_auto_download_new_episodes">New episodes</string>
@@ -1209,6 +1456,7 @@
         <item quantity="other">Automatically download the latest %s episodes from new shows you follow.</item>
     </plurals>
 
+    <string name="number_one">one</string>
     <string name="number_two">two</string>
     <string name="number_three">three</string>
     <string name="number_five">five</string>
@@ -1242,6 +1490,7 @@
     <string name="settings_battery_learn_more_url" translatable="false">https://support.pocketcasts.com/article/playback-pausing-randomly-or-when-screen-is-locked/</string>
     <string name="settings_select_filters">Select filters</string>
     <string name="settings_choose_podcasts">Choose podcasts</string>
+    <string name="settings_choose_playlists">Choose playlists</string>
     <string name="settings_close_upgrade_offer">close upgrade offer</string>
     <string name="settings_customize_buttons_displayed_in_android_13_notification_and_android_auto">Customize the buttons displayed in Android 13+ playback notifications and Android Auto.</string>
     <string name="settings_developer">Developer</string>
@@ -1305,6 +1554,8 @@
     <string name="settings_media_actions_customise">Customize media actions</string>
     <string name="settings_media_actions_show_title">Show custom media actions</string>
     <string name="settings_media_actions_show_subtitle">Show custom media actions in Android 13+ media notifications and Android Auto.</string>
+    <string name="settings_pixel_watch_title">Pixel Watch skip buttons</string>
+    <string name="settings_pixel_watch_subtitle">Replace the custom skip buttons with standard next/previous track buttons that function as skip buttons, allowing compatibility with more devices.</string>
     <string name="settings_media_notification_controls">Media notification controls</string>
     <string name="settings_media_notification_controls_title_archive" translatable="false">@string/archive</string>
     <string name="settings_media_notification_controls_title_mark_as_played" translatable="false">@string/mark_as_played</string>
@@ -1320,6 +1571,10 @@
     <string name="settings_notification_choose_podcasts">Choose podcasts</string>
     <string name="settings_notification_hide_on_pause">Hide playback notification on pause</string>
     <string name="settings_notification_notify_me">Notify me</string>
+    <string name="settings_notification_daily_reminders">Daily Reminders</string>
+    <string name="settings_notification_recommendations">Trending &amp; Recommendations</string>
+    <string name="settings_notification_new_features">New Features &amp; Tips</string>
+    <string name="settings_notification_offers">Pocket Casts Offers</string>
     <string name="settings_notification_play_over">Play over notifications</string>
     <string name="settings_notification_play_over_never">Never</string>
     <string name="settings_notification_play_over_duck">Duck volume</string>
@@ -1402,6 +1657,8 @@
     <string name="settings_storage_store_on">Store podcasts on</string>
     <string name="settings_storage_fix_downloads">Fix downloads</string>
     <string name="settings_storage_fix_downloads_description">Attempt to restore any downloaded files if they are missing in the Pocket Casts app.</string>
+    <string name="settings_storage_normalize_episode_titles">Normalize episode titles</string>
+    <string name="settings_storage_normalize_episode_titles_description">Status: %1$s\nSome parts of the app use an episode search that requires normalized titles. Tapping this setting runs database normalization if the episodes aren\'t normalized already.</string>
     <string name="settings_subscribe_to_played">Follow played podcasts</string>
     <string name="settings_show_played">Show played episodes</string>
     <string name="settings_show_played_summary">Episodes that you have finished playing will still be displayed</string>
@@ -1513,7 +1770,7 @@
     <string name="settings_app_icon_rose" translatable="false">@string/settings_theme_rose</string>
     <string name="settings_app_icon_pocket_cats" translatable="false">Pocket Cats</string>
     <string name="settings_app_icon_red_velvet">Red Velvet</string>
-    <string name="settings_app_icon_pride_2023">Pride 2023</string>
+    <string name="settings_app_icon_pride">Pride</string>
     <string name="settings_app_icon_plus">Plus</string>
     <string name="settings_app_icon_classic" translatable="false">@string/settings_theme_classic</string>
     <string name="settings_app_icon_electric_blue">Electric Blue</string>
@@ -1553,6 +1810,7 @@
     <string name="settings_status_service_refresh_summary">The service used to find new episodes.</string>
     <string name="settings_status_service_account">Account Service</string>
     <string name="settings_status_service_account_summary">The service used to store episode progress, podcasts you follow, filters, etc.</string>
+    <string name="settings_status_service_account_summary_2">The service used to store episode progress, podcasts you follow, playlists, etc.</string>
     <string name="settings_status_service_discover"><![CDATA[Discover & Search]]></string>
     <string name="settings_status_service_discover_summary">The discover section of the app, including podcast search.</string>
     <string name="settings_status_service_ad_blocker_help_singular">The most common cause is that you have an ad-blocker configured on your phone or network. You’ll need to unblock the domain %s</string>
@@ -1569,12 +1827,11 @@
     <string name="settings_about_share_with_friends_message">Hey! Here is a link to download the Pocket Casts app. I\'m really enjoying it and thought you might too. \nhttps://www.pocketcasts.com</string>
     <string name="settings_about_rate_us">Rate us</string>
     <string name="settings_about_instagram">Instagram</string>
-    <string name="settings_about_twitter">Twitter</string>
+    <string name="settings_about_x" translatable="false">X</string>
     <string name="settings_about_work_with_us">Work with us</string>
     <string name="settings_about_legal">Legal and more</string>
     <string name="settings_about_work_from_anywhere">Work from Anywhere</string>
     <string name="settings_about_automattic_family">Automattic family</string>
-    <string name="settings_about_wordpress" translatable="false">WordPress</string>
     <string name="settings_about_jetpack" translatable="false">Jetpack</string>
     <string name="settings_about_dayone" translatable="false">Day One</string>
     <string name="settings_about_woo" translatable="false">WooCommerce</string>
@@ -1588,7 +1845,10 @@
     <string name="settings_about_privacy_policy_available_at">Our Privacy policy is available at %s</string>
     <string name="settings_privacy_summary">Allowing us to collect analytics and crash reports helps us build a better app. We understand if you would prefer not to share this information.</string>
     <string name="settings_privacy_analytics">Analytics</string>
+    <string name="settings_privacy_analytics_first_party">First-party analytics</string>
     <string name="settings_privacy_analytics_summary">Allow us to collect analytics.</string>
+    <string name="settings_privacy_analytics_third_party">Third-party analytics</string>
+    <string name="settings_privacy_analytics_third_party_summary">Allow us to use trusted third-party services to collect anonymous data.</string>
     <string name="settings_privacy_crash">Crash reports</string>
     <string name="settings_privacy_crash_summary">Allow us to collect crash reports.</string>
     <string name="settings_privacy_crash_link">Link your account to crashes</string>
@@ -1725,6 +1985,15 @@
     <string name="discover_sponsored">Sponsored</string>
     <string name="discover_all_categories">All categories</string>
     <string name="discover_select_categories">Select a category</string>
+    <string name="discover_show_all_categories">Show all categories</string>
+    <string name="discover_dismiss_selected_category">Dismiss selected category</string>
+    <string name="recommendations_because_you_like">Because you like</string>
+    <string name="recommendations_loved_by_listeners">Loved by listeners of</string>
+    <string name="recommended_by_creator">Recommended shows by the creator</string>
+    <string name="similar_shows_to">Shows similar to \"%s\"</string>
+    <string name="podroll_information_title">What\'s a creator\'s pick?</string>
+    <string name="podroll_information_summary">Creator Picks are podcasts recommended by the show\'s creator using Podroll.</string>
+    <string name="podroll_information_button">Got it</string>
 
     <!-- Server errors -->
 
@@ -1761,18 +2030,17 @@
 
     <!-- End of Year -->
 
-    <string name="end_of_year_launch_modal_summary">See your top podcasts, categories, listening stats and more. Share with friends and shout out your favorite creators!</string>
-    <!-- Playback 2024 is a proper noun and shouldn't be translated -->
-    <string name="end_of_year_launch_modal_primary_button_title">View My Playback&#160;2024</string>
-    <!-- Playback 2024 is a proper noun and shouldn't be translated -->
-    <string name="end_of_year_prompt_card_title">Playback 2024\nis here!</string>
-    <string name="end_of_year_prompt_card_summary">See your listening&#160;stats, top&#160;podcasts, and&#160;more.</string>
+    <string name="end_of_year_launch_modal_summary">See your top podcasts, categories, listening stats and more. Share with friends and shout out your favorite&#160;creators!</string>
+    <!-- Playback 2025 is a proper noun and shouldn't be translated -->
+    <string name="end_of_year_launch_modal_primary_button_title">View My Playback&#160;2025</string>
+    <string name="end_of_year_prompt_card_title">Playback is here!</string>
+    <string name="end_of_year_prompt_card_summary">See your listening&#160;stats,\ntop&#160;podcasts, and&#160;more.</string>
     <string name="end_of_year_share_via" translatable="false">@string/podcasts_share_via</string>
     <string name="end_of_year_replay">Play again</string>
     <string name="end_of_year_listening_time_title">This was your total time listening to podcasts</string>
     <string name="end_of_year_listening_time_title_english_only" translatable="false">This was your total time\nlistening to podcasts</string>
     <!-- A suffix used to display total listening time in a year. Things like "12 hours 2 days", "20 days", "12 days 5 hours" preceed it so it is "10 days 5 hours total listening time" -->
-    <string name="end_of_year_listening_time_subtitle">total listening to podcasts</string>
+    <string name="end_of_year_listening_time_subtitle">minutes listened</string>
     <string name="end_of_year_share_story">Share this story</string>
     <string name="end_of_year_story_intro_title">Let’s celebrate your year of listening!</string>
     <string name="end_of_year_story_intro_title_english_only" translatable="false">Let’s celebrate your year\nof listening!</string>
@@ -1793,9 +2061,17 @@
     <!-- Text that appear when someone share the listened numbers story to Twitter. %1$d is a placeholder for the number of podcasts listened and %2$d for the number of episodes. %3$d is the year. -->
     <string name="end_of_year_story_listened_to_numbers_share_text">I listened to %1$d different podcasts and %2$d episodes in %3$d</string>
     <!-- Title for the story that display the most listened podcast by the user this year. %1$d is the year -->
-    <string name="end_of_year_story_top_podcast_title">This was your top podcast in %1$d</string>
-    <!-- Subtitle for the story that display the most listened podcast by the user this year. %1$d is the number of episodes, %2$s the listened time and %3$s is the podcast title. -->
-    <string name="end_of_year_story_top_podcast_subtitle">You listened to %1$d episodes for a total of %2$s of \"%3$s\"</string>
+    <string name="end_of_year_story_top_podcast_title">Your top podcast of %1$d</string>
+    <!-- Subtitle for the story that displays the most listened podcasts by the user this year. -->
+    <string name="end_of_year_story_top_podcast_subtitle">It doesn\'t get more \"you\" than this</string>
+    <!-- Subtitle for the story that display the most listened podcast by the user this year. %1$s is the number of episodes, %2$s the days and %3$s hours you've listened to. -->
+    <string name="end_of_year_story_top_podcast_stats_days">%1$s, %2$s, and %3$s.\nThat\'s commitment!</string>
+    <!-- Subtitle for the story that display the most listened podcast by the user this year. %1$s is the number of episodes, %2$s the hours you've listened to. -->
+    <string name="end_of_year_story_top_podcast_stats_hours">%1$s and %2$s.\nThat\'s commitment!</string>
+    <plurals name="episodes">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
     <!-- Text that appear when someone share the top podcast of the year story to Twitter. %1$d is the year and %2$s is the URL to the podcast. -->
     <string name="end_of_year_story_top_podcast_share_text">My favorite podcast of %1$d! %2$s</string>
     <!-- Title for the story showing the top podcasts for the user in the current year. -->
@@ -1813,9 +2089,9 @@
     <!-- Text that appear when someone share the longest episode they listened to story to Twitter. %1$d is the year and %2$s is the URL to the episode. -->
     <string name="end_of_year_story_longest_episode_share_text">The longest episode I listened to in %1$d %2$s</string>
     <!-- Title for the epilogue story. %1$d is the yer. -->
-    <string name="end_of_year_story_epilogue_title">Thank you for listening with us this year.\nSee you in %1$d!</string>
+    <string name="end_of_year_story_epilogue_title">Thanks for spending your year with Pocket\u00A0Casts</string>
     <!-- Subtitle for the epilogue story -->
-    <string name="end_of_year_story_epilogue_subtitle">Don’t forget to share with your friends and give a shout out to your favorite podcast creators</string>
+    <string name="end_of_year_story_epilogue_subtitle">Share your Playback with friends and show some love to the podcasters who kept you company all year</string>
     <!-- Title of the top categories story. -->
     <string name="end_of_year_story_top_categories">Your Top Categories</string>
     <!-- Title of the top categories story. %1$s being the name of the most listened category. -->
@@ -1830,27 +2106,27 @@
     <!-- When loading the End of Year stats stories fails. -->
     <string name="end_of_year_stories_failed">Unable to load your end of year stories, check your internet connection.</string>
     <!--Title of the story when this year's listening time is bigger than previous year. %1$s is the year, %2$s% is the percentage -->
-    <string name="end_of_year_stories_year_over_year_title_went_up">Compared to %1$s, your listening time went up a whopping %2$s%%</string>
-    <!--Title of the story when this year's listening time is bigger than previous year by more than 500%. %1$s is the year -->
-    <string name="end_of_year_stories_year_over_year_title_went_up_a_lot">Compared to %1$s, your listening time went up by more than 500%%</string>
+    <string name="end_of_year_stories_year_over_year_title_went_up">Compared to %1$s, your listening time skyrocketed&#160;%2$s%%</string>
+    <!--Title of the story when this year's listening time is bigger than previous year by more than 500%. -->
+    <string name="end_of_year_stories_year_over_year_title_went_up_a_lot">From zero to hero!</string>
     <!-- Subtitle of the story that compares year listening time when this year's listening time is bigger than last's year. %1$s is the year -->
-    <string name="end_of_year_stories_year_over_year_subtitle_went_up">Ready to top it in %1$s?</string>
-    <!-- Title of the story when this year's listening time is almost the same as the previous year. %1$s is the yaer -->
-    <string name="end_of_year_stories_year_over_year_title_flat">Compared to %1$s, your listening time stayed pretty consistent</string>
+    <string name="end_of_year_stories_year_over_year_subtitle_went_up">Hope you stretched first!</string>
+    <!-- Subtitle of the story when this year's listening time is bigger than previous year by more than 500%. -->
+    <string name="end_of_year_stories_year_over_year_subtitle_went_up_a_lot">You listened more than 500% this year — welcome to the club</string>
+    <!-- Title of the story when this year's listening time is almost the same as the previous year. %1$s is the year -->
+    <string name="end_of_year_stories_year_over_year_title_flat">Your %1$s listening held steady</string>
     <!-- Subtitle of the story that compares year listening time when this year's listening time is almost the same as last's year -->
-    <string name="end_of_year_stories_year_over_year_subtitle_flat">And they say consistency is the key to success… or something like that!</string>
+    <string name="end_of_year_stories_year_over_year_subtitle_flat">Consistent, dependable, like your coffee shop&#160;order</string>
     <!-- Title of the story when this year's listening time is less than the previous year. %1$s is the year -->
-    <string name="end_of_year_stories_year_over_year_title_went_down">Compared to %1$s, your listening time went down a little</string>
+    <string name="end_of_year_stories_year_over_year_title_went_down">Your listening dipped %1$s%% this&#160;year</string>
     <!-- Subtitle of the story that compares year listening time when this year's listening time is less than last's year -->
-    <string name="end_of_year_stories_year_over_year_subtitle_went_down">Aaaah… there’s a life to be lived, right?</string>
-    <!-- Title of the story when this year's listening time is way bigger than previous year. -->
-    <string name="eoy_year_over_year_title_skyrocketed">Compared to 2022, your listening time skyrocketed!</string>
+    <string name="end_of_year_stories_year_over_year_subtitle_went_down">But hey, quality over quantity</string>
     <!-- Text for when a user shares the story comparing the this year (%1$d) and previous year (%2$d) listening time. -->
     <string name="end_of_year_stories_year_over_share_text">My %1$d listening time compared to %2$d</string>
     <!-- Title for the completion rate. %1$d is the percentage.-->
-    <string name="end_of_year_stories_year_completion_rate_title">Your completion rate this year was %1$d%%</string>
+    <string name="end_of_year_stories_year_completion_rate_title">Your completion rate was %1$d%%</string>
     <!-- Title for the completion rate. %1$d is the total of episodes listened this year, %2$d is the total of episodes fully listened to. -->
-    <string name="end_of_year_stories_year_completion_rate_subtitle">From the %1$d episodes you started you listened fully to a total of %2$d</string>
+    <string name="end_of_year_stories_year_completion_rate_subtitle">Out of %2$d episodes started, you finished %1$d.\nA stronger follow‑through than most gym&#160;memberships.</string>
     <!-- Title for when sharing the completion rate story to social media. %1$d is percentage -->
     <string name="end_of_year_stories_completion_rate_share_text">My completion rate this year was %1$d</string>
     <string name="end_of_year_stories_year_completion_rate">completion rate</string>
@@ -1860,16 +2136,18 @@
     <string name="end_of_year_stories_subscribe_to_plus">Support Pocket Casts by subscribing to Plus and get more stats, plus Premium features like bookmarks, folders or preselect chapters!</string>
     <!-- Label of a button to incetivise users to subscribe to Pocket Casts Plus. -->
     <string name="eoy_story_stories_subscribe_to_plus_button_label">Check out Pocket Casts Plus</string>
-    <!-- Title for the story showing the podcast ratings given by the user. -->
-    <string name="eoy_story_ratings_title_1">Let\'s see your ratings!</string>
+    <!-- Title for the story showing the podcast ratings given by the user when they gave high ratings. -->
+    <string name="eoy_story_ratings_title_1">You dropped %1$d-star ratings like confetti!</string>
+    <!-- Title for the story showing the podcast ratings given by the user when they gave low ratings. -->
+    <string name="eoy_story_ratings_title_2">Thanks for sharing your feedback.</string>
     <!-- Title for the story showing the podcast ratings given by the user when they gave no ratings. -->
-    <string name="eoy_story_ratings_title_2">Oh-oh! No podcast ratings to show you yet</string>
+    <string name="eoy_story_ratings_title_no_ratings">No ratings yet, but there\'s still time!</string>
     <!-- Subtitle for the story showing the podcast ratings given by the user when they gave high ratings. -->
-    <string name="eoy_story_ratings_subtitle_1">Wow, so many %1$d star ratings! Thanks for sharing the love with your favorite creators!</string>
+    <string name="eoy_story_ratings_subtitle_1">Creators everywhere appreciate the love</string>
     <!-- Subtitle for the story showing the podcast ratings given by the user when they gave low ratings. -->
-    <string name="eoy_story_ratings_subtitle_2">Thanks for sharing your feedback with the creator community</string>
+    <string name="eoy_story_ratings_subtitle_2">Reviews help great shows get found</string>
     <!-- Subtitle for the story showing the podcast ratings given by the user when they gave no ratings. -->
-    <string name="eoy_story_ratings_subtitle_3">Did you know that you can rate shows now? Share the love for your favorite creators and help them get noticed!</string>
+    <string name="eoy_story_ratings_subtitle_no_ratings">Help your favorite creators get discovered by sharing what you love</string>
     <!-- Label of a button for the story showing podcast ratings given by the user when they gave no ratings. -->
     <string name="eoy_story_ratings_learn_button_label">Learn about ratings</string>
     <!-- Title of a dialog when a user takes a screenshot of a story. -->
@@ -1885,6 +2163,7 @@
     <string name="onboarding_welcome_back">Welcome Back</string>
     <string name="not_now">Not now</string>
     <string name="onboarding_log_in">Log in</string>
+    <string name="onboarding_get_started">Get started</string>
     <string name="onboarding_sign_up">Sign up</string>
     <string name="onboarding_continue_with_google">Continue with Google</string>
     <string name="onboarding_continue_with_google_error">Unable to launch Google sign in.</string>
@@ -1908,8 +2187,10 @@
     <string name="onboarding_recommendations_import">Import</string>
     <string name="onboarding_recommendations_more">More %s</string>
     <string name="onboarding_upgrade_everything_you_love_about_pocket_casts_plus">Everything you love about Pocket&#160;Casts, plus more</string>
-    <string name="onboarding_upgrade_no_subscriptions_found">No subscriptions found.</string>
-    <string name="onboarding_patron_features_title">Believe in what we\’re doing and want to show your support?</string>
+    <string name="onboarding_upgrade_no_plans_found_title">Couldn’t load plans</string>
+    <string name="onboarding_upgrade_no_plans_found_body">Please check your connection or try again later.</string>
+    <string name="onboarding_upgrade_purchase_failure_message">Something went wrong. Please try again later.</string>
+    <string name="onboarding_patron_features_title">Believe in what we’re doing and want to show your support?</string>
     <string name="onboarding_patron_feature_everything_in_plus_title">Everything in Plus</string>
     <string name="onboarding_patron_feature_early_access_title">Early access to features</string>
     <string name="onboarding_patron_feature_cloud_storage_title">100GB Cloud Storage</string>
@@ -1918,17 +2199,21 @@
     <string name="onboarding_patron_feature_gratitude_title" translatable="false">@string/onboarding_plus_feature_gratitude_title</string>
     <string name="onboarding_patron_subscribe">Subscribe to Pocket&#160;Casts Patron</string>
     <string name="onboarding_plus_features_title" translatable="false">@string/onboarding_upgrade_everything_you_love_about_pocket_casts_plus</string>
-    <string name="onboarding_plus_feature_desktop_and_web_apps_title">Desktop &amp; Web apps</string>
     <string name="onboarding_plus_feature_desktop_apps_text">Listen in more places with our Windows, macOS, and Web apps.</string>
-    <string name="onboarding_plus_feature_folders_and_bookmarks_title">Folders &amp; Bookmarks</string>
+    <string name="onboarding_plus_feature_no_banner_ads">No banner ads</string>
+    <string name="onboarding_plus_feature_folders_title">Folders</string>
+    <string name="onboarding_plus_feature_up_next_shuffle_title">Up Next Shuffle</string>
+    <string name="onboarding_plus_feature_bookmarks_title">Bookmarks</string>
+    <string name="onboarding_plus_feature_chapters_title">Preselect chapters</string>
     <string name="onboarding_plus_feature_folders_text">Organize your podcasts in folders and keep them in sync across all your devices.</string>
     <string name="onboarding_plus_feature_cloud_storage_title">20GB Cloud Storage</string>
     <string name="onboarding_plus_feature_cloud_storage_text">Upload your files to cloud storage and have them available everywhere.</string>
     <string name="onboarding_plus_feature_watch_playback">Apple Watch &amp; Wear OS apps</string>
-    <string name="onboarding_plus_feature_extra_themes_icons_title">Extra Themes &amp; App Icons</string>
+    <string name="onboarding_plus_feature_extra_themes_icons_title">Extra themes &amp; icons</string>
     <string name="onboarding_plus_feature_themes_icons_title">Themes &amp; Icons</string>
     <string name="onboarding_plus_feature_themes_icons_text">Fly your true colors. Exclusive icons and themes for the Plus club only.</string>
     <string name="onboarding_plus_feature_gratitude_title">The undying gratitude of everyone here at Pocket Casts</string>
+    <string name="onboarding_plus_feature_libro_title"><![CDATA[Free audiobook from <a href="https://libro.fm/">Libro.fm</a>]]></string>
     <!-- Do not translate Slumber Studios -->
     <string name="onboarding_plus_feature_slumber_studios_title"><![CDATA[1 year of exclusive content from <a href="https://slumberstudios.com/">Slumber&#160;Studios</a>]]></string>
     <string name="onboarding_plus_feature_dream_with_slumber_studios"><![CDATA[<a href="https://slumberstudios.com/">Dream with Slumber Studios content</a>]]></string>
@@ -1936,12 +2221,14 @@
     <string name="onboarding_plus_continuing_agrees_to">By continuing, you agree to our %1$s and %2$s.</string>
     <string name="onboarding_plus_privacy_policy">Privacy Policy</string>
     <string name="onboarding_plus_terms_and_conditions">Terms and Conditions</string>
-    <string name="onboarding_plus_start_free_trial_and_subscribe">Start free trial &amp; subscribe</string>
+    <string name="onboarding_plus_start_free_trial_and_subscribe">Start Free Trial &amp; Subscribe</string>
     <string name="onboarding_plus_subscribe">Subscribe to Pocket&#160;Casts Plus</string>
     <string name="onboarding_subscribe_to_plus">Subscribe to Plus</string>
-    <string name="onboarding_plus_recurring_after_free_trial">Recurring payments will begin after your %s</string>
-    <string name="onboarding_plus_recurring_after_intro_offer">Recurring payment at %s</string>
-    <string name="onboarding_plus_recurring_after_intro_offer_sufix">after your first year</string>
+    <string name="onboarding_start_free_trial_upgrade_button">Start Free Trial</string>
+    <!-- %1$s is period like 1 week, 2 months, etc. %2$s is the date when this period ends. -->
+    <string name="onboarding_plus_recurring_after_free_trial">Recurring payments will begin after your %1$s (%2$s)</string>
+    <!-- %1$s is a price and %2$s is date when the billing at this price starts -->
+    <string name="onboarding_plus_recurring_after_intro_offer">Recurring payment at %1$s after your first year (%2$s)</string>
     <string name="onboarding_plus_can_be_canceled_at_any_time">Can be canceled at any time.</string>
     <string name="onboarding_welcome_get_you_listening">Welcome, now let\'s get you listening!</string>
     <string name="onboarding_welcome_get_you_listening_plus">Thank you, now let\'s get you listening!</string>
@@ -1956,6 +2243,11 @@
     <string name="onboarding_coming_from_another_app">Coming from another app? Import your podcasts and get listening. You can always do this later in settings.</string>
     <string name="onboarding_import_from_castbox">Import from Castbox</string>
     <string name="onboarding_import_from_other_apps">Import from other apps</string>
+    <string name="onboarding_import_from_url">Import from URL</string>
+    <string name="onboarding_import_from_url_description">Import your podcasts from an OPML file using a URL.</string>
+    <string name="onboarding_import_from_url_importing_message">OPML import in progress. You can go back to your onboarding process.</string>
+    <string name="onboarding_import_from_url_error_message">Invalid URL</string>
+    <string name="onboarding_import_from_url_failed">OPML import failed</string>
     <string name="onboarding_import_from_castbox_step_1">Open Castbox.</string>
     <string name="onboarding_import_from_castbox_step_2">Tap the \“Personal\” tab.</string>
     <string name="onboarding_import_from_castbox_step_3">Tap “Settings”.</string>
@@ -1965,6 +2257,15 @@
     <string name="onboarding_can_import_from_opml">Pocket Casts can import podcasts from OPML files, so if your current app can export an OPML file, you can follow these steps:</string>
     <string name="onboarding_import_from_other_apps_step_1">Find the other app\’s export option and export an OPML file.</string>
     <string name="onboarding_import_from_other_apps_step_2">Use your phone\’s \“Share\” menu to send the file to Pocket Casts. Alternatively, import the file from Pocket Casts\’ \“Import &amp; export OPML\” settings menu.</string>
+    <string name="account_encourage_title">We noticed you’re not logged&#160;in</string>
+    <string name="account_encourage_description">Create an account or log in to enjoy Pocket&#160;Casts to the fullest.</string>
+    <string name="account_encourage_benefits_title">Account Benefits</string>
+    <string name="account_benefit_sync_title">Sync across devices</string>
+    <string name="account_benefit_sync_description">Sync your progress, and shows across all your devices.</string>
+    <string name="account_benefit_backups_title">Reliable backups</string>
+    <string name="account_benefit_backups_description">Your library and preferences are securely saved.</string>
+    <string name="account_benefit_recommendations_title">Personalized recommendations</string>
+    <string name="account_benefit_recommendations_description">Get tailored podcast suggestions based on your listening habits.</string>
 
     <!-- Notification channel -->
 
@@ -1977,12 +2278,14 @@
     <string name="notification_channel_description_bookmark">Shows when bookmark is added using headphones</string>
     <string name="notification_channel_description_fix_downloads">Shows when downloads fix is triggered</string>
     <string name="notification_channel_description_fix_downloads_complete">Shows when downloads fix is complete</string>
+    <string name="notification_channel_description_daily_reminders">Shows helpful suggestions to support your listening routine.</string>
+    <string name="notification_channel_description_trending_and_recommendations">Shows trending podcasts and curated recommendations to help you discover new favorites</string>
+    <string name="notification_channel_description_new_features_and_tips">Shows notifications about new features, updates, and handy tips to help you optimize your Pocket Casts experience</string>
+    <string name="notification_channel_description_offers">Shows notifications about exclusive offers, discounts, and promotions to help you make the most of your Pocket Casts experience</string>
 
     <!-- Bookmarks -->
 
     <string name="bookmark_play">Play at bookmark position %s</string>
-    <string name="bookmarks_create_instructions">You can save timestamps of episodes from the actions menu in the player or by configuring an action with your headphones.</string>
-    <string name="bookmarks_not_found">No bookmarks yet</string>
     <string name="bookmarks_headphone_settings">Headphone settings</string>
     <string name="bookmarks_plural">%d bookmarks</string>
     <string name="bookmarks_singular">1 bookmark</string>
@@ -2005,22 +2308,32 @@
     <string name="bookmark_notification_action_delete_title" translatable="false">@string/delete</string>
     <string name="bookmarks_upsell_instructions">Save timestamps of your favorite episodes and unlock many more features with Pocket&#160;Casts Plus.</string>
     <string name="bookmarks_upsell_instructions_early_access">Get early access to this feature with Pocket&#160;Casts Patron and save timestamps of your favorite episodes. Available for Plus subscribers soon.</string>
-    <string name="bookmarks_search_results_not_found">We couldn\'t find any bookmark for that search.</string>
+    <string name="bookmarks_search_results_not_found">We couldn\'t find any bookmark matching your search criteria. Try another keyword.</string>
+    <string name="bookmarks_empty_state_title">Bookmark that moment</string>
+    <string name="bookmarks_free_user_empty_state_message">You can save timestamps of important moments in an episode.</string>
+    <string name="bookmarks_free_user_empty_state_button">Get Bookmarks</string>
+    <string name="bookmarks_paid_user_empty_state_message">You can save timestamps of episodes from the actions menu in the player or by configuring an action with your headphones.</string>
 
     <!-- Transcripts -->
     <string name="error_transcript_failed_to_load">Sorry, but something went wrong while loading this transcript.</string>
     <string name="error_transcript_format_not_supported">Sorry, but this transcript format is not supported: %s</string>
     <string name="error_transcript_failed_to_parse">Sorry, but something went wrong while parsing this transcript.</string>
     <string name="transcript_empty">Transcript is empty.</string>
+    <string name="transcript_open">Open transcript</string>
     <string name="transcript_close">Close transcript</string>
     <string name="transcript_search">Search transcript</string>
+    <string name="transcript_search_close">Close search</string>
     <string name="transcript_error_not_available">Sorry, but this episode has no transcript available.</string>
+    <string name="transcript_generated_paywall_title">This transcript is automatically generated by Pocket&#160;Casts.</string>
+    <string name="transcript_generated_paywall_description">Subscribe to Plus to get access to it and other Premium&#160;features like bookmarks and folders.</string>
+    <string name="transcript_generated_header">This transcript is automatically generated and available to Plus&#160;subscribers only.</string>
+    <string name="transcript_share">Share transcript</string>
 
     <!--    Tasker Plugin-->
 
-    <string name="must_provide_filter_name">Must provide filter name</string>
-    <string name="filter_x_not_found">Filter %1$s not found</string>
-    <string name="no_episodes_in_filter_x">No episodes in Filter %1$s</string>
+    <string name="must_provide_filter_name">Must provide playlist name</string>
+    <string name="filter_x_not_found">Playlist %1$s not found</string>
+    <string name="no_episodes_in_filter_x">No episodes in playlist %1$s</string>
     <string name="must_provide_command_name">Must provide command name</string>
     <string name="command_x_not_valid">Command %1$s not valid</string>
     <string name="playback_command">Playback Command</string>
@@ -2037,13 +2350,13 @@
     <string name="time_to_skip_to_not_valid">Time to skip to %1$s not valid</string>
     <string name="time_to_skip_not_valid">Time to skip %1$s not valid</string>
     <string name="playback_speed_not_valid">Playback Speed %1$s not valid</string>
-    <string name="pocket_casts_play_filter">Pocket Casts Play Filter</string>
+    <string name="pocket_casts_play_filter">Pocket Casts Play Playlist</string>
     <string name="pocket_casts_control_playback">Pocket Casts Control Playback</string>
     <string name="pocket_casts_query_podcasts">Pocket Casts Query Podcasts</string>
     <string name="pocket_casts_query_podcast_episodes">Pocket Casts Query Podcast Episodes</string>
     <string name="pocket_casts_add_to_up_next">Pocket Casts Add To Up Next</string>
-    <string name="pocket_casts_query_filters">Pocket Casts Query Filters</string>
-    <string name="pocket_casts_query_filter_episodes">Pocket Casts Query Filter Episodes</string>
+    <string name="pocket_casts_query_filters">Pocket Casts Query Playlists</string>
+    <string name="pocket_casts_query_filter_episodes">Pocket Casts Query Playlist Episodes</string>
     <string name="pocket_casts_query_up_next_episodes">Pocket Casts Query Up Next Episodes</string>
     <string name="set_playback_speed">Set Playback Speed</string>
     <string name="playback_speed_between_values">Playback Speed (between 0.5 and 3)</string>
@@ -2084,10 +2397,10 @@
     <string name="no_episode_ids_provided">No episode IDs provided</string>
     <string name="no_episodes_found_for_episode_ids_x">No episodes found for episode IDs %1$s</string>
     <string name="episode_count">Episode Count</string>
-    <string name="filter_id">Filter ID</string>
-    <string name="filter_id_description">An unique ID that represents the filter. Can be used on the \'Query Filter Episodes\' action.</string>
-    <string name="filter_title">Filter Title</string>
-    <string name="filter_id_or_title">Filter ID or Title</string>
+    <string name="filter_id">Playlist ID</string>
+    <string name="filter_id_description">An unique ID that represents the playlist. Can be used on the \'Query Playlist Episodes\' action.</string>
+    <string name="filter_title">Playlist Title</string>
+    <string name="filter_id_or_title">Playlist ID or Title</string>
     <string name="error_opening_links_activity_not_found">Looks like you don\'t have an app capable of viewing this content.</string>
 
     <!-- Wear -->
@@ -2095,12 +2408,11 @@
     <string name="wear_hide_password">Hide password</string>
     <string name="wear_show_password">Show password</string>
 
-
     <!-- Nova Launcher -->
     <string name="nova_launcher_subscribed_podcasts">Subscribed Podcasts</string>
     <string name="nova_launcher_recently_played">Recently Played</string>
     <string name="nova_launcher_new_releases">New Releases</string>
-<string name="nova_launcher_trending" translatable="false">@string/discover_trending</string>
+    <string name="nova_launcher_trending" translatable="false">@string/discover_trending</string>
     <string name="nova_launcher_continue_listening">Continue listening</string>
     <string name="nova_launcher_up_next" translatable="false">@string/up_next</string>
 
@@ -2162,64 +2474,11 @@
     <string name="rate_pocket_casts">Rate Pocket Casts</string>
     <string name="pocket_casts_logo">Pocket Casts logo</string>
 
-    <!-- Paywall -->
-    <string name="paywall_save_50_off">Save 50% off your first year.</string>
-    <string name="paywall_free_1_month_trial">Free 1-month trial.</string>
-    <string name="paywall_desktop_and_web_title">Desktop and web apps</string>
-    <string name="paywall_desktop_and_web_description">Listen in more places with our Windows, macOS and Web apps.</string>
-    <string name="paywall_desktop_and_web_content_description">Desktop and web apps image</string>
-    <string name="paywall_folders_title">Folders</string>
-    <string name="paywall_folders_description">Organize your podcasts in folders, and keep them in sync across all your devices.</string>
-    <string name="paywall_folders_content_description">Folders image</string>
-    <string name="paywall_bookmarks_title">Bookmarks</string>
-    <string name="paywall_bookmarks_description">Save your favorite bits from any episode and go back to them.</string>
-    <string name="paywall_bookmarks_content_description">Bookmarks image</string>
-    <string name="paywall_watch_title">Apple Watch and Wear OS playback</string>
-    <string name="paywall_watch_description">Ditch the phone and go for a run.</string>
-    <string name="paywall_watch_content_description">Apple Watch and Wear OS playback image</string>
-    <string name="paywall_slumber_studios_title">Dream with Slumber Studios</string>
-    <string name="paywall_slumber_studios_description">Get 1 year of premium content from Slumber Studios.</string>
-    <string name="paywall_slumber_studios_content_description">Dream with Slumber Studios image</string>
-    <string name="paywall_storage_title">20 GB of storage</string>
-    <string name="paywall_storage_description">Upload your audio files to cloud storage and have them available everywhere.</string>
-    <string name="paywall_storage_content_description">20 GB of storage image</string>
-    <string name="paywall_themes_title">Extra themes and icons</string>
-    <string name="paywall_themes_description">Fly your true colors. Exclusive icons and themes for our subscribers.</string>
-    <string name="paywall_themes_content_description">Extra themes and icons image</string>
-    <string name="paywall_layout_reviews_title">\"Quite simply the best way to listen to podcasts\"</string>
-    <string name="paywall_layout_reviews_subtitle">See why people have upgraded to Plus</string>
-    <string name="paywall_layout_reviews_stars_content_description">Stars</string>
-    <string name="paywall_layout_reviews_rating">4.1 Rating (5.7K Reviews)</string>
-    <string name="paywall_layout_reviews_see_all_reviews_in_store">See all reviews in the Play Store</string>
-
-    <string name="paywall_layout_reviews_review_one_title">Best Podcast App By FAR</string>
-    <string name="paywall_layout_reviews_review_one_message">I\'ve been a long time user and the amount of functionality and customization you get with the free version is astounding. I love that it syncs across devices so I can start listening on my phone and then pick up on an Alexa device. It\'s my recommendation for anyone who listens to podcasts. Also love the stats!</string>
-    <string name="paywall_layout_reviews_review_one_date">Jul 10</string>
-
-    <string name="paywall_layout_reviews_review_two_title">The essential podcast app</string>
-    <string name="paywall_layout_reviews_review_two_message">8 years of excellence and continuous improvement</string>
-    <string name="paywall_layout_reviews_review_two_date">Jun 15</string>
-
-    <string name="paywall_layout_reviews_review_three_title">Best podcast app out there</string>
-    <string name="paywall_layout_reviews_review_three_message">I\'ve been a Pocket Casts user since 2017. \n\nThis is hands down the best app to listen to podcasts. It\'s feature rich and actively developed. There have been some complaints about the Ul change but I haven\'t really noticed it too much. \n\nThis app can be as simple or difficult to use as you\'d like it to be. So either let it be a plug and play or set up skip outro and intro timers and any other little feature you want to enable.</string>
-    <string name="paywall_layout_reviews_review_three_date">Jun 9</string>
-
-    <string name="paywall_layout_reviews_review_four_title">Fantastic app</string>
-    <string name="paywall_layout_reviews_review_four_message">The sync function is magic. Don\'t know what special magic this app has going on but it\'s better than any other app I\'ve used.</string>
-    <string name="paywall_layout_reviews_review_four_date">Jun 1</string>
-
-    <string name="paywall_layout_reviews_review_five_title">Works great and easy to find or add new pods</string>
-    <string name="paywall_layout_reviews_review_five_message">Been using this app for 6 years or better, started on android and now I have been on iOS for almost a year. Works the same on both platforms. Easy to find new podcasts to listen to, very nice Ul, can add podcasts by rss feed url too. The watch app is functional, but I mostly use for my play/pause. Sign in with an account to sync across devices but no requirement to do so.</string>
-    <string name="paywall_layout_reviews_review_five_date">May 6</string>
-
-    <string name="paywall_layout_reviews_review_six_title">Go-To Podcast App</string>
-    <string name="paywall_layout_reviews_review_six_message">PC has been my go-to for years. I\'ve tried other podcast apps and always come back to PC for their simplicity, Ul and support. Definitely worth checking it out, especially if you have grown tired of your current podcast app.</string>
-    <string name="paywall_layout_reviews_review_six_date">Mar 8</string>
-
     <string name="folders_plus_prompt">Organize your podcasts with Pocket&#160;Casts&#160;Plus, and more</string>
     <string name="themes_plus_prompt">Get exclusive themes with Pocket&#160;Casts&#160;Plus, and more</string>
     <string name="icons_plus_prompt">Get exclusive app icons with Pocket&#160;Casts&#160;Plus, and more</string>
     <string name="files_plus_prompt">Upload your files with Pocket&#160;Casts&#160;Plus, and more</string>
+    <string name="suggested_folders_plus_prompt">Organize your shows, with Pocket&#160;Casts&#160;Plus, and more</string>
     <string name="up_next_shuffle_plus_prompt">Shuffle your episodes with Pocket&#160;Casts&#160;Plus, and more</string>
 
     <!-- Engage SDK -->
@@ -2263,11 +2522,201 @@
     <string name="need_to_free_up_space">Need to free up space?</string>
     <string name="save_space_by_managing_downloaded_episodes">Save %1$s – by managing downloaded episodes.</string>
     <string name="manage_downloads">Manage downloads</string>
-    <string name="maybe_later">Maybe Later</string>
+    <string name="dismiss_manage_download_banner">Dismiss</string>
+    <string name="manage_download_dismiss_content_description">Manage Download Banner Dismiss</string>
 
     <!-- Up Next Shuffle -->
     <string name="up_next_shuffle_button_content_description">Up Next shuffle</string>
     <string name="up_next_shuffle_disable_button_content_description">Up Next shuffle disable</string>
     <string name="up_next_shuffle_enable_confirmation_message">Shuffle is on. Episodes will play in random order.</string>
 
+    <!-- Winback -->
+
+    <string name="winback_offer_header">Thinking of leaving?\nLet us help first</string>
+    <string name="winback_offer_free_offer_title">Get your next month free and save %1$s</string>
+    <string name="winback_offer_free_offer_yearly_title">Get 50%% off your next year and save %1$s</string>
+    <string name="winback_offer_free_offer_description">Enjoy one month of Pocket Casts Plus on us! The offer will be added to your current subscription.</string>
+    <string name="winback_offer_free_offer_yearly_description">Pay %1$s now to lock in a year of Pocket Casts Plus at half price. Your discounted year begins after your current plan ends.</string>
+    <string name="winback_offer_free_offer_button_label">Claim offer</string>
+    <string name="winback_offer_differnt_plan_title">Looking for a different plan?</string>
+    <string name="winback_offer_differnt_plan_description">Find the plan that\'s right for you.</string>
+    <string name="winback_offer_help_title">Need help with Pocket&#160;Casts?</string>
+    <string name="winback_offer_help_description">Struggling with any features or having issues.</string>
+    <string name="winback_offer_cancel_continue_button_label">Continue to Cancellation</string>
+    <string name="winback_claimed_offer_message_1">Enjoy your free month!</string>
+    <string name="winback_claimed_offer_message_2">Thanks for choosing Pocket&#160;Casts. Your free month will be added to your current subscription.</string>
+    <string name="winback_claimed_offer_message_3">50% off your next year!</string>
+    <string name="winback_claimed_offer_message_4">Thanks for choosing Pocket&#160;Casts. Your discounted year begins after your current billing period.</string>
+    <string name="winback_available_plans_title">Available Plans</string>
+    <string name="winback_available_plans_billing_note">Your new plan will activate at the end of your current billing period.</string>
+    <string name="winback_too_many_subscritpions_title">Multiple subscriptions found</string>
+    <string name="winback_too_many_subscritpions_note">You have more than one active Pocket&#160;Casts subscription. Please manage your subscriptions in the Play&#160;Store to avoid duplicate charges.</string>
+    <string name="winback_too_many_subscritpions_button_label">Manage subscriptions in Play&#160;Store</string>
+    <string name="winback_error_fetch_description">Sorry, but something went wrong fetching your plans.</string>
+    <string name="winback_changing_plan">Changing plan</string>
+    <string name="winback_claiming_offer">Claiming offer</string>
+    <string name="winback_cancel_subscription_header_title">Things you should know before you cancel</string>
+    <string name="winback_cancel_subscription_header_description">This will change your plan to a free account.</string>
+    <string name="winback_cancel_subscription_perk_active_with_date">Your current subscription will remain active until %1$s.</string>
+    <string name="winback_cancel_subscription_perk_active_without_date">Your current subscription will remain active until its expiration date.</string>
+    <string name="winback_cancel_subscription_perk_plus">Access to Pocket Casts Plus features will be locked after this date.</string>
+    <string name="winback_cancel_subscription_perk_folders">Your folders will be removed and their contents will move back to the Podcasts screen.</string>
+    <string name="winback_cancel_subscription_perk_files">All files uploaded to your Pocket Casts account will be deleted (but downloaded files on your mobile devices will remain).</string>
+    <string name="winback_cancel_subscription_stay_button_label">Keep my subscription</string>
+    <string name="winback_cancel_subscription_cancel_button_label">Yes, Cancel my Subscription</string>
+    <string name="winback_cancel_subscription_accept_offer_button_label">Accept offer</string>
+    <string name="winback_cancel_subscription_continue_cancel_button_label">Continue with cancellation</string>
+
+    <!-- Suggested Folders -->
+    <string name="suggested_folders_title">Smart folders</string>
+    <string name="suggested_folders_use_subtitle">We\'ve organized your podcasts into folders. Save them now and customize later to fit your style.</string>
+    <string name="suggested_folders_replace_subtitle">We\'ve organized your podcasts into folders. Save them now and customize later to fit your style. This will replace any existing folders.</string>
+    <string name="suggested_folders_use_these_folders_button">Use these folders</string>
+    <string name="suggested_folders_create_custom_folder_button">Create custom folder</string>
+    <string name="suggested_folder_content_description">Preview %1$s folder</string>
+    <string name="suggested_folders_replace_folders_button">Replace folders</string>
+    <string name="suggested_folders_replace_folders_confirmation_tittle">Replace existing folders?</string>
+    <string name="suggested_folders_replace_folders_confirmation_description">Accepting suggested folders will overwrite your current folders. This can\'t be undone.</string>
+
+    <!-- Restore from local history -->
+    <string name="restore_from_local_history">Restore from local history</string>
+    <string name="up_next_history">Up Next History</string>
+    <string name="up_next_history_explanation">A list of recent updates to Up Next due to changes on other devices. To view the episodes and have the option to restore them, tap any entry.</string>
+    <string name="up_next_history_restore_button">@string/restore</string>
+    <string name="up_next_history_restore_confirmation_title">Restore Up Next?</string>
+    <string name="up_next_history_restore_confirmation_description">These episodes will be added to the bottom of your current Up Next.</string>
+
+    <!-- Encourage account creation -->
+    <string name="encourage_account_banner_action_label">Create a free account</string>
+    <string name="encourage_account_sync_banner_title">Your shows, on any device</string>
+    <string name="encourage_account_sync_banner_description">Create a free account to sync your shows and listen anywhere.</string>
+    <string name="encourage_account_filters_banner_title">Keep your filters in sync</string>
+    <string name="encourage_account_filters_banner_description">Create a free account to sync your filters on any device.</string>
+    <string name="encourage_account_playlists_banner_title">Keep your playlists in sync</string>
+    <string name="encourage_account_playlists_banner_description">Create a free account to sync your playlists on any device.</string>
+    <string name="encourage_account_history_banner_title">Keep track of what you’ve played</string>
+    <string name="encourage_account_history_banner_description">Create a free account to sync your listening history everywhere.</string>
+
+    <!-- Notifications -->
+    <string name="notification_sync_title">Your shows, on any device!</string>
+    <string name="notification_sync_message">Create a free account to sync your shows and listen anywhere.</string>
+    <string name="notification_import_title">Easily import your podcasts</string>
+    <string name="notification_import_message">Switching from another app? Bring all your favorite shows to Pocket Casts.</string>
+    <string name="notification_up_next_title">Simplify your queue</string>
+    <string name="notification_up_next_message">Build a playback queue and say goodbye to jumping around between episodes.</string>
+    <string name="notification_filters_title">Organize your episodes</string>
+    <string name="notification_filters_message">Create smart filters to organize your episodes.</string>
+    <string name="notification_filters_message_2">Create playlists to organize your episodes.</string>
+    <string name="notification_themes_title">Time for a new look</string>
+    <string name="notification_themes_message">Browse our themes and find the one that suits your style.</string>
+    <string name="notification_staff_picks_title">Explore our Staff Picks</string>
+    <string name="notification_staff_picks_message">Perfectly ripe podcasts, picked just for you by real, podcast-loving humans.</string>
+    <string name="notification_plus_upsell_title">Level up your podcast game</string>
+    <string name="notification_plus_upsell_message">Unlock exclusive features like folders, bookmarks, and more with Plus!</string>
+    <string name="notification_reengage_we_miss_you_title">We miss you!</string>
+    <string name="notification_reengage_we_miss_you_message">It\'s been a while since you\'ve listened. Jump back in and enjoy!</string>
+    <string name="notification_reengage_catch_up_offline_title">Catch up offline</string>
+    <plurals name="notification_reengage_catch_up_offline_message">
+        <item quantity="one">You have %d new episode downloaded and ready to go!</item>
+        <item quantity="other">You have %d new episodes downloaded and ready to go!</item>
+    </plurals>
+    <string name="notification_content_recommendations_trending_title">Trending this week</string>
+    <string name="notification_content_recommendations_trending_message">Check out what everyone else is listening to this week.</string>
+    <string name="notification_content_recommendations_title">New recommendations for you</string>
+    <string name="notification_content_recommendations_message">Wondering what to listen to next? Check out these shows!</string>
+    <string name="notifications_settings_turn_on_push_title">Turn on push notifications?</string>
+    <string name="notifications_settings_turn_on_push_message">To get notifications from Pocket Casts, you\'ll need to turn them on in your device settings.</string>
+    <string name="notifications_settings_turn_on_push_button">Go to device settings</string>
+    <string name="notification_new_features_smart_folders_title">Your podcasts organized</string>
+    <string name="notification_new_features_smart_folders_message">Try Plus and automatically organize your shows with folders</string>
+    <string name="notification_offers_upgrade_title">Level up your podcast game</string>
+    <string name="notification_offers_upgrade_message">Unblock exclusive features like folders, bookmarks, and more with Plus!</string>
+    <string name="notification_prompt_title">Stay up to date!</string>
+    <string name="notification_prompt_message">Notifications are the best way to keep track of new episodes, get recommendations of new shows and tips about Pocket Casts.</string>
+    <string name="notification_prompt_cta">Allow Notifications</string>
+    <string name="notification_snack_message">Please allow notifications in your device settings</string>
+    <string name="notification_snack_cta">Open Settings</string>
+    <string name="notification_mockup_image_description">Mockup image</string>
+
+    <!-- Onboarding Upgrade -->
+    <string name="onboarding_upgrade_generic_title">Superpowers for your podcasts</string>
+    <string name="onboarding_upgrade_schedule_today">Today</string>
+    <string name="onboarding_upgrade_schedule_today_message">Get access to Folders, Shuffle, Bookmarks, and exclusive content</string>
+    <string name="onboarding_upgrade_schedule_day">Day %1$d</string>
+    <string name="onboarding_upgrade_schedule_notify">We\'ll notify you about your trial ending.</string>
+    <string name="onboarding_upgrade_schedule_billing">You\'ll be charged on %1$s. Cancel anytime before.</string>
+    <string name="onboarding_upgrade_schedule_see_features">See all Plus features</string>
+    <string name="onboarding_upgrade_features_transcripts">Generated Transcripts</string>
+    <string name="onboarding_upgrade_features_folders">Tidy your collection with Folders</string>
+    <string name="onboarding_upgrade_features_shuffle">Shuffle your queue</string>
+    <string name="onboarding_upgrade_features_bookmarks">Keep timestamps with Bookmarks</string>
+    <string name="onboarding_upgrade_features_chapters">Save time with Preselect Chapters</string>
+    <string name="onboarding_upgrade_features_files">20 GB Cloud Storage for your files</string>
+    <string name="onboarding_upgrade_features_themes">Extra Themes and App Icons</string>
+    <string name="onboarding_upgrade_features_wear">Apps for Wear OS and Apple Watch</string>
+    <string name="onboarding_upgrade_features_slumber"><![CDATA[1 year of content from <a href="https://slumberstudios.com/">Slumber&#160;Studios</a>]]></string>
+    <string name="onboarding_upgrade_features_trial_schedule">How does the free trial work?</string>
+    <string name="onboarding_upgrade_billing_cycle_monthly">Monthly plan</string>
+    <string name="onboarding_upgrade_billing_cycle_yearly">Yearly plan</string>
+    <string name="onboarding_upgrade_save_percent">Save %1$d\%%</string>
+    <string name="onboarding_upgrade_patron_title">Believe in what we do and wanna show your support?</string>
+    <string name="onboarding_upgrade_patron_plus_features">All the features in Plus</string>
+    <string name="onboarding_upgrade_patron_early_access">Early access to new features</string>
+    <string name="onboarding_upgrade_patron_cloud_storage">100 GB Cloud Storage for your files</string>
+    <string name="onboarding_upgrade_patron_badge">Supporters profile badge</string>
+    <string name="onboarding_upgrade_app_icons">Special Pocket Casts app icons</string>
+    <string name="onboarding_upgrade_gratitude">The undying gratitude of everyone here at Pocket Casts</string>
+    <string name="onboarding_upgrade_account_message">Unlock all paid features like Folders, Shuffle, Bookmarks and many more</string>
+    <string name="onboarding_folders_title">Folders: your podcasts, perfectly placed</string>
+    <string name="onboarding_folders_title_1">Books</string>
+    <string name="onboarding_folders_title_2">Favorites</string>
+    <string name="onboarding_folders_title_3">Sports</string>
+    <string name="onboarding_bookmarks_title">Bookmarks: no more \"where was that?\"</string>
+    <string name="onboarding_shuffle_title">Shuffle: The joy of not choosing</string>
+    <plurals name="onboarding_shuffle_item_duration_minutes">
+        <item quantity="one">%1$d min</item>
+        <item quantity="other">%1$d mins</item>
+    </plurals>
+    <string name="onboarding_shuffle_item_duration_hours">%1$dh %2$dm</string>
+    <string name="onboarding_preselect_chapters_title">Preselect Chapters: cut to the good stuff</string>
+    <string name="onboarding_preselect_chapters_chapter_title">Chapter %1$d</string>
+    <string name="onboarding_upgrade_tnc">Terms\u00A0and\u00A0Conditions</string>
+    <string name="onboarding_upgrade_pp">Privacy\u00A0Policy</string>
+    <string name="onboarding_notification_popup_newsletter">Subscribe to our Newsletter</string>
+    <string name="onboarding_notification_popup_newsletter_message">Once a month, all podcast goodness</string>
+    <string name="onboarding_notification_popup_notifications">Receive Notifications</string>
+    <string name="onboarding_notification_popup_notifications_message">Receive news, podcast suggestions and more</string>
+    <string name="onboarding_notifications_popup_save">Save Preferences</string>
+    <string name="onboarding_intro_carousel_best_app_title">\"The best podcast app out there. By far\"</string>
+    <string name="onboarding_intro_carousel_customization_insane_title">\"The amount of customization is insane\"</string>
+    <string name="onboarding_intro_carousel_organizing_podcasts_title">\"Organizing my podcasts by folders is genius\"</string>
+    <string name="onboarding_intro_carousel_pc_user">Pocket Casts user</string>
+    <string name="onboarding_intro_get_started">Get Started</string>
+    <string name="onboarding_login_continue_with_email">Continue with email</string>
+    <string name="onboarding_login_or">OR</string>
+    <string name="onboarding_create_account_title">Create your Pocket\u00A0Casts account</string>
+    <string name="onboarding_create_account_message">Your podcasts, always in sync. Keep your library safe, and enjoy Pocket\u00A0Casts on web and desktop.</string>
+    <string name="onboarding_create_account_sign_up_email">Sign up with email</string>
+    <string name="onboarding_create_account_sign_up_google">Sign up with Google</string>
+    <string name="onboarding_interests_title">Tell us about your favourite topics</string>
+    <string name="onboarding_interests_description">Great podcasts, handpicked by real people, are coming your way!</string>
+    <string name="onboarding_interests_show_more">Show more categories</string>
+    <string name="onboarding_interests_select_at_least_label">Select at least 3</string>
+    <string name="onboarding_recommendations_title">We hope you love these suggestions!</string>
+    <string name="onboarding_recommendations_message">Here are some great shows to start with. Tap to follow, search, or import from other apps.</string>
+    <string name="search_filters_top_results">Top Results</string>
+    <string name="search_filters_podcasts" translatable="false">@string/podcasts</string>
+    <string name="search_filters_episodes" translatable="false">@string/episodes</string>
+    <string name="search_suggestions_view_all">View all for \"%1$s\"</string>
+    <string name="search_suggestions_no_results_title">No Results</string>
+    <string name="search_suggestions_no_results_message">Try a new search, or by adding a podcast feed URL</string>
+    <string name="eoy_playback_intro_title">Your year in podcasts,\nwrapped and ready to relive</string>
+
+    <!-- App rating prompt -->
+    <string name="app_rating_title">Enjoying Pocket\u00A0Casts?</string>
+    <string name="app_rating_body">Hi there! We’d love to know if you’re enjoying our\u00A0app.</string>
+    <!-- A label under the sad face emoji. A user will be redirected to help pages after tapping it. -->
+    <string name="app_rating_no_label">Not really</string>
+    <!-- A label under the happy face emoji. A user will be redirected to leave a review after tapping it. -->
+    <string name="app_rating_yes_label">Yes!</string>
 </resources>

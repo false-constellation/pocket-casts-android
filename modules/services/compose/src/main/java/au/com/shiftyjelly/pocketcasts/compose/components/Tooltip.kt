@@ -1,36 +1,33 @@
 package au.com.shiftyjelly.pocketcasts.compose.components
 
-import android.content.res.Configuration
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.rememberTransition
-import androidx.compose.animation.core.tween
+import androidx.annotation.FloatRange
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Card
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -41,264 +38,433 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
-import au.com.shiftyjelly.pocketcasts.compose.Devices
+import au.com.shiftyjelly.pocketcasts.compose.preview.ThemePreviewParameterProvider
+import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
-
-/**
- * The Material3 TooltipBox comes with a couple of constraints:
- * Both TooltipBox and RichTooltipBox lack an onDismissRequest property: https://issuetracker.google.com/issues/349864868
- * It dismisses on tapping outside the component. Even if you re-display it, interaction with the rest of the screen is blocked until the tooltip is dismissed.
- *
- * This is a custom Tooltip implementation using Popup based on
- * https://stackoverflow.com/a/69664787/193545
- * It permits screen interaction even when the tooltip is visible and can be used with rest of the M2 components.
- */
 
 @Composable
-fun Tooltip(
-    show: Boolean,
-    modifier: Modifier = Modifier,
-    offset: DpOffset = TooltipDefaults.tooltipOffset(),
-    properties: PopupProperties = TooltipDefaults.PopupProperties,
-    onDismissRequest: (() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
+fun TooltipPopup(
+    title: String,
+    tipPosition: TipPosition,
+    body: String? = null,
+    @FloatRange(from = 0.0, to = 1.0) maxWidthFraction: Float? = null,
+    maxWidth: Dp? = null,
+    elevation: Dp = 16.dp,
+    anchorOffset: DpOffset = DpOffset.Zero,
+    properties: PopupProperties = PopupProperties(dismissOnClickOutside = false),
+    onClick: (() -> Unit)? = null,
+    onClickOutside: (() -> Unit)? = null,
 ) {
-    val expandedStates = remember { MutableTransitionState(false) }
-    expandedStates.targetState = show
-
-    val density = LocalDensity.current
-    val screenWidth = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val offsetFromEdge = with(density) { (TooltipDefaults.ArrowWidth + TooltipDefaults.ContentCornerRadius).toPx() }
-
-    if (expandedStates.currentState || expandedStates.targetState) {
-        // Tooltip anchorPointX calculation
-        var anchorPointX by remember { mutableFloatStateOf(0f) }
-        val popupPositionProvider = DropdownMenuPositionProvider(offset, density) { anchorBounds, tooltipBounds ->
-            anchorPointX = if (anchorBounds.center.x + tooltipBounds.center.x / 2 > screenWidth) {
-                tooltipBounds.width - offsetFromEdge
-            } else {
-                offsetFromEdge
-            }
-        }
-
-        // Tooltip open/close animation
-        val transition = rememberTransition(expandedStates, "Tooltip")
-        val alpha by transition.animateFloat(
-            label = "alpha",
-            transitionSpec = {
-                if (false isTransitioningTo true) {
-                    tween(durationMillis = TooltipDefaults.InTransitionDuration)
-                } else {
-                    tween(durationMillis = TooltipDefaults.OutTransitionDuration)
-                }
-            },
-        ) { if (it) 1f else 0f }
-
-        // Show popup
-        Popup(
-            onDismissRequest = onDismissRequest,
-            popupPositionProvider = popupPositionProvider,
-            properties = properties,
+    // We're adding additional padding to the popup box in order to prevent shadow clipping.
+    // There's no API to determine how much padding is needed. We just eyeball it to 150%.
+    val elevationPadding = elevation * 1.5f
+    Popup(
+        popupPositionProvider = rememberTooltipPositionProvider(tipPosition, anchorOffset, elevationPadding),
+        properties = properties,
+        onDismissRequest = onClickOutside,
+    ) {
+        Box(
+            modifier = Modifier.padding(elevationPadding),
         ) {
-            TooltipContent(
-                modifier = modifier,
-                shape = TooltipShape(anchorPointX),
-                alpha = alpha,
-                content = content,
+            Tooltip(
+                title = title,
+                body = body,
+                tipPosition = tipPosition,
+                elevation = elevation,
+                modifier = Modifier
+                    .then(
+                        if (maxWidthFraction != null) {
+                            Modifier.fillMaxWidth(maxWidthFraction)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .then(
+                        if (maxWidth != null) {
+                            Modifier.widthIn(max = maxWidth)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .then(
+                        if (onClick != null) {
+                            Modifier.clickable(onClick = onClick)
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
         }
     }
 }
 
 @Composable
-private fun TooltipContent(
-    modifier: Modifier,
-    shape: TooltipShape,
-    alpha: Float,
-    content: @Composable ColumnScope.() -> Unit,
+fun Tooltip(
+    title: String,
+    tipPosition: TipPosition,
+    modifier: Modifier = Modifier,
+    body: String? = null,
+    elevation: Dp = 16.dp,
 ) {
-    Card(
-        modifier = Modifier
-            .alpha(alpha),
-        shape = shape,
-        elevation = TooltipDefaults.ContentElevation,
+    val tooltipShape = TooltipShape(tipPosition)
+    val backgroundColor = when (MaterialTheme.theme.type) {
+        Theme.ThemeType.DARK_CONTRAST -> MaterialTheme.theme.colors.primaryUi05
+        else -> MaterialTheme.theme.colors.primaryUi01
+    }
+
+    Box(
+        modifier = (if (elevation > 0.dp) Modifier.shadow(elevation, tooltipShape) else Modifier)
+            .clip(tooltipShape)
+            .background(backgroundColor)
+            .then(modifier),
     ) {
         Column(
-            modifier = modifier
-                .width(IntrinsicSize.Max)
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
-            content()
+            if (tipPosition.isTopAligned()) {
+                Spacer(
+                    modifier = Modifier.height(TipHeight),
+                )
+            }
+            TextH40(
+                text = title,
+            )
+            if (body != null) {
+                Spacer(
+                    modifier = Modifier.height(4.dp),
+                )
+                TextP50(
+                    text = body,
+                    color = MaterialTheme.theme.colors.primaryText02,
+                )
+            }
+            if (tipPosition.isBottomAligned()) {
+                Spacer(
+                    modifier = Modifier.height(TipHeight),
+                )
+            }
         }
     }
 }
 
-class TooltipShape(
-    private val anchorPointX: Float,
-) : Shape {
-    override fun createOutline(
-        size: Size,
-        layoutDirection: LayoutDirection,
-        density: Density,
-    ): Outline = with(density) {
-        val width = size.width
-        val height = size.height
-        val arrowWidthPx = TooltipDefaults.ArrowWidth.toPx()
-        val arrowHeightPx = TooltipDefaults.ArrowHeight.toPx()
-        val cornerRadiusPx = TooltipDefaults.ContentCornerRadius.toPx()
+enum class TipPosition {
+    TopStart,
+    TopCenter,
+    TopEnd,
+    BottomStart,
+    BottomCenter,
+    BottomEnd,
+    ;
 
-        val path = Path().apply {
-            // Start from top-left corner
-            moveTo(0f, arrowHeightPx + cornerRadiusPx)
-            // Top-left corner
-            quadraticTo(0f, arrowHeightPx, cornerRadiusPx, arrowHeightPx)
-            // Line to start of the arrow
-            lineTo(anchorPointX - arrowWidthPx, arrowHeightPx)
-            // Up to the tip of the arrow
-            lineTo(anchorPointX, 0f)
-            // Down to end of the arrow
-            lineTo(anchorPointX + arrowWidthPx, arrowHeightPx)
-            // Line to top-right corner
-            lineTo(width - cornerRadiusPx, arrowHeightPx)
-            // Top-right corner
-            quadraticTo(width, arrowHeightPx, width, arrowHeightPx + cornerRadiusPx)
-            // Line to bottom-right corner
-            lineTo(width, height - cornerRadiusPx)
-            // Bottom-right corner
-            quadraticTo(width, height, width - cornerRadiusPx, height)
-            // Line to bottom-left corner
-            lineTo(cornerRadiusPx, height)
-            // Bottom-left corner
-            quadraticTo(0f, height, 0f, height - cornerRadiusPx)
-            close()
+    internal fun isTopAligned() = this == TopStart || this == TopCenter || this == TopEnd
+
+    internal fun isBottomAligned() = !isTopAligned()
+
+    internal fun normalize(layoutDirection: LayoutDirection) = when (this) {
+        TopCenter -> TopCenter
+        BottomCenter -> BottomCenter
+        TopStart -> when (layoutDirection) {
+            LayoutDirection.Ltr -> TopStart
+            LayoutDirection.Rtl -> TopEnd
         }
 
-        return Outline.Generic(path)
+        TopEnd -> when (layoutDirection) {
+            LayoutDirection.Ltr -> TopEnd
+            LayoutDirection.Rtl -> TopStart
+        }
+
+        BottomStart -> when (layoutDirection) {
+            LayoutDirection.Ltr -> BottomStart
+            LayoutDirection.Rtl -> BottomEnd
+        }
+
+        BottomEnd -> when (layoutDirection) {
+            LayoutDirection.Ltr -> BottomEnd
+            LayoutDirection.Rtl -> BottomStart
+        }
     }
 }
 
-/** @see androidx.compose.material.DropdownMenuPositionProvider */
-@Immutable
-internal data class DropdownMenuPositionProvider(
-    val contentOffset: DpOffset,
-    val density: Density,
-    val onPositionCalculated: (IntRect, IntRect) -> Unit = { _, _ -> },
+@Composable
+private fun rememberTooltipPositionProvider(
+    tipPosition: TipPosition,
+    anchorOffset: DpOffset,
+    elevation: Dp,
+): PopupPositionProvider {
+    val density = LocalDensity.current
+    return remember(tipPosition, anchorOffset, elevation, density) {
+        TooltipPositionProvider(tipPosition, anchorOffset, elevation, density)
+    }
+}
+
+private class TooltipPositionProvider(
+    private val tipPosition: TipPosition,
+    anchorOffset: DpOffset,
+    private val elevation: Dp,
+    private val density: Density,
 ) : PopupPositionProvider {
+    private val anchorOffset = density.run {
+        IntOffset(anchorOffset.x.roundToPx(), anchorOffset.y.roundToPx())
+    }
+
     override fun calculatePosition(
         anchorBounds: IntRect,
         windowSize: IntSize,
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset {
-        // The min margin above and below the menu, relative to the screen.
-        val verticalMargin = with(density) { 48.dp.roundToPx() }
-        // The content offset specified using the dropdown offset parameter.
-        val contentOffsetX = with(density) {
-            contentOffset.x.roundToPx() * (if (layoutDirection == LayoutDirection.Ltr) 1 else -1)
-        }
-        val contentOffsetY = with(density) { contentOffset.y.roundToPx() }
+        val elevationPx = density.run { elevation.roundToPx() }
 
-        // Compute horizontal position.
-        val leftToAnchorLeft = anchorBounds.left + contentOffsetX
-        val rightToAnchorRight = anchorBounds.right - popupContentSize.width + contentOffsetX
-        val rightToWindowRight = windowSize.width - popupContentSize.width
-        val leftToWindowLeft = 0
-        val x = if (layoutDirection == LayoutDirection.Ltr) {
-            sequenceOf(
-                leftToAnchorLeft,
-                rightToAnchorRight,
-                // If the anchor gets outside of the window on the left, we want to position
-                // toDisplayLeft for proximity to the anchor. Otherwise, toDisplayRight.
-                if (anchorBounds.left >= 0) rightToWindowRight else leftToWindowLeft,
-            )
-        } else {
-            sequenceOf(
-                rightToAnchorRight,
-                leftToAnchorLeft,
-                // If the anchor gets outside of the window on the right, we want to position
-                // toDisplayRight for proximity to the anchor. Otherwise, toDisplayLeft.
-                if (anchorBounds.right <= windowSize.width) leftToWindowLeft else rightToWindowRight,
-            )
-        }.firstOrNull {
-            it >= 0 && it + popupContentSize.width <= windowSize.width
-        } ?: rightToAnchorRight
+        return anchorOffset + when (tipPosition.normalize(layoutDirection)) {
+            TipPosition.TopStart -> {
+                val elevationOffset = IntOffset(elevationPx, elevationPx)
+                val tipOffset = IntOffset(density.run { CornerTipPeakPosition.roundToPx() }, 0)
+                anchorBounds.bottomCenter - elevationOffset - tipOffset
+            }
 
-        // Compute vertical position.
-        val topToAnchorBottom = maxOf(anchorBounds.bottom + contentOffsetY, verticalMargin)
-        val bottomToAnchorTop = anchorBounds.top - popupContentSize.height + contentOffsetY
-        val centerToAnchorTop = anchorBounds.top - popupContentSize.height / 2 + contentOffsetY
-        val bottomToWindowBottom = windowSize.height - popupContentSize.height - verticalMargin
-        val y = sequenceOf(
-            topToAnchorBottom,
-            bottomToAnchorTop,
-            centerToAnchorTop,
-            bottomToWindowBottom,
-        ).firstOrNull {
-            it >= verticalMargin &&
-                it + popupContentSize.height <= windowSize.height - verticalMargin
-        } ?: bottomToAnchorTop
+            TipPosition.TopCenter -> {
+                val elevationOffset = IntOffset(0, elevationPx)
+                val contentOffset = IntOffset(popupContentSize.width / 2, 0)
+                anchorBounds.bottomCenter - elevationOffset - contentOffset
+            }
 
-        onPositionCalculated(
-            anchorBounds,
-            IntRect(x, y, x + popupContentSize.width, y + popupContentSize.height),
-        )
-        return IntOffset(x, y)
-    }
-}
+            TipPosition.TopEnd -> {
+                val elevationOffset = IntOffset(-elevationPx, elevationPx)
+                val contentOffset = IntOffset(popupContentSize.width, 0)
+                val tipOffset = IntOffset(density.run { CornerTipPeakPosition.roundToPx() }, 0)
+                anchorBounds.bottomCenter - elevationOffset - contentOffset + tipOffset
+            }
 
-object TooltipDefaults {
-    val PopupProperties = PopupProperties(focusable = false)
-    val ContentElevation = 8.dp
-    val ContentCornerRadius = 4.dp
-    val ArrowWidth = 10.dp
-    val ArrowHeight = 10.dp
+            TipPosition.BottomStart -> {
+                val elevationOffset = IntOffset(elevationPx, -elevationPx)
+                val contentOffset = IntOffset(0, popupContentSize.height)
+                val tipOffset = IntOffset(density.run { CornerTipPeakPosition.roundToPx() }, 0)
+                anchorBounds.topCenter - elevationOffset - contentOffset - tipOffset
+            }
 
-    @Composable
-    fun tooltipOffset() =
-        DpOffset(
-            if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) -(16).dp else 16.dp,
-            -(8).dp,
-        )
+            TipPosition.BottomCenter -> {
+                val elevationOffset = IntOffset(0, -elevationPx)
+                val contentOffset = IntOffset(popupContentSize.width / 2, popupContentSize.height)
+                anchorBounds.topCenter - elevationOffset - contentOffset
+            }
 
-    const val InTransitionDuration = 120
-    const val OutTransitionDuration = 75
-}
-
-@ShowkaseComposable(name = "Tooltip", group = "Popup")
-@Preview(device = Devices.PortraitRegular, name = "Light")
-@Composable
-fun TooltipLightPreview() {
-    TooltipPreview(Theme.ThemeType.LIGHT)
-}
-
-@ShowkaseComposable(name = "Tooltip", group = "Popup")
-@Preview(device = Devices.PortraitRegular, name = "Dark")
-@Composable
-fun TooltipDarkPreview() {
-    TooltipPreview(Theme.ThemeType.DARK)
-}
-
-@Composable
-fun TooltipPreview(
-    type: Theme.ThemeType,
-) {
-    AppThemeWithBackground(type) {
-        TooltipContent(
-            shape = TooltipShape(30f),
-            alpha = 1.0f,
-            modifier = Modifier,
-        ) {
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 24.dp, bottom = 16.dp),
-            ) {
-                TextH40(
-                    text = "This is a tooltip!",
-                    fontWeight = FontWeight.W700,
-                )
+            TipPosition.BottomEnd -> {
+                val elevationOffset = IntOffset(elevationPx, elevationPx)
+                val contentOffset = IntOffset(popupContentSize.width, popupContentSize.height)
+                val tipOffset = IntOffset(density.run { CornerTipPeakPosition.roundToPx() }, 0)
+                anchorBounds.topCenter + elevationOffset - contentOffset + tipOffset
             }
         }
     }
+}
+
+private class TooltipShape(
+    private val tipPosition: TipPosition,
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline {
+        val cardPath = roundedRectPath(size, density)
+        val tipPath = tipPath(size, layoutDirection, density)
+        val path = Path.combine(PathOperation.Union, cardPath, tipPath)
+
+        return Outline.Generic(path)
+    }
+
+    private fun roundedRectPath(
+        size: Size,
+        density: Density,
+    ): Path {
+        val tipHeight = density.run { TipHeight.toPx() }
+        val cornerRadius = density.run { CornerRadius.toPx() }
+        val topOffset = if (tipPosition.isTopAligned()) tipHeight else 0f
+        val bottomOffset = if (tipPosition.isBottomAligned()) tipHeight else 0f
+
+        return Path().apply {
+            val roundRect = RoundRect(
+                left = 0f,
+                top = topOffset,
+                right = size.width,
+                bottom = size.height - bottomOffset,
+                radiusX = cornerRadius,
+                radiusY = cornerRadius,
+            )
+            addRoundRect(roundRect)
+        }
+    }
+
+    private fun tipPath(
+        shapeSize: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ) = when (tipPosition.normalize(layoutDirection)) {
+        TipPosition.TopCenter -> topTip(shapeSize, density)
+        TipPosition.BottomCenter -> bottomTip(shapeSize, density)
+        TipPosition.TopStart -> topLeftTip(density)
+        TipPosition.TopEnd -> topRightTip(shapeSize, density)
+        TipPosition.BottomStart -> bottomLeftTip(shapeSize, density)
+        TipPosition.BottomEnd -> bottomRightTip(shapeSize, density)
+    }
+
+    private fun topTip(
+        shapeSize: Size,
+        density: Density,
+    ) = Path().apply {
+        val scale = density.density
+        val tipHeight = density.run { TipHeight.toPx() }
+        val tipWidth = density.run { CenterTipWidth.toPx() }
+
+        moveTo(shapeSize.width / 2 - tipWidth / 2, tipHeight)
+        addEdgeTip(scale)
+    }
+
+    private fun bottomTip(
+        shapeSize: Size,
+        density: Density,
+    ) = Path().apply {
+        val scale = density.density
+        val tipHeight = density.run { TipHeight.toPx() }
+        val tipWidth = density.run { CenterTipWidth.toPx() }
+
+        moveTo(shapeSize.width / 2 - tipWidth / 2, shapeSize.height - tipHeight)
+        addEdgeTip(scale, flipVertically = true)
+    }
+
+    private fun topRightTip(
+        shapeSize: Size,
+        density: Density,
+    ) = Path().apply {
+        val scale = density.density
+        val tipHeight = density.run { TipHeight.toPx() }
+        val tipWidth = density.run { CornerTipWidth.toPx() }
+
+        moveTo(shapeSize.width - tipWidth, tipHeight)
+        addCornerTip(scale)
+    }
+
+    private fun topLeftTip(
+        density: Density,
+    ) = Path().apply {
+        val scale = density.density
+        val tipHeight = density.run { TipHeight.toPx() }
+        val tipWidth = density.run { CornerTipWidth.toPx() }
+
+        moveTo(tipWidth, tipHeight)
+        addCornerTip(scale, flipHorizontally = true)
+    }
+
+    private fun bottomRightTip(
+        shapeSize: Size,
+        density: Density,
+    ) = Path().apply {
+        val scale = density.density
+        val tipHeight = density.run { TipHeight.toPx() }
+        val tipWidth = density.run { CornerTipWidth.toPx() }
+
+        moveTo(shapeSize.width - tipWidth, shapeSize.height - tipHeight)
+        addCornerTip(scale, flipVertically = true)
+    }
+
+    private fun bottomLeftTip(
+        shapeSize: Size,
+        density: Density,
+    ) = Path().apply {
+        val scale = density.density
+        val tipHeight = density.run { TipHeight.toPx() }
+        val tipWidth = density.run { CornerTipWidth.toPx() }
+
+        moveTo(tipWidth, shapeSize.height - tipHeight)
+        addCornerTip(scale, flipHorizontally = true, flipVertically = true)
+    }
+
+    private fun Path.addEdgeTip(
+        scale: Float,
+        flipVertically: Boolean = false,
+    ) {
+        val hScale = scale
+        val vScale = scale * (if (flipVertically) -1 else 1)
+
+        relativeCubicTo(1.71f * hScale, 0f * vScale, 3.42f * hScale, 0.01f * vScale, 5.14f * hScale, -0.01f * vScale)
+        relativeCubicTo(1.62f * hScale, -0.02f * vScale, 3.47f * hScale, -0.04f * vScale, 5.07f * hScale, -0.65f * vScale)
+        relativeCubicTo(1.72f * hScale, -0.65f * vScale, 2.86f * hScale, -1.79f * vScale, 4.01f * hScale, -3.12f * vScale)
+        relativeCubicTo(0.83f * hScale, -0.96f * vScale, 2.45f * hScale, -3.01f * vScale, 3.24f * hScale, -4.01f * vScale)
+        relativeCubicTo(0.65f * hScale, -0.81f * vScale, 1.91f * hScale, -2.42f * vScale, 2.6f * hScale, -3.2f * vScale)
+        relativeCubicTo(0.87f * hScale, -0.98f * vScale, 1.95f * hScale, -2.02f * vScale, 3.44f * hScale, -2.02f * vScale)
+        relativeCubicTo(1.49f * hScale, 0f * vScale, 2.57f * hScale, 1.04f * vScale, 3.44f * hScale, 2.02f * vScale)
+        relativeCubicTo(0.69f * hScale, 0.78f * vScale, 1.96f * hScale, 2.38f * vScale, 2.6f * hScale, 3.2f * vScale)
+        relativeCubicTo(0.79f * hScale, 0.99f * vScale, 2.41f * hScale, 3.04f * vScale, 3.24f * hScale, 4.01f * vScale)
+        relativeCubicTo(1.15f * hScale, 1.34f * vScale, 2.29f * hScale, 2.47f * vScale, 4.01f * hScale, 3.12f * vScale)
+        relativeCubicTo(1.6f * hScale, 0.6f * vScale, 3.43f * hScale, 0.63f * vScale, 5.07f * hScale, 0.65f * vScale)
+        relativeCubicTo(1.71f * hScale, 0.02f * vScale, 3.43f * hScale, 0.01f * vScale, 5.14f * hScale, 0.01f * vScale)
+    }
+
+    private fun Path.addCornerTip(
+        scale: Float,
+        flipHorizontally: Boolean = false,
+        flipVertically: Boolean = false,
+    ) {
+        val hScale = scale * (if (flipHorizontally) -1 else 1)
+        val vScale = scale * (if (flipVertically) -1 else 1)
+
+        relativeCubicTo(1.71f * hScale, 0f * vScale, 3.42f * hScale, 0.01f * vScale, 5.14f * hScale, -0.01f * vScale)
+        relativeCubicTo(1.62f * hScale, -0.02f * vScale, 3.47f * hScale, -0.04f * vScale, 5.07f * hScale, -0.65f * vScale)
+        relativeCubicTo(1.72f * hScale, -0.65f * vScale, 2.86f * hScale, -1.79f * vScale, 4.01f * hScale, -3.12f * vScale)
+        relativeCubicTo(0.83f * hScale, -0.96f * vScale, 2.45f * hScale, -3.01f * vScale, 3.24f * hScale, -4.01f * vScale)
+        relativeCubicTo(0.65f * hScale, -0.81f * vScale, 1.91f * hScale, -2.42f * vScale, 2.6f * hScale, -3.2f * vScale)
+        relativeCubicTo(0.87f * hScale, -0.98f * vScale, 1.95f * hScale, -2.02f * vScale, 3.44f * hScale, -2.02f * vScale)
+        relativeCubicTo(1.49f * hScale, 0f * vScale, 2.57f * hScale, 1.04f * vScale, 3.44f * hScale, 2.02f * vScale)
+        relativeCubicTo(0.69f * hScale, 0.78f * vScale, 1.96f * hScale, 2.38f * vScale, 2.6f * hScale, 3.2f * vScale)
+        relativeCubicTo(0.79f * hScale, 0.99f * vScale, 2.41f * hScale, 3.04f * vScale, 3.24f * hScale, 4.01f * vScale)
+        relativeCubicTo(7.22f * hScale, 8.4f * vScale, 7.22f * hScale, 8.4f * vScale, 7.22f * hScale, 20.28f * vScale)
+    }
+}
+
+private val TipHeight = 13.dp
+private val CornerTipWidth = 40.dp
+private val CornerTipPeakPosition = 16.5.dp
+private val CenterTipWidth = 47.dp
+private val CornerRadius = 10.dp
+
+@Preview
+@Composable
+private fun TooltipThemePreview(
+    @PreviewParameter(ThemePreviewParameterProvider::class) themeType: Theme.ThemeType,
+) {
+    AppThemeWithBackground(themeType) {
+        Box(
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Tooltip(
+                title = "Sort by “Recently Played”",
+                body = "You can now sort by Recently Played and quickly pick up where you left off.",
+                tipPosition = TipPosition.BottomStart,
+                modifier = Modifier.widthIn(max = 300.dp),
+            )
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun TooltipTipPreview(
+    @PreviewParameter(TipPositionParameterProvider::class) tipPosition: TipPosition,
+) {
+    AppThemeWithBackground(Theme.ThemeType.LIGHT) {
+        Box(
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Tooltip(
+                title = "Sort by “Recently Played”",
+                body = "You can now sort by Recently Played and quickly pick up where you left off.",
+                tipPosition = tipPosition,
+                modifier = Modifier.widthIn(max = 300.dp),
+            )
+        }
+    }
+}
+
+private class TipPositionParameterProvider : PreviewParameterProvider<TipPosition> {
+    override val values = TipPosition.entries.asSequence()
 }

@@ -6,11 +6,11 @@ import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.TextView
-import au.com.shiftyjelly.pocketcasts.models.entity.Playlist
+import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.views.R
 import au.com.shiftyjelly.pocketcasts.views.helper.PlaylistHelper
 
-class FilterAutoDownloadAdapter(private val filters: List<Playlist>, private val clickListener: ClickListener, val isDarkTheme: Boolean) : androidx.recyclerview.widget.RecyclerView.Adapter<FilterAutoDownloadAdapter.ViewHolder>() {
+class FilterAutoDownloadAdapter(private val filters: List<PlaylistEntity>, private val clickListener: ClickListener, val isDarkTheme: Boolean) : androidx.recyclerview.widget.RecyclerView.Adapter<FilterAutoDownloadAdapter.ViewHolder>() {
 
     init {
         setHasStableIds(true)
@@ -40,17 +40,18 @@ class FilterAutoDownloadAdapter(private val filters: List<Playlist>, private val
         return filters[position].id ?: androidx.recyclerview.widget.RecyclerView.NO_ID
     }
 
-    private fun addTalkBack(filter: Playlist, view: View) {
+    private fun addTalkBack(filter: PlaylistEntity, view: View) {
         val status = if (filter.autoDownload) "on" else "off"
         view.contentDescription = "${filter.title} auto downloads $status."
     }
 
     interface ClickListener {
-        fun onAutoDownloadChanged(filter: Playlist, on: Boolean)
-        fun onSettingsClicked(filter: Playlist)
+        fun onAutoDownloadChanged(filter: PlaylistEntity, on: Boolean)
     }
 
-    inner class ViewHolder(view: View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(view), View.OnClickListener {
+    inner class ViewHolder(view: View) :
+        androidx.recyclerview.widget.RecyclerView.ViewHolder(view),
+        View.OnClickListener {
         val title = view.findViewById(R.id.title) as TextView
         val image = view.findViewById(R.id.image) as ImageView
         val button = view.findViewById(R.id.row_button) as View
@@ -70,8 +71,6 @@ class FilterAutoDownloadAdapter(private val filters: List<Playlist>, private val
             }
             if (view.id == R.id.checkbox || view.id == R.id.row_button) {
                 clickListener.onAutoDownloadChanged(filter, checkBox.isChecked)
-            } else if (view.id == R.id.settings_button) {
-                clickListener.onSettingsClicked(filter)
             }
         }
     }

@@ -30,23 +30,27 @@
 
     <application
             android:name=".PocketCastsApplication"
+            android:allowBackup="false"
+            android:enableOnBackInvokedCallback="false"
             android:hardwareAccelerated="true"
             android:icon="${appIcon}"
             android:label="@string/app_name"
             android:largeHeap="true"
-            android:allowBackup="false"
-            android:usesCleartextTraffic="true"
-            android:supportsRtl="false"
-            tools:replace="android:supportsRtl"
-            android:theme="@style/ThemeDark"
             android:localeConfig="@xml/locales_config"
-            tools:ignore="UnusedAttribute">
+            android:supportsRtl="false"
+            android:theme="@style/ThemeDark"
+            android:usesCleartextTraffic="true"
+            tools:ignore="UnusedAttribute"
+            tools:replace="android:supportsRtl,android:allowBackup">
 
-        <meta-data android:name="com.google.android.gms.car.application"
+    <meta-data android:name="com.google.android.gms.car.application"
                    android:resource="@xml/automotive_app_desc"/>
 
         <meta-data android:name="com.google.android.wearable.media.theme"
                    android:resource="@style/WearMediaTheme"/>
+
+        <meta-data android:name="asset_statements"
+            android:resource="@string/asset_statements" />
 
         <!-- Main activity. Uses standard launch mode as if you go into a episode list and then exit the app, then open using recents the back button was broken. Also when on the updates tab if you click a notification and then you have to back twice. -->
         <activity
@@ -115,6 +119,42 @@
                 <data
                     android:host="pcast.pocketcasts.net"
                     android:scheme="https"/>
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:host="play.pocketcasts.com"
+                    android:scheme="https"
+                    android:pathPrefix="/podcasts/" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:host="play.pocketcasts.net"
+                    android:scheme="https"
+                    android:pathPrefix="/podcasts/" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:host="pocketcasts.com"
+                    android:scheme="https"
+                    android:pathPrefix="/podcasts/" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:host="pocketcasts.net"
+                    android:scheme="https"
+                    android:pathPrefix="/podcasts/" />
             </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
@@ -516,7 +556,7 @@
             android:targetActivity=".ui.MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_pride_2023">
+            android:icon="@mipmap/ic_launcher_pride">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -643,6 +683,7 @@
 
         <!-- Disable Sentry exception tracking so we can turn it on based on the user preference -->
         <meta-data android:name="io.sentry.auto-init" android:value="false" />
+
     </application>
 
 </manifest>

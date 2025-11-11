@@ -7,10 +7,11 @@ import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.compose.PodcastColors
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
+import au.com.shiftyjelly.pocketcasts.models.type.SignInState
+import au.com.shiftyjelly.pocketcasts.models.type.Subscription
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarkArguments
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
@@ -22,12 +23,10 @@ import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
 import au.com.shiftyjelly.pocketcasts.settings.whatsnew.WhatsNewFragment
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectBookmarksHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.reactivex.BackpressureStrategy
-import java.util.Date
+import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,7 +90,7 @@ class MainActivityViewModel
         val lastSeenVersionCode = settings.getWhatsNewVersionCode()
         val migratedVersion = settings.getMigratedVersionCode()
         if (migratedVersion != 0) { // We don't want to show this to new users, there is a race condition between this and the version migration
-            val whatsNewShouldBeShown = WhatsNewFragment.isWhatsNewNewerThan(lastSeenVersionCode) && FeatureFlag.isEnabled(Feature.REIMAGINE_SHARING)
+            val whatsNewShouldBeShown = WhatsNewFragment.isWhatsNewNewerThan(lastSeenVersionCode)
             _state.update { state -> state.copy(shouldShowWhatsNew = whatsNewShouldBeShown) }
         }
     }
@@ -112,12 +111,11 @@ class MainActivityViewModel
     val isSignedIn: Boolean
         get() = signInState.value?.isSignedIn ?: false
 
-    fun shouldShowCancelled(subscriptionStatus: SubscriptionStatus): Boolean {
-        val paidStatus = (subscriptionStatus as? SubscriptionStatus.Paid) ?: return false
-        val renewing = subscriptionStatus.autoRenew
+    fun shouldShowCancelled(subscription: Subscription): Boolean {
+        val renewing = subscription.isAutoRenewing
         val cancelAcknowledged = settings.getCancelledAcknowledged()
-        val giftDays = paidStatus.giftDays
-        val expired = paidStatus.expiryDate.before(Date())
+        val giftDays = subscription.giftDays
+        val expired = subscription.expiryDate.isBefore(Instant.now())
 
         return !renewing && !cancelAcknowledged && giftDays == 0 && expired
     }
@@ -127,6 +125,7 @@ class MainActivityViewModel
     }
 
     suspend fun isEndOfYearStoriesEligible() = endOfYearManager.isEligibleForEndOfYear()
+
     fun updateStoriesModalShowState(show: Boolean) {
         viewModelScope.launch {
             shouldShowStoriesModal.value = show &&
@@ -139,34 +138,29 @@ class MainActivityViewModel
         multiSelectBookmarksHelper.closeMultiSelect()
     }
 
-    fun buildBookmarkArguments(bookmarkUuid: String? = null, onSuccess: (BookmarkArguments) -> Unit) {
-        viewModelScope.launch {
-            // load the existing bookmark
-            val bookmark = bookmarkUuid?.let { bookmarkManager.findBookmark(it) }
-            if (bookmarkUuid != null && bookmark == null) {
+    suspend fun createBookmarkArguments(bookmarkUuid: String?): BookmarkArguments? {
+        val bookmark = if (bookmarkUuid != null) {
+            val existingBookmark = bookmarkManager.findBookmark(bookmarkUuid)
+            if (existingBookmark == null) {
                 _snackbarMessage.emit(LR.string.bookmark_not_found)
-                return@launch
+                return null
             }
-            val currentEpisode = playbackManager.getCurrentEpisode()
-            val episodeUuid = bookmark?.episodeUuid ?: currentEpisode?.uuid ?: return@launch
-            val timeInSecs = bookmark?.timeSecs ?: currentEpisode?.let { playbackManager.getCurrentTimeMs(currentEpisode) / 1000 } ?: 0
-
-            val podcast =
-                bookmark?.let { podcastManager.findPodcastByUuid(bookmark.podcastUuid) }
-            val backgroundColor =
-                if (podcast == null) 0xFF000000.toInt() else theme.playerBackgroundColor(podcast)
-            val tintColor =
-                if (podcast == null) 0xFFFFFFFF.toInt() else theme.playerHighlightColor(podcast)
-
-            val arguments = BookmarkArguments(
-                bookmarkUuid = bookmark?.uuid,
-                episodeUuid = episodeUuid,
-                timeSecs = timeInSecs,
-                backgroundColor = backgroundColor,
-                tintColor = tintColor,
-            )
-            onSuccess(arguments)
+            existingBookmark
+        } else {
+            null
         }
+
+        val currentEpisode = playbackManager.getCurrentEpisode()
+        val episodeUuid = bookmark?.episodeUuid ?: currentEpisode?.uuid ?: return null
+        val timeInSecs = bookmark?.timeSecs ?: currentEpisode?.let { playbackManager.getCurrentTimeMs(currentEpisode) / 1000 } ?: 0
+        val podcast = bookmark?.let { podcastManager.findPodcastByUuid(bookmark.podcastUuid) }
+
+        return BookmarkArguments(
+            bookmarkUuid = bookmarkUuid,
+            episodeUuid = episodeUuid,
+            timeSecs = timeInSecs,
+            podcastColors = podcast?.let(::PodcastColors) ?: PodcastColors.ForUserEpisode,
+        )
     }
 
     fun viewBookmark(bookmarkUuid: String) {

@@ -12,37 +12,53 @@ import au.com.shiftyjelly.pocketcasts.compose.bars.SystemBarsStyles
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.Network
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 object OnboardingRecommendationsFlow {
+    const val ROUTE = "onboardingRecommendationsFlow"
 
-    const val route = "onboardingRecommendationsFlow"
-
-    private const val start = "start"
-    private const val search = "search"
+    private const val INTERESTS = "interests"
+    private const val RECOMMENDATIONS = "recommendations"
+    private const val SEARCH = "search"
 
     fun NavGraphBuilder.onboardingRecommendationsFlowGraph(
         theme: Theme.ThemeType,
         flow: OnboardingFlow,
-        onBackPressed: () -> Unit,
+        onBackPress: () -> Unit,
         onComplete: () -> Unit,
         navController: NavController,
         onUpdateSystemBars: (SystemBarsStyles) -> Unit,
     ) {
+        val root = if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_RECOMMENDATIONS)) {
+            INTERESTS
+        } else {
+            RECOMMENDATIONS
+        }
         navigation(
-            route = this@OnboardingRecommendationsFlow.route,
-            startDestination = start,
+            route = this@OnboardingRecommendationsFlow.ROUTE,
+            startDestination = root,
         ) {
             importFlowGraph(theme, navController, flow, onUpdateSystemBars)
 
-            composable(start) {
+            composable(INTERESTS) {
+                OnboardingInterestsPage(
+                    theme = theme,
+                    onBackPress = { navController.popBackStack() },
+                    onShowRecommendations = { navController.navigate(RECOMMENDATIONS) },
+                    onUpdateSystemBars = onUpdateSystemBars,
+                )
+            }
+
+            composable(RECOMMENDATIONS) {
                 OnboardingRecommendationsStartPage(
                     theme,
-                    onImportClicked = { navController.navigate(OnboardingImportFlow.route) },
+                    onImportClick = { navController.navigate(OnboardingImportFlow.ROUTE) },
                     onSearch = with(LocalContext.current) {
                         {
                             if (Network.isConnected(this)) {
-                                navController.navigate(search)
+                                navController.navigate(SEARCH)
                             } else {
                                 Toast.makeText(
                                     this,
@@ -52,15 +68,15 @@ object OnboardingRecommendationsFlow {
                             }
                         }
                     },
-                    onBackPressed = onBackPressed,
+                    onBackPress = onBackPress,
                     onComplete = onComplete,
                     onUpdateSystemBars = onUpdateSystemBars,
                 )
             }
-            composable(search) {
+            composable(SEARCH) {
                 OnboardingRecommendationsSearchPage(
                     theme = theme,
-                    onBackPressed = { navController.popBackStack() },
+                    onBackPress = { navController.popBackStack() },
                     onUpdateSystemBars = onUpdateSystemBars,
                 )
             }

@@ -42,7 +42,6 @@ import au.com.shiftyjelly.pocketcasts.localization.helper.TimeHelper
 import au.com.shiftyjelly.pocketcasts.models.to.Chapter
 import au.com.shiftyjelly.pocketcasts.player.R
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -102,7 +101,7 @@ fun ChapterRow(
                 Spacer(Modifier.width(8.dp))
             }
             TextH50(
-                text = (chapter.index + 1).toString(),
+                text = (chapter.uiIndex).toString(),
                 color = textColor,
                 modifier = Modifier
                     .padding(horizontal = 12.dp),
@@ -189,55 +188,45 @@ private fun getTextColor(
     }
 }
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "Light")
 @Preview(name = "Light")
 @Composable
-fun ChapterRowLightPreview() = ChapterRowPreview(Theme.ThemeType.LIGHT)
+private fun ChapterRowLightPreview() = ChapterRowPreview(Theme.ThemeType.LIGHT)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "Dark")
 @Preview(name = "Dark")
 @Composable
-fun ChapterRowDarkPreview() = ChapterRowPreview(Theme.ThemeType.DARK)
+private fun ChapterRowDarkPreview() = ChapterRowPreview(Theme.ThemeType.DARK)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "Rose")
 @Preview(name = "Rose")
 @Composable
-fun ChapterRowRosePreview() = ChapterRowPreview(Theme.ThemeType.ROSE)
+private fun ChapterRowRosePreview() = ChapterRowPreview(Theme.ThemeType.ROSE)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "Indigo")
 @Preview(name = "Indigo")
 @Composable
-fun ChapterRowIndigoPreview() = ChapterRowPreview(Theme.ThemeType.INDIGO)
+private fun ChapterRowIndigoPreview() = ChapterRowPreview(Theme.ThemeType.INDIGO)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "ExtraDark")
 @Preview(name = "ExtraDark")
 @Composable
-fun ChapterRowExtraDarkPreview() = ChapterRowPreview(Theme.ThemeType.EXTRA_DARK)
+private fun ChapterRowExtraDarkPreview() = ChapterRowPreview(Theme.ThemeType.EXTRA_DARK)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "DarkContrast")
 @Preview(name = "DarkContrast")
 @Composable
-fun ChapterRowDarkContrastPreview() = ChapterRowPreview(Theme.ThemeType.DARK_CONTRAST)
+private fun ChapterRowDarkContrastPreview() = ChapterRowPreview(Theme.ThemeType.DARK_CONTRAST)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "LightContrast")
 @Preview(name = "LightContrast")
 @Composable
-fun ChapterRowLightContrastPreview() = ChapterRowPreview(Theme.ThemeType.LIGHT_CONTRAST)
+private fun ChapterRowLightContrastPreview() = ChapterRowPreview(Theme.ThemeType.LIGHT_CONTRAST)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "Electric")
 @Preview(name = "Electric")
 @Composable
-fun ChapterRowElectricPreview() = ChapterRowPreview(Theme.ThemeType.ELECTRIC)
+private fun ChapterRowElectricPreview() = ChapterRowPreview(Theme.ThemeType.ELECTRIC)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "Classic")
 @Preview(name = "Classic")
 @Composable
-fun ChapterRowClassicPreview() = ChapterRowPreview(Theme.ThemeType.CLASSIC_LIGHT)
+private fun ChapterRowClassicPreview() = ChapterRowPreview(Theme.ThemeType.CLASSIC_LIGHT)
 
-@ShowkaseComposable(name = "ChapterRow", group = "Chapter", styleName = "Radioactive")
 @Preview(name = "Radioactive")
 @Composable
-fun ChapterRowRadioactivePreview() = ChapterRowPreview(Theme.ThemeType.RADIOACTIVE)
+private fun ChapterRowRadioactivePreview() = ChapterRowPreview(Theme.ThemeType.RADIOACTIVE)
 
 @Composable
 private fun ChapterRowPreview(theme: Theme.ThemeType) {
@@ -247,7 +236,8 @@ private fun ChapterRowPreview(theme: Theme.ThemeType) {
         endTime = 62.seconds,
         url = "https://pocketcasts.com".toHttpUrlOrNull(),
         imagePath = null,
-        index = 1,
+        index = 0,
+        uiIndex = 5,
     )
     AppThemeWithBackground(theme) {
         ChaptersTheme {

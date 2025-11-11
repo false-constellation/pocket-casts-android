@@ -11,10 +11,14 @@ import android.widget.TextView
 import androidx.appcompat.widget.Toolbar
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.analytics.discoverListPodcastSubscribed
+import au.com.shiftyjelly.pocketcasts.analytics.discoverListPodcastTapped
 import au.com.shiftyjelly.pocketcasts.discover.R
+import au.com.shiftyjelly.pocketcasts.discover.util.DiscoverDeepLinkManager.Companion.STAFF_PICKS_LIST_ID
 import au.com.shiftyjelly.pocketcasts.discover.view.DiscoverFragment.Companion.EPISODE_UUID_KEY
 import au.com.shiftyjelly.pocketcasts.discover.view.DiscoverFragment.Companion.LIST_ID_KEY
 import au.com.shiftyjelly.pocketcasts.discover.view.DiscoverFragment.Companion.PODCAST_UUID_KEY
@@ -26,6 +30,8 @@ import au.com.shiftyjelly.pocketcasts.models.type.EpisodeViewSource
 import au.com.shiftyjelly.pocketcasts.podcasts.view.episode.EpisodeContainerFragment
 import au.com.shiftyjelly.pocketcasts.podcasts.view.podcast.PodcastFragment
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
+import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationManager
+import au.com.shiftyjelly.pocketcasts.repositories.notification.OnboardingNotificationType
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.servers.model.DiscoverEpisode
 import au.com.shiftyjelly.pocketcasts.servers.model.DiscoverPodcast
@@ -43,16 +49,21 @@ import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import coil.load
 import coil.transform.CircleCropTransformation
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
-open class PodcastGridListFragment : BaseFragment(), Toolbar.OnMenuItemClickListener {
+open class PodcastGridListFragment :
+    BaseFragment(),
+    Toolbar.OnMenuItemClickListener {
 
     @Inject lateinit var podcastManager: PodcastManager
 
     @Inject lateinit var settings: Settings
 
     @Inject lateinit var analyticsTracker: AnalyticsTracker
+
+    @Inject lateinit var notificationManager: NotificationManager
 
     companion object {
         internal const val ARG_LIST_UUID = "listUuid"
@@ -65,6 +76,7 @@ open class PodcastGridListFragment : BaseFragment(), Toolbar.OnMenuItemClickList
         internal const val ARG_TAGLINE = "tagline"
         internal const val ARG_CURATED = "curated"
         internal const val ARG_INFERRED_ID = "inferredId"
+        internal const val ARG_AUTHENTICATED = "authenticated"
 
         fun newInstanceBundle(
             networkLoadableList: NetworkLoadableList,
@@ -79,6 +91,7 @@ open class PodcastGridListFragment : BaseFragment(), Toolbar.OnMenuItemClickList
                 putString(ARG_EXPANDED_STYLE, networkLoadableList.expandedStyle.stringValue)
                 putString(ARG_TAGLINE, networkLoadableList.expandedTopItemLabel)
                 putBoolean(ARG_CURATED, networkLoadableList.curated)
+                putBoolean(ARG_AUTHENTICATED, networkLoadableList.authenticated ?: false)
             }
         }
     }
@@ -101,7 +114,7 @@ open class PodcastGridListFragment : BaseFragment(), Toolbar.OnMenuItemClickList
     val listUuid: String?
         get() = arguments?.getString(ARG_LIST_UUID)
 
-    private val inferredId: String
+    val inferredId: String
         get() = arguments?.getString(ARG_INFERRED_ID) ?: NetworkLoadableList.Companion.NONE
 
     val sourceUrl: String?
@@ -116,22 +129,24 @@ open class PodcastGridListFragment : BaseFragment(), Toolbar.OnMenuItemClickList
     protected val viewModel: PodcastListViewModel by viewModels()
 
     val onPodcastClicked: (DiscoverPodcast) -> Unit = { podcast ->
-        listUuid?.let {
-            analyticsTracker.track(AnalyticsEvent.DISCOVER_LIST_PODCAST_TAPPED, mapOf(LIST_ID_KEY to it, PODCAST_UUID_KEY to podcast.uuid))
-        }
+        val listDate = viewModel.listFeed?.date
+        analyticsTracker.discoverListPodcastTapped(podcastUuid = podcast.uuid, listId = listUuid, listDate = listDate)
         val sourceView = when (expandedStyle) {
             is ExpandedStyle.RankedList -> SourceView.DISCOVER_RANKED_LIST
             is ExpandedStyle.PlainList -> SourceView.DISCOVER_PLAIN_LIST
             else -> SourceView.DISCOVER
         }
-        val fragment = PodcastFragment.newInstance(podcastUuid = podcast.uuid, fromListUuid = listUuid, sourceView = sourceView)
+        val fragment = PodcastFragment.newInstance(
+            podcastUuid = podcast.uuid,
+            fromListUuid = listUuid,
+            fromListDate = listDate,
+            sourceView = sourceView,
+        )
         (activity as FragmentHostListener).addFragment(fragment)
     }
 
     val onPodcastSubscribe: (String) -> Unit = { podcastUuid ->
-        listUuid?.let {
-            analyticsTracker.track(AnalyticsEvent.DISCOVER_LIST_PODCAST_SUBSCRIBED, mapOf(LIST_ID_KEY to it, PODCAST_UUID_KEY to podcastUuid))
-        }
+        analyticsTracker.discoverListPodcastSubscribed(podcastUuid = podcastUuid, listId = listUuid, listDate = viewModel.listFeed?.date)
         var podcastSubscribedSource = SourceView.DISCOVER
         if (expandedStyle is ExpandedStyle.RankedList) {
             podcastSubscribedSource = SourceView.DISCOVER_RANKED_LIST
@@ -168,12 +183,22 @@ open class PodcastGridListFragment : BaseFragment(), Toolbar.OnMenuItemClickList
         viewModel.stopPlayback()
     }
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        if (listUuid == STAFF_PICKS_LIST_ID) {
+            lifecycleScope.launch {
+                notificationManager.updateUserFeatureInteraction(OnboardingNotificationType.StaffPicks)
+            }
+        }
+        super.onViewCreated(view, savedInstanceState)
+    }
+
     override fun onMenuItemClick(item: MenuItem): Boolean {
         if (item.itemId == R.id.share_list) {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, shareUrl ?: "")
             }
+            analyticsTracker.track(AnalyticsEvent.DISCOVER_LIST_SHARE_TAPPED)
             startActivity(Intent.createChooser(intent, getString(LR.string.podcasts_share_via)))
             return true
         }

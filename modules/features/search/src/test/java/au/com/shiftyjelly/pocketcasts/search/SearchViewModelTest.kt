@@ -13,10 +13,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.junit.MockitoJUnitRunner
-import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
-import org.mockito.kotlin.whenever
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(MockitoJUnitRunner::class)
@@ -37,8 +35,6 @@ class SearchViewModelTest {
 
     @Before
     fun setUp() {
-        whenever(searchHandler.searchResults).thenReturn(mock())
-        whenever(searchHandler.loading).thenReturn(mock())
         viewModel =
             SearchViewModel(searchHandler, searchHistoryManager, podcastManager, AnalyticsTracker.test())
     }

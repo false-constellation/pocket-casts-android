@@ -10,8 +10,9 @@ import java.io.PrintWriter
 import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.IllegalFormatException
+import java.util.Locale
 import timber.log.Timber
-import timber.log.Timber.Forest.tag
 
 object LogBuffer {
 
@@ -25,7 +26,7 @@ object LogBuffer {
     private const val LOG_FILE_NAME = "debug.log"
     private const val LOG_BACKUP_FILE_NAME = "debug.log.1"
 
-    private val LOG_FILE_DATE_FORMAT = SimpleDateFormat("dd/M HH:mm:ss")
+    private val LOG_FILE_DATE_FORMAT = SimpleDateFormat("dd/M HH:mm:ss.SSS", Locale.US)
     private const val FILE_MAX_SIZE_BYTES = (200 * 1024).toLong()
 
     private var logPath: String? = null
@@ -44,11 +45,10 @@ object LogBuffer {
     private fun add(message: String?) {
         val path = logPath
         val backupPath = logBackupPath
-        if (message == null || message.isEmpty() || path == null || backupPath == null) {
+        if (message.isNullOrEmpty() || path == null || backupPath == null) {
             return
         }
 
-        var out: FileWriter? = null
         try {
             val logFile = File(path)
             var exists = logFile.exists()
@@ -61,17 +61,13 @@ object LogBuffer {
                 exists = false
             }
 
-            out = FileWriter(logPath, exists)
-            out.write(message)
-            out.write("\n")
-            out.flush()
+            FileWriter(logPath, exists).use { writer ->
+                writer.write(message)
+                writer.write("\n")
+                writer.flush()
+            }
         } catch (e: IOException) {
             Timber.w(e, "Unable to write log buffer %s", logPath)
-        } finally {
-            try {
-                out?.close()
-            } catch (t: Throwable) {
-            }
         }
     }
 
@@ -95,18 +91,6 @@ object LogBuffer {
         }
     }
 
-    fun clearLog() {
-        val path = logPath
-        val backupPath = logBackupPath
-        if (path == null || backupPath == null) {
-            return
-        }
-        val logFile = File(path)
-        val logBackupFile = File(backupPath)
-        logFile.delete()
-        logBackupFile.delete()
-    }
-
     fun i(tag: String, message: String, vararg args: Any) {
         addLog(Log.INFO, tag, null, message, *args)
     }
@@ -123,31 +107,26 @@ object LogBuffer {
         addLog(Log.ERROR, tag, null, message, *args)
     }
 
-    fun trace(tag: String, message: String, vararg args: Any) {
-        addLog(Log.INFO, tag, null, message + getThreadStackTraceString(), *args)
-    }
-
     fun e(tag: String, throwable: Throwable, message: String, vararg args: Any) {
         addLog(Log.ERROR, tag, throwable, message, *args)
     }
 
-    @Suppress("NAME_SHADOWING")
     fun addLog(priority: Int, tag: String, throwable: Throwable?, message: String?, vararg args: Any) {
-        var message = message
-        if (message != null && message.isEmpty()) {
-            message = null
+        var logMessage = message
+        if (logMessage != null && logMessage.isEmpty()) {
+            logMessage = null
         }
-        if (message == null) {
+        if (logMessage == null) {
             if (throwable == null) {
                 return
             }
-            message = getStackTraceString(throwable)
+            logMessage = getStackTraceString(throwable)
         } else {
             if (args.isNotEmpty()) {
-                message = String.format(message, *args)
+                logMessage = logMessage.formatCatching(*args)
             }
             if (throwable != null) {
-                message += "\n" + getStackTraceString(throwable)
+                logMessage += "\n" + getStackTraceString(throwable)
             }
         }
 
@@ -156,47 +135,26 @@ object LogBuffer {
         when (priority) {
             Log.DEBUG -> {
                 prefix = "D "
-                Timber.d(timberPrefix + message)
+                Timber.tag(tag).d("%s%s", timberPrefix, logMessage)
             }
             Log.INFO -> {
                 prefix = "I "
-                Timber.i(timberPrefix + message)
+                Timber.tag(tag).i("%s%s", timberPrefix, logMessage)
             }
             Log.WARN -> {
                 prefix = "W "
-                Timber.w(timberPrefix + message)
+                Timber.tag(tag).w("%s%s", timberPrefix, logMessage)
             }
             Log.ERROR -> {
                 prefix = "E "
-                Timber.e(timberPrefix + message)
+                Timber.tag(tag).e("%s%s", timberPrefix, logMessage)
             }
             else -> prefix = ""
         }
 
-        prefix += LOG_FILE_DATE_FORMAT.format(Date()) // + " ["+tag+"]";
+        prefix += LOG_FILE_DATE_FORMAT.format(Date())
 
-        add("$prefix $message")
-    }
-
-    private fun getThreadStackTraceString(): String {
-        val sw = StringWriter(256)
-        val pw = PrintWriter(sw, false)
-        Throwable().printStackTrace(pw)
-        pw.flush()
-        val rawTrace = sw.toString()
-        val lines = rawTrace.split("\n".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
-        val trace = StringBuilder()
-        for (i in lines.indices) {
-            if (i == 0) {
-                continue
-            }
-            val line = lines[i]
-            if (!line.startsWith("\tat au.com.shiftyjelly.pocketcasts.") || line.contains("LogBuffer")) {
-                continue
-            }
-            trace.append("\n at ").append(line.substring(34))
-        }
-        return trace.toString()
+        add("$prefix $logMessage")
     }
 
     private fun getStackTraceString(t: Throwable): String {
@@ -207,5 +165,14 @@ object LogBuffer {
         t.printStackTrace(pw)
         pw.flush()
         return sw.toString()
+    }
+
+    private fun String.formatCatching(vararg args: Any) = try {
+        this.format(*args)
+    } catch (e: IllegalFormatException) {
+        // Return the string without the arguments, including the error
+        val errorDetails = "Unable to format log message with args ${args.contentToString()}"
+        Timber.e(e, errorDetails)
+        "$this ($errorDetails)"
     }
 }

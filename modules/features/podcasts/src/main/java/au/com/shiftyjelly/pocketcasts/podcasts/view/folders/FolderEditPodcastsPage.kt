@@ -5,13 +5,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.Card
 import androidx.compose.material.Checkbox
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
@@ -35,12 +36,13 @@ import au.com.shiftyjelly.pocketcasts.compose.bars.BottomSheetAppBar
 import au.com.shiftyjelly.pocketcasts.compose.bars.NavigationButton
 import au.com.shiftyjelly.pocketcasts.compose.buttons.RowButton
 import au.com.shiftyjelly.pocketcasts.compose.components.HorizontalDivider
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.compose.components.PodcastSelectedText
 import au.com.shiftyjelly.pocketcasts.compose.components.SearchBar
 import au.com.shiftyjelly.pocketcasts.compose.components.TextP40
 import au.com.shiftyjelly.pocketcasts.compose.components.TextP50
 import au.com.shiftyjelly.pocketcasts.compose.components.rememberViewInteropNestedScrollConnection
+import au.com.shiftyjelly.pocketcasts.compose.layout.verticalNavigationBars
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.models.entity.Folder
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
@@ -51,29 +53,40 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @Composable
 fun FolderEditPodcastsPage(
-    onCloseClick: () -> Unit,
-    onNextClick: () -> Unit,
-    viewModel: FolderEditViewModel,
-    navigationButton: NavigationButton = NavigationButton.Close,
     settings: Settings,
     fragmentManager: FragmentManager,
+    viewModel: FolderEditViewModel,
+    onCloseClick: () -> Unit,
+    onNextClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    navigationButton: NavigationButton = NavigationButton.Close,
 ) {
     val state: FolderEditViewModel.State by viewModel.state.collectAsState()
     val context = LocalContext.current
-    Surface(modifier = Modifier.nestedScroll(rememberViewInteropNestedScrollConnection())) {
+    Surface(modifier = modifier.nestedScroll(rememberViewInteropNestedScrollConnection())) {
         Column {
             BottomSheetAppBar(
                 navigationButton = navigationButton,
                 onNavigationClick = onCloseClick,
             )
             PageList(
-                onNextClick = onNextClick,
+                state = state,
                 onSortClick = {
                     SelectSortByDialog(settings, viewModel::changeSortOrder).show(context = context, fragmentManager = fragmentManager)
                 },
-                state = state,
-                viewModel = viewModel,
+                onSearchPodcasts = viewModel::searchPodcasts,
+                onAddPodcast = viewModel::addPodcast,
+                onRemovePodcast = viewModel::removePodcast,
                 modifier = Modifier.weight(1f),
+            )
+            RowButton(
+                text = when {
+                    state.isEditFolder -> stringResource(LR.string.update)
+                    state.selectedCount == 1 -> stringResource(LR.string.add_podcasts_singular)
+                    else -> stringResource(LR.string.add_podcasts_plural, state.selectedCount)
+                },
+                onClick = { onNextClick() },
+                modifier = Modifier.padding(WindowInsets.verticalNavigationBars.asPaddingValues()),
             )
         }
     }
@@ -81,19 +94,22 @@ fun FolderEditPodcastsPage(
 
 @Composable
 private fun PageList(
-    onNextClick: () -> Unit,
-    onSortClick: () -> Unit,
     state: FolderEditViewModel.State,
-    viewModel: FolderEditViewModel,
+    onSortClick: () -> Unit,
+    onSearchPodcasts: (String) -> Unit,
+    onAddPodcast: (String) -> Unit,
+    onRemovePodcast: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(modifier = modifier) {
+    LazyColumn(
+        modifier = modifier,
+    ) {
         item {
             Column {
                 LargePageTitle(text = stringResource(if (state.isCreateFolder) LR.string.create_folder else LR.string.filters_choose_podcasts))
                 SearchSortBar(
                     searchText = state.searchText,
-                    onSearchTextChanged = { text -> viewModel.searchPodcasts(text) },
+                    onSearchTextChange = onSearchPodcasts,
                     onSortClick = onSortClick,
                 )
                 HorizontalDivider()
@@ -113,26 +129,23 @@ private fun PageList(
                 podcast = podcastWithFolder.podcast,
                 folder = if (state.folder?.uuid == podcastWithFolder.folder?.uuid) null else podcastWithFolder.folder,
                 selected = state.isSelected(podcastWithFolder.podcast),
-                addPodcast = { uuid -> viewModel.addPodcast(uuid) },
-                removePodcast = { uuid -> viewModel.removePodcast(uuid) },
+                addPodcast = onAddPodcast,
+                removePodcast = onRemovePodcast,
             )
         }
         item {
             Spacer(modifier = Modifier.height(7.dp))
         }
     }
-    val buttonText = when {
-        state.isEditFolder -> stringResource(LR.string.update)
-        state.selectedCount == 1 -> stringResource(LR.string.add_podcasts_singular)
-        else -> stringResource(LR.string.add_podcasts_plural, state.selectedCount)
-    }
-    Card(elevation = 8.dp) {
-        RowButton(text = buttonText, onClick = { onNextClick() })
-    }
 }
 
 @Composable
-private fun SearchSortBar(searchText: String, onSearchTextChanged: (String) -> Unit, onSortClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SearchSortBar(
+    searchText: String,
+    onSearchTextChange: (String) -> Unit,
+    onSortClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -142,7 +155,7 @@ private fun SearchSortBar(searchText: String, onSearchTextChanged: (String) -> U
         SearchBar(
             text = searchText,
             placeholder = stringResource(LR.string.search_podcasts),
-            onTextChanged = onSearchTextChanged,
+            onTextChange = onSearchTextChange,
             modifier = Modifier
                 .padding(start = 16.dp)
                 .weight(1f),
@@ -181,7 +194,8 @@ private fun PodcastSelectRow(
         Box(
             modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         ) {
-            PodcastImage(
+            @Suppress("DEPRECATION")
+            PodcastImageDeprecated(
                 uuid = podcast.uuid,
                 modifier = Modifier.size(56.dp),
             )

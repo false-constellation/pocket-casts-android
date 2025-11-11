@@ -14,9 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.material.Text
-import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.UpgradeFeatureCard
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
 import au.com.shiftyjelly.pocketcasts.compose.images.SubscriptionBadge
 import au.com.shiftyjelly.pocketcasts.wear.ui.component.WatchListChip
@@ -28,20 +27,21 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 import au.com.shiftyjelly.pocketcasts.ui.R as UR
 
 object RequirePlusScreen {
-    const val route = "requirePlus"
+    const val ROUTE = "requirePlus"
 }
 
 @Composable
 fun RequirePlusScreen(
     onContinueToLogin: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: RequirePlusViewModel = hiltViewModel(),
 ) {
     val columnState = rememberResponsiveColumnState()
 
     ScreenScaffold(
         scrollState = columnState,
+        modifier = modifier,
     ) {
-        val viewModel = hiltViewModel<RequirePlusViewModel>()
-
         CallOnce {
             viewModel.onShown()
         }
@@ -51,8 +51,8 @@ fun RequirePlusScreen(
         ) {
             item {
                 SubscriptionBadge(
-                    iconRes = UpgradeFeatureCard.PLUS.iconRes,
-                    shortNameRes = UpgradeFeatureCard.PLUS.shortNameRes,
+                    iconRes = IR.drawable.ic_plus,
+                    shortNameRes = LR.string.pocket_casts_plus_short,
                     iconColor = Color.Black,
                     backgroundColor = colorResource(UR.color.plus_gold),
                     textColor = Color.Black,

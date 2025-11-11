@@ -19,11 +19,11 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
@@ -34,8 +34,8 @@ import com.google.android.horologist.compose.layout.ScalingLazyColumn
 import com.google.android.horologist.compose.layout.ScalingLazyColumnState
 
 object PodcastScreen {
-    const val argument = "podcastUuid"
-    const val route = "podcast/{$argument}"
+    const val ARGUMENT = "podcastUuid"
+    const val ROUTE = "podcast/{$ARGUMENT}"
     val podcastImageSize = 72.dp
 
     fun navigateRoute(podcastUuid: String) = "podcast/$podcastUuid"
@@ -43,10 +43,10 @@ object PodcastScreen {
 
 @Composable
 fun PodcastScreen(
+    columnState: ScalingLazyColumnState,
     onEpisodeTap: (PodcastEpisode) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: PodcastViewModel = hiltViewModel(),
-    columnState: ScalingLazyColumnState,
 ) {
     val artworkConfiguration by viewModel.artworkConfiguration.collectAsState()
 
@@ -67,25 +67,28 @@ fun PodcastScreen(
 private fun Content(
     state: UiState.Loaded,
     useEpisodeArtwork: Boolean,
+    columnState: ScalingLazyColumnState,
     onEpisodeTap: (PodcastEpisode) -> Unit,
     modifier: Modifier = Modifier,
-    columnState: ScalingLazyColumnState,
 ) {
     val podcast = state.podcast ?: return
-    Box(modifier = modifier.fillMaxWidth()) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+    ) {
         PodcastColorBackground(
             podcast = podcast,
             theme = state.theme,
-            modifier = modifier,
+            modifier = Modifier,
         )
 
         ScalingLazyColumn(
-            modifier = modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             columnState = columnState,
         ) {
             item { Spacer(Modifier.height(4.dp)) }
             item {
-                PodcastImage(
+                @Suppress("DEPRECATION")
+                PodcastImageDeprecated(
                     uuid = podcast.uuid,
                     modifier = Modifier.size(PodcastScreen.podcastImageSize),
                 )
@@ -94,14 +97,14 @@ private fun Content(
             item {
                 Column {
                     Text(
-                        modifier = modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colors.onPrimary,
                         text = podcast.title,
                         style = MaterialTheme.typography.button,
                     )
                     Text(
-                        modifier = modifier
+                        modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 8.dp),
                         textAlign = TextAlign.Center,

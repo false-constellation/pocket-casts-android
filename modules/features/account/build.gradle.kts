@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.compose.compiler)
@@ -19,7 +20,6 @@ dependencies {
     ksp(libs.dagger.hilt.compiler)
     ksp(libs.hilt.compiler)
     ksp(libs.moshi.kotlin.codegen)
-    ksp(libs.showkase.processor)
 
     api(libs.androidx.appcompat)
     api(libs.androidx.constraintlayout)
@@ -30,7 +30,6 @@ dependencies {
     api(libs.material)
     api(libs.moshi)
     api(libs.navigation.runtime)
-    api(libs.showkase)
 
     api(projects.modules.features.search)
     api(projects.modules.features.settings)
@@ -48,6 +47,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.preference.ktx)
     implementation(libs.coil)
+    implementation(libs.coil.compose)
     implementation(libs.compose.activity)
     implementation(libs.compose.animation)
     implementation(libs.compose.constraintlayout)
@@ -75,6 +75,9 @@ dependencies {
     implementation(libs.rx2.kotlin)
     implementation(libs.rx2.relay)
     implementation(libs.timber)
+    implementation(libs.credentials)
+    implementation(libs.credentials.google.play)
+    implementation(libs.google.identity)
 
     implementation(projects.modules.features.cartheme)
     implementation(projects.modules.services.images)

@@ -18,20 +18,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.AutofillNode
-import androidx.compose.ui.autofill.AutofillType
-import androidx.compose.ui.composed
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalAutofill
-import androidx.compose.ui.platform.LocalAutofillTree
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
@@ -55,18 +48,18 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 fun EmailAndPasswordFields(
     email: String,
     password: String,
-    emailPlaceholder: String = stringResource(LR.string.profile_email_address),
-    passwordPlaceholder: String = stringResource(LR.string.profile_password),
-    showEmailError: Boolean,
-    showPasswordError: Boolean,
-    showPasswordErrorMessage: Boolean = showPasswordError,
     enabled: Boolean,
     isCreatingAccount: Boolean,
-    focusEnabled: Boolean = true,
-    onDone: () -> Unit,
+    showEmailError: Boolean,
+    showPasswordError: Boolean,
+    onConfirm: () -> Unit,
     onUpdateEmail: (String) -> Unit,
     onUpdatePassword: (String) -> Unit,
     modifier: Modifier = Modifier,
+    emailPlaceholder: String = stringResource(LR.string.profile_email_address),
+    passwordPlaceholder: String = stringResource(LR.string.profile_password),
+    showPasswordErrorMessage: Boolean = showPasswordError,
+    focusEnabled: Boolean = true,
 ) {
     val emailFocusRequester = remember { FocusRequester() }
     val passwordFocusRequester = remember { FocusRequester() }
@@ -102,7 +95,7 @@ fun EmailAndPasswordFields(
             placeholder = passwordPlaceholder,
             enabled = enabled,
             imeAction = ImeAction.Done,
-            onImeAction = onDone,
+            onImeAction = onConfirm,
             focusRequester = passwordFocusRequester,
             isCreatingAccount = isCreatingAccount,
             onUpdatePassword = onUpdatePassword,
@@ -130,18 +123,18 @@ fun EmailField(
     email: String,
     enabled: Boolean,
     isError: Boolean,
-    placeholder: String = stringResource(LR.string.profile_email_address),
-    onUpdateEmail: (String) -> Unit,
-    imeAction: ImeAction = ImeAction.Next,
-    onImeAction: () -> Unit,
-    focusRequester: FocusRequester = remember { FocusRequester() },
     isCreatingAccount: Boolean,
+    onImeAction: () -> Unit,
+    onUpdateEmail: (String) -> Unit,
     modifier: Modifier = Modifier,
+    placeholder: String = stringResource(LR.string.profile_email_address),
+    imeAction: ImeAction = ImeAction.Next,
+    focusRequester: FocusRequester = remember { FocusRequester() },
 ) {
-    @Suppress("NAME_SHADOWING")
-    @OptIn(ExperimentalComposeUiApi::class)
-    val modifier = modifier.focusRequester(focusRequester)
-        .autofill(emailAutofill(isCreatingAccount), onUpdateEmail)
+    val formModifier = modifier.focusRequester(focusRequester)
+        .semantics {
+            contentType = (if (isCreatingAccount) ContentType.NewUsername else ContentType.Username) + ContentType.EmailAddress
+        }
 
     FormField(
         value = email,
@@ -161,7 +154,7 @@ fun EmailField(
             keyboardType = KeyboardType.Email,
         ),
         onImeAction = onImeAction,
-        modifier = modifier,
+        modifier = formModifier,
     )
 }
 
@@ -170,21 +163,20 @@ fun PasswordField(
     password: String,
     enabled: Boolean,
     isError: Boolean,
-    placeholder: String = stringResource(LR.string.profile_password),
-    imeAction: ImeAction = ImeAction.Done,
-    onImeAction: () -> Unit,
-    focusRequester: FocusRequester = remember { FocusRequester() },
     isCreatingAccount: Boolean,
+    onImeAction: () -> Unit,
     onUpdatePassword: (String) -> Unit,
     modifier: Modifier = Modifier,
-
+    placeholder: String = stringResource(LR.string.profile_password),
+    imeAction: ImeAction = ImeAction.Done,
+    focusRequester: FocusRequester = remember { FocusRequester() },
 ) {
     var showPassword by remember { mutableStateOf(false) }
 
-    @OptIn(ExperimentalComposeUiApi::class)
-    @Suppress("NAME_SHADOWING")
-    val modifier = modifier.focusRequester(focusRequester)
-        .autofill(passwordAutofill(isCreatingAccount), onUpdatePassword)
+    val formModifier = modifier.focusRequester(focusRequester)
+        .semantics {
+            contentType = if (isCreatingAccount) ContentType.NewPassword else ContentType.Password
+        }
 
     FormField(
         value = password,
@@ -216,63 +208,26 @@ fun PasswordField(
                 )
             }
         },
-        modifier = modifier,
+        modifier = formModifier,
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
-private fun emailAutofill(isNewEmail: Boolean) =
-    listOf(if (isNewEmail) AutofillType.NewUsername else AutofillType.Username)
-
-@OptIn(ExperimentalComposeUiApi::class)
-private fun passwordAutofill(isNewPassword: Boolean) =
-    listOf(if (isNewPassword) AutofillType.NewPassword else AutofillType.Password)
-
-/**
- * From https://bryanherbst.com/2021/04/13/compose-autofill/
- * Also see https://issuetracker.google.com/issues/176949051 for info about autofill limitations with compose
- */
-@OptIn(ExperimentalComposeUiApi::class)
-private fun Modifier.autofill(
-    autofillTypes: List<AutofillType>,
-    onFill: ((String) -> Unit),
-) = composed {
-    val autofill = LocalAutofill.current
-    val autofillNode = AutofillNode(onFill = onFill, autofillTypes = autofillTypes)
-    LocalAutofillTree.current += autofillNode
-
-    this.onGloballyPositioned {
-        autofillNode.boundingBox = it.boundsInWindow()
-    }.onFocusChanged { focusState ->
-        autofill?.run {
-            if (focusState.isFocused) {
-                requestAutofillForNode(autofillNode)
-            } else {
-                cancelAutofillForNode(autofillNode)
-            }
-        }
-    }
-}
-
-@ShowkaseComposable(name = "EmailAndPasswordFields", group = "Form", styleName = "Light", defaultStyle = true)
 @Preview(name = "Light")
 @Composable
-fun UserPasswordFieldsLightPreview() {
+private fun UserPasswordFieldsLightPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         UserPasswordFieldsPreview()
     }
 }
 
-@ShowkaseComposable(name = "EmailAndPasswordFields", group = "Form", styleName = "Dark")
 @Preview(name = "Dark")
 @Composable
-fun UserPasswordFieldsDarkPreview() {
+private fun UserPasswordFieldsDarkPreview() {
     AppThemeWithBackground(Theme.ThemeType.DARK) {
         UserPasswordFieldsPreview()
     }
 }
 
-@Preview
 @Composable
 private fun UserPasswordFieldsPreview() {
     EmailAndPasswordFields(
@@ -282,10 +237,11 @@ private fun UserPasswordFieldsPreview() {
         showPasswordError = false,
         enabled = true,
         focusEnabled = false,
-        onDone = {},
+        onConfirm = {},
         onUpdateEmail = {},
         onUpdatePassword = {},
         showPasswordErrorMessage = false,
         isCreatingAccount = false,
+        modifier = Modifier.padding(16.dp),
     )
 }

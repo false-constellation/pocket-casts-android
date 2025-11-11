@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
@@ -33,12 +35,15 @@ fun ReferralsGuestPassError(
     errorMessage: String,
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
     ) {
         CloseButton(
             modifier = Modifier
@@ -77,7 +82,7 @@ fun ReferralsGuestPassError(
 
 @Preview
 @Composable
-fun ReferralsSendGuestPassErrorPreview() {
+private fun ReferralsSendGuestPassErrorPreview() {
     AppTheme(Theme.ThemeType.DARK) {
         ReferralsGuestPassError(
             errorMessage = stringResource(LR.string.error_no_network),

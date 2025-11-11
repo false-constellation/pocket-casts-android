@@ -26,6 +26,7 @@ dependencies {
     api(projects.modules.services.model)
     api(projects.modules.services.preferences)
     api(projects.modules.services.repositories)
+    api(projects.modules.services.servers)
 
     implementation(platform(libs.compose.bom))
 
@@ -33,6 +34,7 @@ dependencies {
     implementation(libs.androidx.mediarouter)
     implementation(libs.androidx.preference.ktx)
     implementation(libs.coil)
+    implementation(libs.compose.activity)
     implementation(libs.coroutines.core)
     implementation(libs.material.dialogs)
     implementation(libs.material.progressbar)

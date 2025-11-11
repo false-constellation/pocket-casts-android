@@ -13,21 +13,30 @@ import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.models.db.AppDatabase
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
+import au.com.shiftyjelly.pocketcasts.models.type.Membership
+import au.com.shiftyjelly.pocketcasts.models.type.Subscription
+import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionPlatform
 import au.com.shiftyjelly.pocketcasts.models.type.TrimMode
+import au.com.shiftyjelly.pocketcasts.payment.BillingCycle
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration
 import au.com.shiftyjelly.pocketcasts.repositories.file.FileStorage
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
-import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
 import au.com.shiftyjelly.pocketcasts.utils.FileUtil
 import au.com.shiftyjelly.pocketcasts.utils.Util
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
+import com.squareup.moshi.Moshi
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import timber.log.Timber
 
 @HiltWorker
@@ -44,33 +53,87 @@ class VersionMigrationsWorker @AssistedInject constructor(
 
     companion object {
         private const val VERSION_MIGRATIONS_WORKER_NAME = "version_migrations_worker"
-        fun performMigrations(podcastManager: PodcastManager, settings: Settings, syncManager: SyncManager, context: Context) {
-            performMigrationsSync(podcastManager, settings, syncManager)
+        fun performMigrations(
+            context: Context,
+            settings: Settings,
+            moshi: Moshi,
+        ) {
+            performMigrationsSync(settings, moshi)
             enqueueAsyncMigrations(settings, context)
         }
 
         /**
          * Perform short migrations straight away.
          */
-        private fun performMigrationsSync(podcastManager: PodcastManager, settings: Settings, syncManager: SyncManager) {
-            performUpdateIfRequired(updateKey = "run_v7_20", settings = settings) {
-                // Upgrading to version 7.20.0 requires the folders from the servers to be added to the existing podcasts. In case the user doesn't have internet this is done as part of the regular sync process.
-                if (syncManager.isLoggedIn()) {
-                    podcastManager.reloadFoldersFromServer()
-                }
+        private fun performMigrationsSync(settings: Settings, moshi: Moshi) {
+            migrateSubscriptionStatusToSubscription(settings)
+            migrateSubscriptionToMembership(settings, moshi)
+        }
+
+        private fun migrateSubscriptionStatusToSubscription(settings: Settings) {
+            if (settings.contains("accountstatus", isPrivate = true)) {
+                val rawStatus = settings.getStringForKey("accountstatus", isPrivate = true) ?: return
+                runCatching { mapToSubscriptionOrThrow(rawStatus) }
+                    .onFailure { error -> LogBuffer.e(LogBuffer.TAG_SUBSCRIPTIONS, error, "Failed to migrate subscription") }
+                    .onSuccess { subscription ->
+                        val membership = Membership(
+                            subscription = subscription,
+                            createdAt = null,
+                            features = emptyList(),
+                        )
+                        settings.cachedMembership.set(membership, updateModifiedAt = false)
+                    }
+                settings.deleteKey("accountstatus", isPrivate = true)
             }
         }
 
-        private fun performUpdateIfRequired(updateKey: String, settings: Settings, update: () -> Unit) {
-            if (settings.getBooleanForKey(key = updateKey, defaultValue = false)) {
-                // already performed this update
-                return
+        private fun mapToSubscriptionOrThrow(rawStatus: String): Subscription? {
+            val jsonStatus = JSONObject(rawStatus)
+            return Subscription(
+                tier = when (val tier = jsonStatus.getString("tier")) {
+                    "PATRON" -> SubscriptionTier.Patron
+                    "PLUS" -> SubscriptionTier.Plus
+                    "FREE" -> return null
+                    else -> error("Unknown tier: $tier")
+                },
+                billingCycle = when (jsonStatus.getString("frequency")) {
+                    "MONTHLY" -> BillingCycle.Monthly
+                    "YEARLY" -> BillingCycle.Yearly
+                    "NONE" -> null
+                    else -> return null
+                },
+                platform = when (jsonStatus.getString("platform")) {
+                    "IOS" -> SubscriptionPlatform.iOS
+                    "ANDROID" -> SubscriptionPlatform.Android
+                    "WEB" -> SubscriptionPlatform.Web
+                    "GIFT" -> SubscriptionPlatform.Gift
+                    else -> SubscriptionPlatform.Unknown
+                },
+                expiryDate = Instant.parse(jsonStatus.getString("expiry")),
+                isAutoRenewing = jsonStatus
+                    .getJSONArray("subscriptions")
+                    .getJSONObject(jsonStatus.getInt("index"))
+                    .getBoolean("autoRenewing"),
+                giftDays = jsonStatus.getInt("giftDays"),
+            )
+        }
+
+        private fun migrateSubscriptionToMembership(settings: Settings, moshi: Moshi) {
+            if (settings.contains("user_subscription", isPrivate = true)) {
+                val rawSubscription = settings.getStringForKey("user_subscription", isPrivate = true) ?: return
+                val moshi = moshi.adapter(Subscription::class.java)
+                runCatching { requireNotNull(moshi.fromJson(rawSubscription)) { "Failed to decode subscription" } }
+                    .onFailure { error -> LogBuffer.e(LogBuffer.TAG_SUBSCRIPTIONS, error, "Failed to migrate subscription") }
+                    .onSuccess { subscription ->
+                        val membership = Membership(
+                            subscription = subscription,
+                            createdAt = null,
+                            features = emptyList(),
+                        )
+                        settings.cachedMembership.set(membership, updateModifiedAt = false)
+                    }
+                settings.deleteKey("user_subscription", isPrivate = true)
             }
-
-            update()
-            Timber.i("Successfully completed update $updateKey")
-
-            settings.setBooleanForKey(key = updateKey, value = true)
         }
 
         /**
@@ -148,8 +211,7 @@ class VersionMigrationsWorker @AssistedInject constructor(
         // don't migrate when first installing
         if (previousVersionCode == 0) {
             settings.setWhatsNewVersionCode(Settings.WHATS_NEW_VERSION_CODE)
-            settings.setSeenPlayerTour(true)
-            settings.setSeenUpNextTour(true)
+            configurePlaylistForNewUsersOnboarding()
             return
         }
 
@@ -185,6 +247,10 @@ class VersionMigrationsWorker @AssistedInject constructor(
         }
 
         upgradeMultiSelectItems(settings)
+
+        if (previousVersionCode < 9382) {
+            EpisodeTitlesNormalizationWorker.enqueue(applicationContext)
+        }
     }
 
     private fun removeOldTempPodcastDirectory() {
@@ -275,5 +341,11 @@ class VersionMigrationsWorker @AssistedInject constructor(
 
     private fun enableDynamicColors() {
         settings.useDynamicColorsForWidget.set(true, updateModifiedAt = true)
+    }
+
+    private fun configurePlaylistForNewUsersOnboarding() {
+        if (FeatureFlag.isEnabled(Feature.PLAYLISTS_REBRANDING, immutable = true)) {
+            settings.showPlaylistsOnboarding.set(false, updateModifiedAt = false)
+        }
     }
 }

@@ -4,15 +4,21 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingLoginOrSignUpViewModel.Companion.AnalyticsProp
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.experiments.ExperimentProvider
+import au.com.shiftyjelly.pocketcasts.models.type.Subscription
+import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.repositories.sync.LoginResult
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SignInSource
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
+import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.utils.Network
+import au.com.shiftyjelly.pocketcasts.utils.extensions.isGooglePlayServicesAvailableSuccess
+import com.google.android.gms.common.GoogleApiAvailability
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -33,7 +39,12 @@ class OnboardingLogInViewModel @Inject constructor(
     private val syncManager: SyncManager,
     private val experiments: ExperimentProvider,
     @ApplicationContext context: Context,
-) : AndroidViewModel(context as Application), CoroutineScope {
+) : AndroidViewModel(context as Application),
+    CoroutineScope {
+
+    val showContinueWithGoogleButton =
+        Settings.GOOGLE_SIGN_IN_SERVER_CLIENT_ID.isNotEmpty() &&
+            GoogleApiAvailability.getInstance().isGooglePlayServicesAvailableSuccess(context)
 
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Default
@@ -53,7 +64,21 @@ class OnboardingLogInViewModel @Inject constructor(
         _state.update { it.copy(password = password) }
     }
 
-    fun logIn(onSuccessfulLogin: () -> Unit) {
+    fun onSignInButtonTapped(flow: OnboardingFlow) {
+        analyticsTracker.track(
+            AnalyticsEvent.SIGNIN_BUTTON_TAPPED,
+            mapOf(AnalyticsProp.flow(flow), AnalyticsProp.ButtonTapped.signIn),
+        )
+    }
+
+    fun onForgotPasswordTapped(flow: OnboardingFlow) {
+        analyticsTracker.track(
+            AnalyticsEvent.SIGNIN_FORGOT_PASSWORD_TAPPED,
+            mapOf(AnalyticsProp.flow(flow)),
+        )
+    }
+
+    fun logIn(onSuccessfulLogin: (Subscription?) -> Unit) {
         _state.update { it.copy(hasAttemptedLogIn = true, isNetworkAvailable = Network.isConnected(getApplication())) }
 
         val state = state.value
@@ -68,7 +93,7 @@ class OnboardingLogInViewModel @Inject constructor(
             )
         }
 
-        subscriptionManager.clearCachedStatus()
+        subscriptionManager.clearCachedMembership()
 
         viewModelScope.launch {
             val result = syncManager.loginWithEmailAndPassword(
@@ -80,7 +105,7 @@ class OnboardingLogInViewModel @Inject constructor(
                 is LoginResult.Success -> {
                     podcastManager.refreshPodcastsAfterSignIn()
                     experiments.refreshExperiments()
-                    onSuccessfulLogin()
+                    onSuccessfulLogin(subscriptionManager.fetchFreshSubscription())
                 }
 
                 is LoginResult.Failed -> {

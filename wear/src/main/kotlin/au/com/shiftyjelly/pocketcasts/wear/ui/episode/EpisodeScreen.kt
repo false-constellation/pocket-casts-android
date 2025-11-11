@@ -27,7 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.text.parseAsHtml
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.MaterialTheme
@@ -56,8 +56,9 @@ fun EpisodeScreen(
     navigateToRemoveFromUpNextNotification: () -> Unit,
     navigateToStreamingConfirmation: () -> Unit,
     navigateToNowPlaying: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: EpisodeViewModel = hiltViewModel(),
 ) {
-    val viewModel = hiltViewModel<EpisodeViewModel>()
     val state = viewModel.stateFlow.collectAsState().value
     if (state !is EpisodeViewModel.State.Loaded) return
 
@@ -70,8 +71,7 @@ fun EpisodeScreen(
 
     ScalingLazyColumn(
         columnState = columnState,
-        modifier = Modifier
-            .fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
     ) {
         val headingLineHeight = 14.sp
         item {

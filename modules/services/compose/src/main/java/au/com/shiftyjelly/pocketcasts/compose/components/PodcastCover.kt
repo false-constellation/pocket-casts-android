@@ -24,7 +24,8 @@ fun PodcastCover(
     cornerRadius: Dp? = null,
 ) {
     val cornerRadiusSize = cornerRadius ?: if (coverSize == CoverSize.SMALL) 4.dp else 8.dp
-    PodcastImage(
+    @Suppress("DEPRECATION")
+    PodcastImageDeprecated(
         uuid = uuid,
         elevation = if (coverSize == CoverSize.SMALL) 4.dp else 8.dp,
         cornerSize = cornerRadiusSize,
@@ -58,16 +59,15 @@ fun RectangleCover(
     }
 }
 
-fun Modifier.transformPodcastCover() =
-    drawWithContent {
-        withTransform({
-            scale(1f, .6f)
-            rotate(-45f)
-            scale(1.25f, 1.25f)
-        }) {
-            this@drawWithContent.drawContent()
-        }
+fun Modifier.transformPodcastCover() = drawWithContent {
+    withTransform({
+        scale(1f, .6f)
+        rotate(-45f)
+        scale(1.25f, 1.25f)
+    }) {
+        this@drawWithContent.drawContent()
     }
+}
 
 enum class CoverSize {
     SMALL,

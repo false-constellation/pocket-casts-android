@@ -4,14 +4,8 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
-import au.com.shiftyjelly.pocketcasts.analytics.TracksAnalyticsTracker
-import au.com.shiftyjelly.pocketcasts.models.type.Subscription
-import au.com.shiftyjelly.pocketcasts.models.type.Subscription.Companion.PLUS_MONTHLY_PRODUCT_ID
-import au.com.shiftyjelly.pocketcasts.models.type.Subscription.Companion.PLUS_YEARLY_PRODUCT_ID
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
-import au.com.shiftyjelly.pocketcasts.repositories.subscription.PurchaseEvent
-import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.repositories.sync.LoginResult
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
 import au.com.shiftyjelly.pocketcasts.utils.Util
@@ -31,64 +25,15 @@ class CreateAccountViewModel
 
     val upgradeMode = MutableLiveData<Boolean>()
     val subscriptionType = MutableLiveData<SubscriptionType>().apply { value = SubscriptionType.FREE }
-    val subscription = MutableLiveData<Subscription?>()
     val newsletter = MutableLiveData<Boolean>().apply { postValue(false) }
 
     val createAccountState = MutableLiveData<CreateAccountState>().apply { value = CreateAccountState.CurrentlyValid }
     private val disposables = CompositeDisposable()
     var defaultSubscriptionType = SubscriptionType.FREE
 
-    @Inject lateinit var subscriptionManager: SubscriptionManager
-
     companion object {
-        private const val PRODUCT_KEY = "product"
-        private const val OFFER_TYPE_KEY = "offer_type"
-        private const val OFFER_TYPE_NONE = "none"
-        private const val OFFER_TYPE_FREE_TRIAL = "free_trial"
-        private const val OFFER_TYPE_INTRO_OFFER = "intro_offer"
-        private const val ERROR_CODE_KEY = "error_code"
         private const val SOURCE_KEY = "source"
         private const val ENABLED_KEY = "enabled"
-
-        fun trackPurchaseEvent(subscription: Subscription?, purchaseEvent: PurchaseEvent, analyticsTracker: AnalyticsTracker) {
-            val productKey = subscription?.productDetails?.productId?.let {
-                if (it in listOf(PLUS_MONTHLY_PRODUCT_ID, PLUS_YEARLY_PRODUCT_ID)) {
-                    // retain short product id for plus subscriptions
-                    // extract part of the product id after the last period ("com.pocketcasts.plus.monthly" -> "monthly")
-                    it.split('.').lastOrNull()
-                } else {
-                    it // return full product id for new products
-                }
-            } ?: TracksAnalyticsTracker.INVALID_OR_NULL_VALUE
-            val offerType = when (subscription) {
-                is Subscription.Trial -> OFFER_TYPE_FREE_TRIAL
-                is Subscription.Intro -> OFFER_TYPE_INTRO_OFFER
-                else -> OFFER_TYPE_NONE
-            }
-
-            val analyticsProperties = mapOf(
-                PRODUCT_KEY to productKey,
-                OFFER_TYPE_KEY to offerType,
-            )
-
-            when (purchaseEvent) {
-                is PurchaseEvent.Success -> analyticsTracker.track(AnalyticsEvent.PURCHASE_SUCCESSFUL, analyticsProperties)
-
-                is PurchaseEvent.Cancelled -> analyticsTracker.track(
-                    AnalyticsEvent.PURCHASE_CANCELLED,
-                    analyticsProperties.plus(ERROR_CODE_KEY to purchaseEvent.responseCode),
-                )
-
-                is PurchaseEvent.Failure -> {
-                    // Exclude error_code property if we do not have a responseCode
-                    val properties = purchaseEvent.responseCode?.let {
-                        analyticsProperties.plus(ERROR_CODE_KEY to it)
-                    } ?: analyticsProperties
-
-                    analyticsTracker.track(AnalyticsEvent.PURCHASE_FAILED, properties)
-                }
-            }
-        }
     }
 
     private fun errorUpdate(error: CreateAccountError, add: Boolean) {
@@ -97,6 +42,7 @@ class CreateAccountViewModel
             is CreateAccountState.Failure -> {
                 errors.addAll(existingState.errors)
             }
+
             else -> {}
         }
         if (add) errors.add(error) else errors.remove(error)
@@ -154,7 +100,6 @@ class CreateAccountViewModel
     fun clearValues() {
         upgradeMode.value = false
         subscriptionType.value = defaultSubscriptionType
-        subscription.value = null
         newsletter.value = false
     }
 
@@ -167,6 +112,7 @@ class CreateAccountViewModel
             is CreateAccountState.Failure -> {
                 return state.errors.contains(error)
             }
+
             else -> {}
         }
         return false
@@ -188,6 +134,7 @@ class CreateAccountViewModel
                     podcastManager.refreshPodcastsAfterSignIn()
                     createAccountState.postValue(CreateAccountState.AccountCreated)
                 }
+
                 is LoginResult.Failed -> {
                     val message = result.message
                     val errors = mutableSetOf(CreateAccountError.CANNOT_CREATE_ACCOUNT)
@@ -219,19 +166,13 @@ enum class SubscriptionType(val value: String) {
 }
 
 enum class CreateAccountError {
-    CANNOT_LOAD_SUBS,
     INVALID_EMAIL,
     INVALID_PASSWORD,
     CANNOT_CREATE_ACCOUNT,
-    CANNOT_CREATE_SUB,
-    CANCELLED_CREATE_SUB,
 }
 
 sealed class CreateAccountState {
     object CurrentlyValid : CreateAccountState()
-    object SubscriptionTypeChosen : CreateAccountState()
-    object ProductsLoading : CreateAccountState()
-    data class ProductsLoaded(val list: List<Subscription>) : CreateAccountState()
     object AccountCreating : CreateAccountState()
     object AccountCreated : CreateAccountState()
     object SubscriptionCreated : CreateAccountState()

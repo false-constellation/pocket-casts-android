@@ -5,8 +5,11 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSizeIn
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -62,7 +65,10 @@ private enum class TaskerInputFieldSelectMode { Variable, ItemList }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun <T> ComposableTaskerInputField(content: TaskerInputFieldState.Content<T>) {
+fun <T> ComposableTaskerInputField(
+    content: TaskerInputFieldState.Content<T>,
+    modifier: Modifier = Modifier,
+) {
     var selectionMode by remember { mutableStateOf(null as TaskerInputFieldSelectMode?) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -74,7 +80,9 @@ fun <T> ComposableTaskerInputField(content: TaskerInputFieldState.Content<T>) {
         keyboardController?.hide()
         selection?.let { content.onTextChange(it) }
     }
-    Box {
+    Box(
+        modifier = modifier,
+    ) {
         Row {
             val possibleItems = content.possibleItems?.collectAsState(initial = null)?.value
 
@@ -185,11 +193,15 @@ private fun ComposableTaskerInputFieldPreview() {
 fun ComposableTaskerInputFieldList(
     fieldContents: List<TaskerInputFieldState.Content<*>>,
     onFinish: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .padding(8.dp)
-            .fillMaxHeight(),
+            .fillMaxHeight()
+            .imePadding()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
     ) {
         LazyColumn {
             fieldContents.forEach { content ->

@@ -18,7 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.MaterialTheme
@@ -41,10 +41,9 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @Composable
 fun NowPlayingChip(
+    viewModel: NowPlayingChipViewModel = hiltViewModel(),
     onClick: () -> Unit,
 ) {
-    val viewModel = hiltViewModel<NowPlayingChipViewModel>()
-
     val state by viewModel.state.collectAsState()
     val playbackState = state.playbackState
     val artworkConfiguration by viewModel.artworkConfiguration.collectAsState()

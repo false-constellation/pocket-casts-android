@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.compose.components
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.requiredHeight
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -56,6 +58,7 @@ fun AutoResizeText(
     onTextLayout: (TextLayoutResult) -> Unit = {},
     style: TextStyle = LocalTextStyle.current,
     heightFactor: Float? = null,
+    isFocusable: Boolean = false,
 ) {
     val alignment = contentAlignment ?: when (textAlign) {
         TextAlign.Left -> Alignment.TopStart
@@ -66,7 +69,10 @@ fun AutoResizeText(
         TextAlign.End -> Alignment.TopEnd
         else -> Alignment.TopStart
     }
-    BoxWithConstraints(modifier = modifier, contentAlignment = alignment) {
+    BoxWithConstraints(
+        modifier = modifier,
+        contentAlignment = alignment,
+    ) {
         var shrunkFontSize = if (maxFontSize.isSpecified) maxFontSize else 100.sp
 
         val calculateIntrinsics = @Composable {
@@ -92,7 +98,7 @@ fun AutoResizeText(
                 spanStyles = listOf(),
                 placeholders = listOf(),
                 maxLines = maxLines,
-                ellipsis = false,
+                overflow = TextOverflow.Clip,
             )
         }
 
@@ -158,7 +164,13 @@ fun AutoResizeText(
             onTextLayout = onTextLayout,
             maxLines = maxLines,
             style = style,
-            modifier = heightModifier,
+            modifier = heightModifier.then(
+                if (isFocusable) {
+                    Modifier.focusable()
+                } else {
+                    Modifier
+                },
+            ),
         )
     }
 }

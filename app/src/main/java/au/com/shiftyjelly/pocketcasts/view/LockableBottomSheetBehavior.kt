@@ -1,11 +1,13 @@
 package au.com.shiftyjelly.pocketcasts.view
 
 import android.content.Context
+import android.os.Parcelable
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import com.google.android.material.bottomsheet.ViewPager2AwareBottomSheetBehavior
+import kotlinx.parcelize.Parcelize
 
 // StackOverflow: https://stackoverflow.com/questions/35794264/disabling-user-dragging-on-bottomsheet
 
@@ -13,7 +15,7 @@ import com.google.android.material.bottomsheet.ViewPager2AwareBottomSheetBehavio
 class LockableBottomSheetBehavior<V : View> : ViewPager2AwareBottomSheetBehavior<V> {
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
 
-    var swipeEnabled = true
+    var swipeEnabled = false
 
     override fun onInterceptTouchEvent(
         parent: CoordinatorLayout,
@@ -95,4 +97,23 @@ class LockableBottomSheetBehavior<V : View> : ViewPager2AwareBottomSheetBehavior
             false
         }
     }
+
+    override fun onSaveInstanceState(parent: CoordinatorLayout, child: V): Parcelable {
+        return SavedState(
+            isSwipeEnabled = swipeEnabled,
+            parentState = super.onSaveInstanceState(parent, child),
+        )
+    }
+
+    override fun onRestoreInstanceState(parent: CoordinatorLayout, child: V, state: Parcelable) {
+        val savedState = state as SavedState
+        swipeEnabled = savedState.isSwipeEnabled
+        super.onRestoreInstanceState(parent, child, savedState.parentState)
+    }
+
+    @Parcelize
+    private class SavedState(
+        val isSwipeEnabled: Boolean,
+        val parentState: Parcelable,
+    ) : Parcelable
 }

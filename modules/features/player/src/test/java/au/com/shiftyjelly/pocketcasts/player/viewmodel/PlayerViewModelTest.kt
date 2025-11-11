@@ -13,12 +13,14 @@ import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.PlaybackEffects
+import au.com.shiftyjelly.pocketcasts.models.type.Subscription
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel.NavigationState
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel.PlaybackEffectsSettingsTab
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel.SnackbarMessage
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.UserSetting
 import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration
+import au.com.shiftyjelly.pocketcasts.repositories.ads.BlazeAdsManager
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
@@ -29,15 +31,14 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue.State
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.sharedtest.MainCoroutineRule
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import com.jakewharton.rxrelay2.BehaviorRelay
 import io.reactivex.Flowable
 import io.reactivex.Observable
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
@@ -81,9 +82,6 @@ class PlayerViewModelTest {
     private lateinit var podcastManager: PodcastManager
 
     @Mock
-    private lateinit var userEpisodeManager: UserEpisodeManager
-
-    @Mock
     private lateinit var theme: Theme
 
     @Mock
@@ -97,9 +95,6 @@ class PlayerViewModelTest {
 
     @Mock
     private lateinit var context: Context
-
-    @Mock
-    private lateinit var applicationScope: CoroutineScope
 
     @Mock
     private lateinit var upNextQueue: UpNextQueue
@@ -118,6 +113,9 @@ class PlayerViewModelTest {
 
     @Mock
     private lateinit var podcast: Podcast
+
+    @Mock
+    private lateinit var blazeAdsManager: BlazeAdsManager
 
     @Mock
     private lateinit var userSettingsGlobalEffects: UserSetting<PlaybackEffects>
@@ -277,11 +275,11 @@ class PlayerViewModelTest {
         val useRealTimeForPlaybackRemainingTimeMock = mock<UserSetting<Boolean>>()
         whenever(useRealTimeForPlaybackRemainingTimeMock.flow).thenReturn(MutableStateFlow(false))
         whenever(settings.useRealTimeForPlaybackRemaingTime).thenReturn(useRealTimeForPlaybackRemainingTimeMock)
+        whenever(blazeAdsManager.findPlayerAd()).thenReturn(flowOf(null))
 
         viewModel = PlayerViewModel(
             playbackManager = playbackManager,
             episodeManager = episodeManager,
-            userEpisodeManager = userEpisodeManager,
             podcastManager = podcastManager,
             bookmarkManager = bookmarkManager,
             downloadManager = downloadManager,
@@ -291,8 +289,8 @@ class PlayerViewModelTest {
             analyticsTracker = analyticsTracker,
             episodeAnalytics = episodeAnalytics,
             context = context,
-            applicationScope = applicationScope,
             ioDispatcher = UnconfinedTestDispatcher(),
+            blazeAdsManager = blazeAdsManager,
         )
     }
 }

@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/buildkite/pipeline-schema/main/schema.json
+---
+
+# This pipeline is meant to be triggered by the MC scenario in ReleasesV2
+
+# Expected variables passed to the pipeline by ReleasesV2: `TRACK`, `ROLLOUT_PERCENT`
+
+steps:
+  - label: "🚂 Update Rollouts"
+    command: |
+      echo '--- :ruby: Setup Ruby Tools'
+      install_gems
+
+      echo '--- 🔐 Access Secrets'
+      bundle exec fastlane run configure_apply
+
+      echo '--- 🚀 Update Rollouts'
+      bundle exec fastlane update_rollouts track:"$TRACK" percent:"$ROLLOUT_PERCENT"
+    plugins: [$CI_TOOLKIT]
+    agents:
+      queue: "tumblr-metal"
+    retry:
+      manual:
+        allowed: false
+        reason: "Always prefer re-triggering a new build from ReleaseV2 rather than retrying the individual job from Buildkite"
+
+  - label: ":github: Publish Draft GitHub Release"
+    if: build.env("PUBLISH_DRAFT_GITHUB_RELEASE") == "true"
+    command: |
+      echo '--- 🤖 Use bot for Git operations'
+      # Needed because if `track:production` then the publish_gh_release lane will also delete the release branch
+      source use-bot-for-git
+
+      echo '--- :ruby: Setup Ruby Tools'
+      install_gems
+
+      echo '--- 🚀 Publish Draft GitHub Release'
+      bundle exec fastlane publish_gh_release skip_confirm:true track:"$TRACK"
+    plugins: [$CI_TOOLKIT]
+    agents:
+      queue: "tumblr-metal"
+    retry:
+      manual:
+        allowed: false
+        reason: "Always prefer re-triggering a new build from ReleaseV2 rather than retrying the individual job from Buildkite"

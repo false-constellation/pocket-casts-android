@@ -6,6 +6,31 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.core.view.isGone
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -14,15 +39,24 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import au.com.shiftyjelly.pocketcasts.compose.AppTheme
+import au.com.shiftyjelly.pocketcasts.compose.CallOnce
+import au.com.shiftyjelly.pocketcasts.compose.components.Banner
+import au.com.shiftyjelly.pocketcasts.compose.components.TipPosition
+import au.com.shiftyjelly.pocketcasts.compose.components.Tooltip
+import au.com.shiftyjelly.pocketcasts.compose.extensions.setContentWithViewCompositionStrategy
 import au.com.shiftyjelly.pocketcasts.filters.databinding.FragmentFiltersBinding
-import au.com.shiftyjelly.pocketcasts.models.entity.Playlist
+import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.chromecast.CastManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
+import au.com.shiftyjelly.pocketcasts.repositories.podcast.SmartPlaylistManager
+import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
+import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
-import au.com.shiftyjelly.pocketcasts.utils.extensions.hideShadow
+import au.com.shiftyjelly.pocketcasts.views.extensions.quickScrollToTop
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragmentToolbar.ChromeCastButton.Shown
+import au.com.shiftyjelly.pocketcasts.views.fragments.TopScrollable
 import au.com.shiftyjelly.pocketcasts.views.helper.NavigationIcon.None
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -30,13 +64,18 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @AndroidEntryPoint
-class FiltersFragment : BaseFragment(), CoroutineScope, Toolbar.OnMenuItemClickListener {
+class FiltersFragment :
+    BaseFragment(),
+    CoroutineScope,
+    Toolbar.OnMenuItemClickListener,
+    TopScrollable {
     @Inject lateinit var settings: Settings
 
-    @Inject lateinit var playlistManager: PlaylistManager
+    @Inject lateinit var smartPlaylistManager: SmartPlaylistManager
 
     @Inject lateinit var castManager: CastManager
 
@@ -44,7 +83,7 @@ class FiltersFragment : BaseFragment(), CoroutineScope, Toolbar.OnMenuItemClickL
     private var trackFilterListShown = false
     var filterCount: Int? = null
     var lastFilterUuidShown: String? = null
-    var previousLastFilter: Playlist? = null
+    var previousLastFilter: PlaylistEntity? = null
 
     private var binding: FragmentFiltersBinding? = null
 
@@ -72,8 +111,6 @@ class FiltersFragment : BaseFragment(), CoroutineScope, Toolbar.OnMenuItemClickL
 
         val binding = binding ?: return
 
-        binding.appBarLayout.hideShadow()
-
         setupToolbarAndStatusBar(
             toolbar = binding.toolbar,
             title = getString(LR.string.filters),
@@ -82,6 +119,39 @@ class FiltersFragment : BaseFragment(), CoroutineScope, Toolbar.OnMenuItemClickL
             navigationIcon = None,
         )
         binding.toolbar.setOnMenuItemClickListener(this)
+
+        binding.freeAccountBanner.setContentWithViewCompositionStrategy {
+            AppTheme(
+                themeType = theme.activeTheme,
+            ) {
+                Banner(
+                    title = stringResource(LR.string.encourage_account_filters_banner_title),
+                    description = stringResource(LR.string.encourage_account_filters_banner_description),
+                    actionLabel = stringResource(LR.string.encourage_account_banner_action_label),
+                    icon = painterResource(IR.drawable.ic_refresh),
+                    onActionClick = {
+                        viewModel.onCreateFreeAccountClick()
+                        OnboardingLauncher.openOnboardingFlow(
+                            activity = requireActivity(),
+                            onboardingFlow = OnboardingFlow.LoggedOut,
+                        )
+                    },
+                    onDismiss = {
+                        viewModel.dismissFreeAccountBanner()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.isFreeAccountBannerVisible.collect {
+                    binding.freeAccountBanner.isVisible = it
+                }
+            }
+        }
 
         val recyclerView = binding.recyclerView
         recyclerView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
@@ -105,6 +175,10 @@ class FiltersFragment : BaseFragment(), CoroutineScope, Toolbar.OnMenuItemClickL
             previousLastFilter = it.lastOrNull()
             viewModel.adapterState = it.toMutableList()
             adapter.submitList(it)
+
+            viewModel.shouldShowTooltip(adapter.currentList) {
+                showTooltip()
+            }
         }
 
         val touchHelperCallback = FiltersListItemTouchCallback({ from, to ->
@@ -130,6 +204,7 @@ class FiltersFragment : BaseFragment(), CoroutineScope, Toolbar.OnMenuItemClickL
     override fun onMenuItemClick(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.filter_create -> {
+                viewModel.trackOnCreateFilterTap()
                 openCreate()
                 true
             }
@@ -167,7 +242,7 @@ class FiltersFragment : BaseFragment(), CoroutineScope, Toolbar.OnMenuItemClickL
         (activity as FragmentHostListener).showModal(fragment)
     }
 
-    fun openPlaylist(playlist: Playlist, isNewFilter: Boolean = false) {
+    fun openPlaylist(playlist: PlaylistEntity, isNewFilter: Boolean = false) {
         val context = context ?: return
 
         lastFilterUuidShown = playlist.uuid
@@ -177,6 +252,67 @@ class FiltersFragment : BaseFragment(), CoroutineScope, Toolbar.OnMenuItemClickL
         (activity as? FragmentHostListener)?.addFragment(playlistFragment)
 
         playlistFragment.view?.requestFocus() // Jump to new page for talk back
+    }
+
+    private fun showTooltip() {
+        val toolbar = binding?.toolbar ?: return
+        binding?.tooltipComposeView?.isVisible = true
+        binding?.tooltipComposeView?.apply {
+            setContentWithViewCompositionStrategy {
+                AppTheme(theme.activeTheme) {
+                    val configuration = LocalConfiguration.current
+                    var toolbarY by remember { mutableIntStateOf(0) }
+
+                    CallOnce {
+                        viewModel.trackTooltipShown()
+                    }
+
+                    LaunchedEffect(configuration) {
+                        val location = IntArray(2)
+                        toolbar.getLocationOnScreen(location)
+                        toolbarY = (location[1] + toolbar.height)
+                    }
+
+                    Box(
+                        contentAlignment = Alignment.TopEnd,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.4f))
+                            .clickable(
+                                interactionSource = null,
+                                indication = null,
+                                onClick = ::closeTooltip,
+                            )
+                            .semantics { hideFromAccessibility() },
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .offset { IntOffset(x = -8.dp.roundToPx(), y = toolbarY - 8.dp.roundToPx()) }
+                                .widthIn(max = 320.dp),
+                        ) {
+                            Tooltip(
+                                title = stringResource(LR.string.filters_tooltip_title),
+                                body = stringResource(LR.string.filters_tooltip_subtitle),
+                                tipPosition = TipPosition.TopEnd,
+                                modifier = Modifier.clickable(onClick = ::closeTooltip),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun closeTooltip() {
+        binding?.tooltipComposeView?.isGone = true
+        binding?.tooltipComposeView?.disposeComposition()
+        viewModel.onTooltipClosed()
+    }
+
+    override fun scrollToTop(): Boolean {
+        val canScroll = binding?.recyclerView?.canScrollVertically(-1) ?: false
+        binding?.recyclerView?.quickScrollToTop()
+        return canScroll
     }
 }
 

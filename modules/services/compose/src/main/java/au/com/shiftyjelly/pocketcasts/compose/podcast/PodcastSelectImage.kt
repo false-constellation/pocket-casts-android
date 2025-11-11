@@ -28,7 +28,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.compose.components.podcastImageCornerSize
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
@@ -41,18 +41,19 @@ private val colorSelectedAlpha = Color(0x7FFFFFFF)
 fun PodcastSelectImage(
     podcast: Podcast,
     selected: Boolean,
-    onPodcastSelected: () -> Unit,
-    onPodcastUnselected: () -> Unit,
+    onSelectPodcast: () -> Unit,
+    onDeselectPodcast: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(
         modifier = modifier
             .aspectRatio(1f)
-            .clickable { if (selected) onPodcastUnselected() else onPodcastSelected() }
+            .clickable { if (selected) onDeselectPodcast() else onSelectPodcast() }
             .semantics(mergeDescendants = true) {},
         contentAlignment = Alignment.Center,
     ) {
-        PodcastImage(
+        @Suppress("DEPRECATION")
+        PodcastImageDeprecated(
             uuid = podcast.uuid,
             title = podcast.title,
             showTitle = true,
@@ -112,16 +113,16 @@ private fun ColorPickerLightPreview() {
             PodcastSelectImage(
                 podcast = Podcast(uuid = "e7a6f7d0-02f2-0133-1c51-059c869cc4eb", title = "Material"),
                 selected = false,
-                onPodcastSelected = {},
-                onPodcastUnselected = {},
+                onSelectPodcast = {},
+                onDeselectPodcast = {},
                 modifier = Modifier.size(100.dp),
             )
             Spacer(Modifier.height(16.dp))
             PodcastSelectImage(
                 podcast = Podcast(uuid = "e7a6f7d0-02f2-0133-1c51-059c869cc4eb", title = "Android Developers Backstage"),
                 selected = true,
-                onPodcastSelected = {},
-                onPodcastUnselected = {},
+                onSelectPodcast = {},
+                onDeselectPodcast = {},
                 modifier = Modifier.size(100.dp),
             )
         }

@@ -20,11 +20,14 @@ class DeepLinkFactoryTest {
         webBaseHost = "pocketcasts.com",
         listHost = "lists.pocketcasts.com",
         shareHost = "pca.st",
+        webPlayerHost = "play.pocketcasts.com",
     )
 
     @Test
     fun downloads() {
-        val intent = Intent().setAction("INTENT_OPEN_APP_DOWNLOADING")
+        val intent = Intent()
+            .setAction("INTENT_OPEN_APP_DOWNLOADING")
+            .setData(Uri.parse("pktc://profile/downloads"))
 
         val deepLink = factory.create(intent)
 
@@ -222,14 +225,25 @@ class DeepLinkFactoryTest {
     }
 
     @Test
-    fun showUpNext() {
+    fun showUpNextModal() {
         val intent = Intent()
             .setAction(ACTION_VIEW)
             .putExtra("launch-page", "upnext")
 
         val deepLink = factory.create(intent)
 
-        assertEquals(ShowUpNextDeepLink, deepLink)
+        assertEquals(ShowUpNextModalDeepLink, deepLink)
+    }
+
+    @Test
+    fun showUpNextTab() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://upnext?location=tab"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(ShowUpNextTabDeepLink, deepLink)
     }
 
     @Test
@@ -237,11 +251,12 @@ class DeepLinkFactoryTest {
         val intent = Intent()
             .setAction(ACTION_VIEW)
             .putExtra("launch-page", "playlist")
-            .putExtra("playlist-id", 10L)
+            .putExtra("playlist_uuid", "id")
+            .putExtra("playlist_type", "manual")
 
         val deepLink = factory.create(intent)
 
-        assertEquals(ShowFilterDeepLink(filterId = 10), deepLink)
+        assertEquals(ShowPlaylistDeepLink(playlistUuid = "id", playlistType = "manual"), deepLink)
     }
 
     @Test
@@ -528,6 +543,39 @@ class DeepLinkFactoryTest {
     }
 
     @Test
+    fun filtersTab() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://filters"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(ShowFiltersDeepLink, deepLink)
+    }
+
+    @Test
+    fun createAccount() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://signup"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(CreateAccountDeepLink, deepLink)
+    }
+
+    @Test
+    fun openApp() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://open"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(AppOpenDeepLink, deepLink)
+    }
+
+    @Test
     fun upgradeAccount() {
         val intent = Intent()
             .setAction(ACTION_VIEW)
@@ -561,6 +609,50 @@ class DeepLinkFactoryTest {
     }
 
     @Test
+    fun import() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://settings/import"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(ImportDeepLink, deepLink)
+    }
+
+    @Test
+    fun staffPicks() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://discover/staffpicks"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(StaffPicksDeepLink, deepLink)
+    }
+
+    @Test
+    fun trending() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://discover/trending"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(TrendingDeepLink, deepLink)
+    }
+
+    @Test
+    fun recommendations() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://discover/recommendations"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(RecommendationsDeepLink, deepLink)
+    }
+
+    @Test
     fun nativeShare() {
         val intent = Intent()
             .setAction(ACTION_VIEW)
@@ -576,6 +668,17 @@ class DeepLinkFactoryTest {
             ),
             deepLink,
         )
+    }
+
+    @Test
+    fun upsell() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://upsell"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(UpsellDeepLink, deepLink)
     }
 
     @Test
@@ -733,6 +836,67 @@ class DeepLinkFactoryTest {
                 startTimestamp = 15.seconds,
                 endTimestamp = 55.seconds,
                 sourceView = null,
+                autoPlay = false,
+            ),
+            deepLink,
+        )
+    }
+
+    @Test
+    fun webPlayerSharePodcast() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("https://play.pocketcasts.com/podcasts/podcast-id?source_view=source"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(ShowPodcastDeepLink("podcast-id", sourceView = "source"), deepLink)
+    }
+
+    @Test
+    fun webBaseSharePodcast() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("https://pocketcasts.com/podcasts/podcast-id?source_view=source"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(ShowPodcastDeepLink("podcast-id", sourceView = "source"), deepLink)
+    }
+
+    @Test
+    fun webPlayerShareEpisode() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("https://play.pocketcasts.com/podcasts/podcast-id/episode-id?source_view=source"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(
+            ShowEpisodeDeepLink(
+                episodeUuid = "episode-id",
+                podcastUuid = "podcast-id",
+                sourceView = "source",
+                autoPlay = false,
+            ),
+            deepLink,
+        )
+    }
+
+    @Test
+    fun webPlayerShareEpisodeWithStartTimestamp() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("https://play.pocketcasts.com/podcasts/podcast-id/episode-id?source_view=source&t=15"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(
+            ShowEpisodeDeepLink(
+                episodeUuid = "episode-id",
+                podcastUuid = "podcast-id",
+                startTimestamp = 15.seconds,
+                sourceView = "source",
                 autoPlay = false,
             ),
             deepLink,
@@ -970,5 +1134,37 @@ class DeepLinkFactoryTest {
         val deepLink = factory.create(intent)
 
         assertEquals(ReferralsDeepLink(code = "abc"), deepLink)
+    }
+
+    @Test
+    fun themes() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://settings/themes"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(ThemesDeepLink, deepLink)
+    }
+
+    @Test
+    fun smartFolders() {
+        val intent = Intent()
+            .setAction(ACTION_VIEW)
+            .setData(Uri.parse("pktc://features/suggestedFolders"))
+
+        val deepLink = factory.create(intent)
+
+        assertEquals(SmartFoldersDeepLink, deepLink)
+    }
+
+    @Test
+    fun developerOptions() {
+        val intent = Intent(ACTION_VIEW)
+            .setData(Uri.parse("pktc://developer_options"))
+
+        val deeplink = factory.create(intent)
+
+        assertEquals(DeveloperOptionsDeeplink, deeplink)
     }
 }

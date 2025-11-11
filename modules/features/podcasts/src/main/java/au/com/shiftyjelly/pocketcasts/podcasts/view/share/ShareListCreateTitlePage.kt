@@ -33,7 +33,7 @@ import au.com.shiftyjelly.pocketcasts.compose.bars.NavigationButton
 import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
 import au.com.shiftyjelly.pocketcasts.compose.components.FormField
 import au.com.shiftyjelly.pocketcasts.compose.components.FormFieldDefaults
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.compose.extensions.header
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
@@ -43,17 +43,20 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
  */
 @Composable
 fun ShareListCreateTitlePage(
-    onBackClick: () -> Unit,
+    onBackPress: () -> Unit,
     onNextClick: () -> Unit,
     viewModel: ShareListCreateViewModel,
+    modifier: Modifier = Modifier,
 ) {
     val state: ShareListCreateViewModel.State by viewModel.state.collectAsState()
 
-    Column {
+    Column(
+        modifier = modifier,
+    ) {
         ThemedTopAppBar(
             title = stringResource(LR.string.podcasts_share_create_list),
             navigationButton = NavigationButton.Back,
-            onNavigationClick = onBackClick,
+            onNavigationClick = onBackPress,
             actions = {
                 IconButton(onClick = onNextClick, enabled = state.title.isNotBlank()) {
                     Icon(
@@ -88,7 +91,9 @@ private fun ShareListCreateTitleContent(
     val configuration = LocalConfiguration.current
     val inLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val imageMinSize = if (inLandscape) 120.dp else 80.dp
-    Column {
+    Column(
+        modifier = modifier,
+    ) {
         if (!inLandscape) {
             TitleDescriptionFields(
                 title = title,
@@ -97,7 +102,7 @@ private fun ShareListCreateTitleContent(
                 onDescriptionChange = onDescriptionChange,
                 onDoneClick = onDoneClick,
                 focusRequester = focusRequester,
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
             )
         }
         LazyVerticalGrid(
@@ -105,7 +110,6 @@ private fun ShareListCreateTitleContent(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = modifier,
         ) {
             if (inLandscape) {
                 header {
@@ -120,7 +124,8 @@ private fun ShareListCreateTitleContent(
                 }
             }
             items(items = podcasts) { podcast ->
-                PodcastImage(
+                @Suppress("DEPRECATION")
+                PodcastImageDeprecated(
                     uuid = podcast.uuid,
                     title = podcast.title,
                     showTitle = true,

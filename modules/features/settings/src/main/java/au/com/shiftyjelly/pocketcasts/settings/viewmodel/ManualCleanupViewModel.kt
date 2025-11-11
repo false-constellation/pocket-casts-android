@@ -123,7 +123,6 @@ class ManualCleanupViewModel
                 episodeManager.deleteEpisodeFiles(
                     episodes = episodesToDelete,
                     playbackManager = playbackManager,
-                    removeFromUpNext = false,
                 )
                 _snackbarMessage.emit(LR.string.settings_manage_downloads_deleting)
             }
@@ -164,8 +163,7 @@ class ManualCleanupViewModel
         isFragmentChangingConfigurations = isChangingConfigurations ?: false
     }
 
-    fun cleanupConfirmationDialog(context: Context) =
-        ManualCleanupConfirmationDialog(context = context, onConfirm = ::onDeleteConfirmed)
+    fun cleanupConfirmationDialog(context: Context) = ManualCleanupConfirmationDialog(context = context, onConfirm = ::onDeleteConfirmed)
 
     private fun Array<EpisodePlayingStatus>.mapToDiskSpaceViewsForEpisodes(
         episodes: List<PodcastEpisode>,
@@ -174,12 +172,11 @@ class ManualCleanupViewModel
             .copy(episodes = episodes.filter { it.playingStatus == episodePlayingStatus })
     }
 
-    private fun EpisodePlayingStatus.mapToDiskSpaceViewTitle() =
-        when (this) {
-            EpisodePlayingStatus.NOT_PLAYED -> LR.string.unplayed
-            EpisodePlayingStatus.IN_PROGRESS -> LR.string.in_progress
-            EpisodePlayingStatus.COMPLETED -> LR.string.played
-        }
+    private fun EpisodePlayingStatus.mapToDiskSpaceViewTitle() = when (this) {
+        EpisodePlayingStatus.NOT_PLAYED -> LR.string.unplayed
+        EpisodePlayingStatus.IN_PROGRESS -> LR.string.in_progress
+        EpisodePlayingStatus.COMPLETED -> LR.string.played
+    }
 
     private fun trackCleanupCompleted() {
         val properties = HashMap<String, Boolean>()

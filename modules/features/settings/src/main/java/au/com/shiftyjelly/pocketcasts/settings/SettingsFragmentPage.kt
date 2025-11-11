@@ -23,9 +23,11 @@ import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRow
 import au.com.shiftyjelly.pocketcasts.compose.preview.ThemePreviewParameterProvider
 import au.com.shiftyjelly.pocketcasts.compose.theme
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
+import au.com.shiftyjelly.pocketcasts.models.type.SignInState
 import au.com.shiftyjelly.pocketcasts.settings.about.AboutFragment
 import au.com.shiftyjelly.pocketcasts.settings.developer.DeveloperFragment
+import au.com.shiftyjelly.pocketcasts.settings.history.HistoryFragment
+import au.com.shiftyjelly.pocketcasts.settings.notifications.NotificationsSettingsFragment
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
@@ -42,22 +44,23 @@ fun SettingsFragmentPage(
     signInState: SignInState,
     isDebug: Boolean,
     isUnrestrictedBattery: Boolean,
-    onBackPressed: () -> Unit,
-    openFragment: (Fragment) -> Unit,
     bottomInset: Dp,
+    onBackPress: () -> Unit,
+    openFragment: (Fragment) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    Column {
+    Column(
+        modifier = modifier,
+    ) {
         ThemedTopAppBar(
             title = stringResource(LR.string.settings),
             bottomShadow = true,
-            onNavigationClick = onBackPressed,
+            onNavigationClick = onBackPress,
         )
         LazyColumn(
-            contentPadding = PaddingValues(bottom = bottomInset),
-            modifier = Modifier
-                .background(MaterialTheme.theme.colors.primaryUi02)
-                .padding(vertical = 8.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 8.dp),
+            modifier = Modifier.background(MaterialTheme.theme.colors.primaryUi02),
         ) {
             if (isDebug) {
                 item {
@@ -81,7 +84,7 @@ fun SettingsFragmentPage(
                 item {
                     PlusRow(onClick = {
                         OnboardingLauncher.openOnboardingFlow(
-                            context.getActivity(),
+                            requireNotNull(context.getActivity()),
                             OnboardingFlow.Upsell(
                                 OnboardingUpgradeSource.SETTINGS,
                             ),
@@ -108,7 +111,7 @@ fun SettingsFragmentPage(
                 AutoArchiveRow(onClick = { openFragment(AutoArchiveFragment()) })
             }
             item {
-                AutoDownloadRow(onClick = { openFragment(AutoDownloadSettingsFragment.newInstance()) })
+                AutoDownloadRow(onClick = { openFragment(AutoDownloadSettingsFragment()) })
             }
             item {
                 AutoAddToUpNextRow(onClick = { openFragment(AutoAddSettingsFragment()) })
@@ -118,6 +121,9 @@ fun SettingsFragmentPage(
             }
             item {
                 ImportAndExportOpmlRow(onClick = { openFragment(ExportSettingsFragment()) })
+            }
+            item {
+                RestoreFromLocalHistoryRow(onClick = { openFragment(HistoryFragment()) })
             }
             item {
                 AdvancedRow(onClick = { openFragment(AdvancedSettingsFragment()) })
@@ -285,6 +291,15 @@ private fun AboutRow(onClick: () -> Unit) {
 }
 
 @Composable
+private fun RestoreFromLocalHistoryRow(onClick: () -> Unit) {
+    SettingRow(
+        primaryText = stringResource(LR.string.restore_from_local_history),
+        icon = painterResource(IR.drawable.ic_history),
+        modifier = Modifier.rowModifier(onClick),
+    )
+}
+
+@Composable
 private fun AdvancedRow(onClick: () -> Unit) {
     SettingRow(
         primaryText = stringResource(LR.string.settings_title_advanced),
@@ -293,10 +308,9 @@ private fun AdvancedRow(onClick: () -> Unit) {
     )
 }
 
-fun Modifier.rowModifier(onClick: () -> Unit): Modifier =
-    this
-        .clickable { onClick() }
-        .padding(vertical = 6.dp)
+fun Modifier.rowModifier(onClick: () -> Unit): Modifier = this
+    .clickable { onClick() }
+    .padding(vertical = 6.dp)
 
 @Preview
 @Composable
@@ -306,7 +320,7 @@ private fun SettingsPagePreview(@PreviewParameter(ThemePreviewParameterProvider:
             signInState = SignInState.SignedOut,
             isDebug = true,
             isUnrestrictedBattery = false,
-            onBackPressed = {},
+            onBackPress = {},
             openFragment = {},
             bottomInset = 0.dp,
         )

@@ -8,25 +8,29 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
-import au.com.shiftyjelly.pocketcasts.compose.components.DialogButtonState
+import au.com.shiftyjelly.pocketcasts.compose.components.DialogButtonProperties
+import au.com.shiftyjelly.pocketcasts.models.db.dao.EpisodeDao
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.download.FixDownloadsWorker
 import au.com.shiftyjelly.pocketcasts.repositories.file.FileStorage
 import au.com.shiftyjelly.pocketcasts.repositories.file.FolderLocation
 import au.com.shiftyjelly.pocketcasts.repositories.file.StorageException
+import au.com.shiftyjelly.pocketcasts.repositories.jobs.EpisodeTitlesNormalizationWorker
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
+import au.com.shiftyjelly.pocketcasts.settings.viewmodel.StorageSettingsViewModel.State.DatabaseEpisodeNormalizationState.NormalizationState
 import au.com.shiftyjelly.pocketcasts.utils.FileUtilWrapper
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
-import java.util.*
+import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactive.collect
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
@@ -36,6 +40,7 @@ class StorageSettingsViewModel
 @Inject constructor(
     private val episodeManager: EpisodeManager,
     private val fileStorage: FileStorage,
+    private val episodeDao: EpisodeDao,
     private val fileUtil: FileUtilWrapper,
     private val settings: Settings,
     private val analyticsTracker: AnalyticsTracker,
@@ -144,7 +149,29 @@ class StorageSettingsViewModel
                 )
             },
         ),
+        episodeTitlesState = State.DatabaseEpisodeNormalizationState(
+            normalizationState = NormalizationState.Loading,
+            onNormalize = {
+                EpisodeTitlesNormalizationWorker.enqueue(context)
+                analyticsTracker.track(AnalyticsEvent.SETTINGS_STORAGE_NORMALIZE_EPISODE_TITLES)
+            },
+        ),
     )
+
+    init {
+        viewModelScope.launch {
+            episodeDao
+                .hasNormalizedEpisodeTitles(EpisodeTitlesNormalizationWorker.NORMALIZATION_TOKEN)
+                .collect { isNormalized ->
+                    mutableState.update { state ->
+                        val titlesState = state.episodeTitlesState.copy(
+                            normalizationState = if (isNormalized) NormalizationState.Normalized else NormalizationState.NotNormalized,
+                        )
+                        state.copy(episodeTitlesState = titlesState)
+                    }
+                }
+        }
+    }
 
     fun onFragmentResume() {
         setupStorage()
@@ -386,14 +413,14 @@ class StorageSettingsViewModel
         title = context.getString(LR.string.settings_storage_move_are_you_sure),
         message = context.getString(LR.string.settings_storage_move_message),
         buttons = listOf(
-            DialogButtonState(
+            DialogButtonProperties(
                 text = context.getString(LR.string.settings_storage_move_cancel).uppercase(
                     Locale.getDefault(),
                 ),
                 onClick = {},
 
             ),
-            DialogButtonState(
+            DialogButtonProperties(
                 text = context.getString(LR.string.settings_storage_move),
                 onClick = { movePodcasts(oldDirectory, newDirectory) },
             ),
@@ -410,14 +437,14 @@ class StorageSettingsViewModel
         buttons = buildList {
             if (showCancel) {
                 add(
-                    DialogButtonState(
+                    DialogButtonProperties(
                         text = context.getString(LR.string.cancel).uppercase(),
                         onClick = {},
                     ),
                 )
             }
             add(
-                DialogButtonState(
+                DialogButtonProperties(
                     text = context.getString(LR.string.ok),
                     onClick = {},
                 ),
@@ -435,6 +462,7 @@ class StorageSettingsViewModel
         val storageFolderState: StorageFolderState,
         val backgroundRefreshState: BackgroundRefreshState,
         val storageDataWarningState: StorageDataWarningState,
+        val episodeTitlesState: DatabaseEpisodeNormalizationState,
     ) {
         data class DownloadedFilesState(
             val size: Long = 0L,
@@ -463,11 +491,30 @@ class StorageSettingsViewModel
             val isChecked: Boolean = false,
             val onCheckedChange: (Boolean) -> Unit,
         )
+
+        data class DatabaseEpisodeNormalizationState(
+            val normalizationState: NormalizationState,
+            val onNormalize: () -> Unit,
+        ) {
+            enum class NormalizationState(
+                @StringRes val labelId: Int,
+            ) {
+                Loading(
+                    labelId = LR.string.loading,
+                ),
+                Normalized(
+                    labelId = LR.string.normalized,
+                ),
+                NotNormalized(
+                    labelId = LR.string.not_normalized,
+                ),
+            }
+        }
     }
 
     data class AlertDialogState(
         val title: String,
         val message: String? = null,
-        val buttons: List<DialogButtonState>,
+        val buttons: List<DialogButtonProperties>,
     )
 }

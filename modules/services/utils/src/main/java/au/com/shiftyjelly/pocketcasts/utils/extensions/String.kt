@@ -7,11 +7,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import net.gcardone.junidecode.Junidecode
 import timber.log.Timber
-
-fun String.escapeLike(escapeChar: Char) = replace("$escapeChar", "$escapeChar$escapeChar")
-    .replace("%", "$escapeChar%")
-    .replace("_", "${escapeChar}_")
 
 val ISO_DATE_FORMATS = object : ThreadLocal<List<SimpleDateFormat>>() {
     override fun initialValue(): List<SimpleDateFormat> {
@@ -70,25 +67,62 @@ fun String.removeNewLines(): String {
     return this.replace("[\n\r]".toRegex(), "")
 }
 
-fun String.removeAccents() =
-    Normalizer.normalize(this, Normalizer.Form.NFD)
-        .replace("\\p{Mn}+".toRegex(), "")
-        .replace("\u0141", "L") // Remove L with stroke
-        .replace("\u0142", "l") // Remove l with stroke
+private val nfdDecomposedCharacters = """\p{Mn}+""".toRegex()
+
+fun String.removeAccents() = Normalizer.normalize(this, Normalizer.Form.NFD)
+    .replace(nfdDecomposedCharacters, "")
+    .replace("\u0141", "L")
+    .replace("\u0142", "l")
+    .lowercase()
+
+fun String.unidecode() = buildString {
+    val decoded = Junidecode.unidecode(this@unidecode)
+
+    var shouldAppendWhitespace = false
+    for (character in decoded) {
+        if (character.isLetterOrDigit()) {
+            append(character.lowercaseChar())
+            shouldAppendWhitespace = true
+        } else if (character.isWhitespace() && shouldAppendWhitespace) {
+            append(' ')
+            shouldAppendWhitespace = false
+        }
+    }
+    if (lastOrNull() == ' ') {
+        deleteCharAt(lastIndex)
+    }
+}
+
+fun String.escapeLike(escapeChar: Char, unidecode: Boolean = true): String {
+    val base = if (unidecode) unidecode() else this
+    return buildString {
+        for (character in base) {
+            when (character) {
+                escapeChar, '%', '_' -> {
+                    append(escapeChar)
+                    append(character)
+                }
+                else -> {
+                    append(character)
+                }
+            }
+        }
+    }
+}
 
 fun String.sha1(): String? = hashString("SHA-1")
 fun String.sha256(): String? = hashString("SHA-256")
+fun List<String>.md5(): String? = this.joinToString(",").hashString("MD5")
 
 /**
  * For information on permitted algorithms, see
  * https://developer.android.com/reference/kotlin/java/security/MessageDigest
  */
-private fun String.hashString(algorithm: String) =
-    try {
-        MessageDigest.getInstance(algorithm)
-            .digest(toByteArray())
-            .joinToString("") { "%02x".format(it) }
-    } catch (e: Exception) {
-        LogBuffer.e(LogBuffer.TAG_INVALID_STATE, "Error applying $algorithm to $this: ${e.message}")
-        null
-    }
+private fun String.hashString(algorithm: String) = try {
+    MessageDigest.getInstance(algorithm)
+        .digest(toByteArray())
+        .joinToString("") { "%02x".format(it) }
+} catch (e: Exception) {
+    LogBuffer.e(LogBuffer.TAG_INVALID_STATE, "Error applying $algorithm to $this: ${e.message}")
+    null
+}

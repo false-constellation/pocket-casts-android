@@ -9,32 +9,25 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.ColorInt
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.os.BundleCompat
 import androidx.core.view.isVisible
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.localization.extensions.getStringPluralPodcastsSelected
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
-import au.com.shiftyjelly.pocketcasts.models.type.PodcastsSortType
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
 import au.com.shiftyjelly.pocketcasts.repositories.images.loadInto
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.ui.extensions.themed
+import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
 import au.com.shiftyjelly.pocketcasts.views.databinding.SettingsFragmentPodcastSelectBinding
 import au.com.shiftyjelly.pocketcasts.views.databinding.SettingsRowPodcastBinding
+import au.com.shiftyjelly.pocketcasts.views.viewmodels.PodcastSelectViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.Single
-import io.reactivex.android.schedulers.AndroidSchedulers
-import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.rxkotlin.addTo
-import io.reactivex.rxkotlin.subscribeBy
-import io.reactivex.rxkotlin.zipWith
-import io.reactivex.schedulers.Schedulers
-import javax.inject.Inject
+import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
-import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @AndroidEntryPoint
@@ -42,26 +35,32 @@ class PodcastSelectFragment : BaseFragment() {
     companion object {
         private const val NEW_INSTANCE_ARG = "tintColor"
 
+        fun createArgs(
+            @ColorInt tintColor: Int? = null,
+            showToolbar: Boolean = false,
+            source: PodcastSelectFragmentSource,
+        ) = Bundle().apply {
+            putParcelable(
+                NEW_INSTANCE_ARG,
+                PodcastSelectFragmentArgs(
+                    tintColor = tintColor,
+                    showToolbar = showToolbar,
+                    source = source,
+                ),
+            )
+        }
+
         fun newInstance(
             @ColorInt tintColor: Int? = null,
             showToolbar: Boolean = false,
             source: PodcastSelectFragmentSource,
-        ): PodcastSelectFragment =
-            PodcastSelectFragment().apply {
-                arguments = Bundle().apply {
-                    putParcelable(
-                        NEW_INSTANCE_ARG,
-                        PodcastSelectFragmentArgs(
-                            tintColor = tintColor,
-                            showToolbar = showToolbar,
-                            source = source,
-                        ),
-                    )
-                }
-            }
-
-        private fun extractArgs(bundle: Bundle?): PodcastSelectFragmentArgs? =
-            bundle?.let { BundleCompat.getParcelable(it, NEW_INSTANCE_ARG, PodcastSelectFragmentArgs::class.java) }
+        ): PodcastSelectFragment = PodcastSelectFragment().apply {
+            arguments = createArgs(
+                tintColor = tintColor,
+                showToolbar = showToolbar,
+                source = source,
+            )
+        }
     }
 
     interface Listener {
@@ -73,13 +72,9 @@ class PodcastSelectFragment : BaseFragment() {
     private var adapter: PodcastSelectAdapter? = null
     private var binding: SettingsFragmentPodcastSelectBinding? = null
     private var source: PodcastSelectFragmentSource? = null
-
     private var userChanged = false
 
-    @Inject lateinit var podcastManager: PodcastManager
-
-    @Inject lateinit var analyticsTracker: AnalyticsTracker
-    private val disposables = CompositeDisposable()
+    private val viewModel: PodcastSelectViewModel by viewModels()
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -100,10 +95,11 @@ class PodcastSelectFragment : BaseFragment() {
 
         val layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
-        val args = extractArgs(arguments)
-            ?: throw IllegalStateException("${this::class.java.simpleName} is missing arguments. It must be created with newInstance function")
+        val args = requireArguments().requireParcelable<PodcastSelectFragmentArgs>(NEW_INSTANCE_ARG)
 
         source = args.source
+
+        source?.let { viewModel.trackOnShown(it) }
 
         val imageRequestFactory = PocketCastsImageRequestFactory(requireContext()).themed()
         binding.toolbarLayout.isVisible = args.showToolbar
@@ -113,49 +109,54 @@ class PodcastSelectFragment : BaseFragment() {
         if (args.tintColor != null) {
             binding.btnSelect.setTextColor(args.tintColor)
         }
-        podcastManager.findSubscribedRxSingle()
-            .zipWith(Single.fromCallable { listener.podcastSelectFragmentGetCurrentSelection() })
-            .map { pair ->
-                val podcasts = pair.first
-                val selected = pair.second
-                return@map podcasts
-                    .sortedBy { PodcastsSortType.cleanStringForSort(it.title) }
-                    .map { SelectablePodcast(it, selected.contains(it.uuid)) }
-            }
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribeOn(Schedulers.io())
-            .subscribeBy(
-                onError = { Timber.e(it) },
-                onSuccess = {
-                    val adapter = PodcastSelectAdapter(it, args.tintColor, imageRequestFactory) {
-                        val selectedList = it.map { it.uuid }
+
+        val selectedUuids = listener.podcastSelectFragmentGetCurrentSelection()
+        viewModel.loadSelectablePodcasts(selectedUuids)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.selectablePodcasts.collect { podcastList ->
+                        val adapter = PodcastSelectAdapter(
+                            podcastList,
+                            args.tintColor,
+                            imageRequestFactory,
+                            onPodcastToggled = { podcastUuid, enabled ->
+                                source?.let { viewModel.trackOnPodcastToggled(it, podcastUuid, enabled) }
+                            },
+                            onSelectionChanged = {
+                                val selectedList = it.map { it.uuid }
+                                binding.lblPodcastsChosen.text =
+                                    resources.getStringPluralPodcastsSelected(selectedList.size)
+                                listener.podcastSelectFragmentSelectionChanged(selectedList)
+                                userChanged = true
+                            },
+                        )
+
+                        val selectedCount = podcastList.count { it.selected }
                         binding.lblPodcastsChosen.text =
-                            resources.getStringPluralPodcastsSelected(selectedList.size)
-                        listener.podcastSelectFragmentSelectionChanged(selectedList)
-                        userChanged = true
-                    }
-
-                    val selected = it.filter { it.selected }
-                    binding.lblPodcastsChosen.text =
-                        resources.getStringPluralPodcastsSelected(selected.size)
-                    binding.recyclerView.layoutManager = layoutManager
-                    binding.recyclerView.adapter = adapter
-
-                    updateSelectButtonText(adapter.selectedPodcasts.size, adapter.list.size)
-                    binding.btnSelect.setOnClickListener {
-                        if (adapter.selectedPodcasts.size == adapter.list.size) { // Everything is selected
-                            adapter.deselectAll()
-                        } else {
-                            adapter.selectAll()
-                        }
+                            resources.getStringPluralPodcastsSelected(selectedCount)
+                        binding.recyclerView.layoutManager = layoutManager
+                        binding.recyclerView.adapter = adapter
 
                         updateSelectButtonText(adapter.selectedPodcasts.size, adapter.list.size)
-                    }
+                        binding.btnSelect.setOnClickListener {
+                            if (adapter.selectedPodcasts.size == adapter.list.size) {
+                                source?.let { viewModel.trackOnSelectNoneTapped(it) }
+                                adapter.deselectAll()
+                            } else {
+                                source?.let { viewModel.trackOnSelectAllTapped(it) }
+                                adapter.selectAll()
+                            }
 
-                    this.adapter = adapter
-                },
-            )
-            .addTo(disposables)
+                            updateSelectButtonText(adapter.selectedPodcasts.size, adapter.list.size)
+                        }
+
+                        this@PodcastSelectFragment.adapter = adapter
+                    }
+                }
+            }
+        }
     }
 
     private fun updateSelectButtonText(selectedSize: Int, listSize: Int) {
@@ -169,40 +170,16 @@ class PodcastSelectFragment : BaseFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        disposables.clear()
-        trackChange()
-        binding = null
-    }
-
-    private fun trackChange() {
+        source?.let { viewModel.trackOnDismissed(it) }
         if (userChanged) {
             val props = buildMap {
                 adapter?.selectedPodcasts?.size?.let {
                     put("number_selected", it)
                 }
             }
-            when (source) {
-                PodcastSelectFragmentSource.AUTO_ADD -> {
-                    analyticsTracker.track(AnalyticsEvent.SETTINGS_AUTO_ADD_UP_NEXT_PODCASTS_CHANGED, props)
-                }
-
-                PodcastSelectFragmentSource.NOTIFICATIONS -> {
-                    analyticsTracker.track(AnalyticsEvent.SETTINGS_NOTIFICATIONS_PODCASTS_CHANGED, props)
-                }
-
-                PodcastSelectFragmentSource.DOWNLOADS -> {
-                    analyticsTracker.track(AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_PODCASTS_CHANGED, props)
-                }
-
-                PodcastSelectFragmentSource.FILTERS -> {
-                    // Do not track because the filter_updated event was tracked when the change was persisted
-                }
-
-                null -> {
-                    Timber.e("No source set for ${this::class.java.simpleName}")
-                }
-            }
+            viewModel.trackChange(source, props)
         }
+        binding = null
     }
 
     fun selectAll() {
@@ -219,8 +196,8 @@ class PodcastSelectFragment : BaseFragment() {
     fun userChanged() = userChanged
 }
 
-private data class SelectablePodcast(val podcast: Podcast, var selected: Boolean)
-private class PodcastSelectAdapter(val list: List<SelectablePodcast>, @ColorInt val tintColor: Int?, imageRequestFactory: PocketCastsImageRequestFactory, val onSelectionChanged: (selected: List<Podcast>) -> Unit) : RecyclerView.Adapter<PodcastSelectAdapter.PodcastViewHolder>() {
+data class SelectablePodcast(val podcast: Podcast, var selected: Boolean)
+private class PodcastSelectAdapter(val list: List<SelectablePodcast>, @ColorInt val tintColor: Int?, imageRequestFactory: PocketCastsImageRequestFactory, val onPodcastToggled: (uuid: String, enabled: Boolean) -> Unit, val onSelectionChanged: (selected: List<Podcast>) -> Unit) : RecyclerView.Adapter<PodcastSelectAdapter.PodcastViewHolder>() {
     val imageRequestFactory = imageRequestFactory.smallSize()
 
     class PodcastViewHolder(val binding: SettingsRowPodcastBinding) : RecyclerView.ViewHolder(binding.root)
@@ -251,6 +228,7 @@ private class PodcastSelectAdapter(val list: List<SelectablePodcast>, @ColorInt 
         }
         holder.binding.checkbox.setOnCheckedChangeListener { _, isChecked ->
             item.selected = isChecked
+            onPodcastToggled(item.podcast.uuid, isChecked)
             onSelectionChanged(selectedPodcasts)
         }
 
@@ -284,9 +262,8 @@ private data class PodcastSelectFragmentArgs(
     val source: PodcastSelectFragmentSource,
 ) : Parcelable
 
-enum class PodcastSelectFragmentSource {
-    AUTO_ADD,
-    DOWNLOADS,
-    NOTIFICATIONS,
-    FILTERS,
+enum class PodcastSelectFragmentSource(val analyticsValue: String) {
+    AUTO_ADD("auto_add"),
+    NOTIFICATIONS("notifications"),
+    FILTERS("filters"),
 }

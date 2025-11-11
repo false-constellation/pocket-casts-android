@@ -2,8 +2,6 @@ package au.com.shiftyjelly.pocketcasts.podcasts.view.episode
 
 import android.app.Dialog
 import android.content.res.ColorStateList
-import android.content.res.Resources
-import android.graphics.Color
 import android.os.Bundle
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
@@ -11,9 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.StringRes
-import androidx.core.os.BundleCompat
 import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
@@ -33,10 +29,9 @@ import au.com.shiftyjelly.pocketcasts.player.view.chapters.ChaptersViewModel.Mod
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.BookmarksViewModel
 import au.com.shiftyjelly.pocketcasts.podcasts.databinding.FragmentEpisodeContainerBinding
 import au.com.shiftyjelly.pocketcasts.podcasts.view.episode.EpisodeFragment.EpisodeFragmentArgs
-import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
-import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarColor
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
+import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseDialogFragment
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -99,21 +94,13 @@ class EpisodeContainerFragment :
                 )
             }
         }
-        private fun extractArgs(bundle: Bundle?): EpisodeFragmentArgs? =
-            bundle?.let { BundleCompat.getParcelable(it, NEW_INSTANCE_ARG, EpisodeFragmentArgs::class.java) }
     }
 
-    override val statusBarColor: StatusBarColor
-        get() = StatusBarColor.Custom(
-            context?.getThemeColor(UR.attr.primary_ui_01)
-                ?: Color.WHITE,
-            theme.isDarkTheme,
-        )
+    override val includeNavigationBarPadding: Boolean = false
 
     var binding: FragmentEpisodeContainerBinding? = null
 
-    private val args: EpisodeFragmentArgs
-        get() = extractArgs(arguments) ?: throw IllegalStateException("${this::class.java.simpleName} is missing arguments. It must be created with newInstance function")
+    private val args get() = requireArguments().requireParcelable<EpisodeFragmentArgs>(NEW_INSTANCE_ARG)
 
     private val episodeUUID: String
         get() = args.episodeUuid
@@ -192,14 +179,6 @@ class EpisodeContainerFragment :
             state = BottomSheetBehavior.STATE_EXPANDED
             skipCollapsed = true
         }
-        // Ensure the dialog ends up the full height of the screen
-        // Bottom sheet dialogs get wrapped in a sheet that is WRAP_CONTENT so setting MATCH_PARENT on our
-        // root view is ignored.
-        bottomSheetDialog?.setOnShowListener {
-            view.updateLayoutParams<ViewGroup.LayoutParams> {
-                height = Resources.getSystem().displayMetrics.heightPixels
-            }
-        }
 
         val binding = binding ?: return
 
@@ -271,6 +250,7 @@ class EpisodeContainerFragment :
             multiSelectHelper = bookmarksViewModel.multiSelectHelper,
             menuRes = null,
             activity = requireActivity(),
+            includeStatusBarPadding = false,
         )
     }
 

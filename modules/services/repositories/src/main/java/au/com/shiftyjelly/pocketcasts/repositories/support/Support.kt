@@ -15,17 +15,16 @@ import au.com.shiftyjelly.pocketcasts.localization.R
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast.Companion.AUTO_DOWNLOAD_NEW_EPISODES
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
+import au.com.shiftyjelly.pocketcasts.preferences.model.AutoPlaySource
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
 import au.com.shiftyjelly.pocketcasts.repositories.file.FileStorage
 import au.com.shiftyjelly.pocketcasts.repositories.file.StorageOptions
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
+import au.com.shiftyjelly.pocketcasts.repositories.playlist.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
-import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
 import au.com.shiftyjelly.pocketcasts.utils.FileUtil
 import au.com.shiftyjelly.pocketcasts.utils.Network
@@ -50,7 +49,9 @@ import javax.inject.Singleton
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.reactive.awaitFirst
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
@@ -62,7 +63,6 @@ class Support @Inject constructor(
     private val settings: Settings,
     private val fileStorage: FileStorage,
     private val upNextQueue: UpNextQueue,
-    private val subscriptionManager: SubscriptionManager,
     private val systemBatteryRestrictions: SystemBatteryRestrictions,
     private val syncManager: SyncManager,
     @ApplicationContext private val context: Context,
@@ -79,14 +79,13 @@ class Support @Inject constructor(
         val intent = Intent(Intent.ACTION_SEND)
 
         withContext(Dispatchers.IO) {
-            intent.type = "text/html"
+            intent.type = "message/rfc822"
             if (emailSupport) {
                 intent.putExtra(Intent.EXTRA_EMAIL, arrayOf("support@pocketcasts.com"))
             }
-            val isPaid = subscriptionManager.getCachedStatus() is SubscriptionStatus.Paid
             intent.putExtra(
                 Intent.EXTRA_SUBJECT,
-                "$subject v${settings.getVersion()} ${getAccountType(isPaid)}",
+                "$subject v${settings.getVersion()} ${getAccountType()}",
             )
 
             // try to attach the debug information
@@ -144,10 +143,9 @@ class Support @Inject constructor(
         withContext(Dispatchers.IO) {
             intent.type = "text/html"
             intent.putExtra(Intent.EXTRA_EMAIL, arrayOf("support@pocketcasts.com"))
-            val isPaid = subscriptionManager.getCachedStatus() is SubscriptionStatus.Paid
             intent.putExtra(
                 Intent.EXTRA_SUBJECT,
-                "$subject v${settings.getVersion()} ${getAccountType(isPaid)}",
+                "$subject v${settings.getVersion()} ${getAccountType()}",
             )
 
             try {
@@ -182,33 +180,28 @@ class Support @Inject constructor(
         return intent
     }
 
-    private fun getAccountType(isPaid: Boolean) = if (isPaid) {
-        when ((subscriptionManager.getCachedStatus() as SubscriptionStatus.Paid).tier) {
-            SubscriptionTier.PATRON -> "Patron Account"
-            SubscriptionTier.PLUS -> "Plus Account"
-            SubscriptionTier.NONE -> ""
-        }
-    } else {
-        ""
+    private fun getAccountType() = when (settings.cachedSubscription.value?.tier) {
+        SubscriptionTier.Patron -> "Patron Account"
+        SubscriptionTier.Plus -> "Plus Account"
+        null -> ""
     }
 
-    suspend fun getLogs(): String =
-        withContext(Dispatchers.IO) {
-            buildString {
-                append(getUserDebug(false))
-                val outputStream = ByteArrayOutputStream()
-                LogBuffer.output(outputStream)
-                append(outputStream.toString())
-            }
+    suspend fun getLogs(): String = withContext(Dispatchers.IO) {
+        buildString {
+            append(getUserDebug(false))
+            val outputStream = ByteArrayOutputStream()
+            LogBuffer.output(outputStream)
+            append(outputStream.toString())
         }
+    }
 
     @Suppress("DEPRECATION")
     suspend fun getUserDebug(html: Boolean): String {
         val output = StringBuilder()
         try {
             val eol = if (html) "<br/>" else "\n"
-            output.append("Platform : ").append(Util.getAppPlatform(context)).append(eol)
-            output.append("App version : ").append(settings.getVersion()).append(" (").append(settings.getVersionCode()).append(")").append(eol)
+            output.append("Platform: ").append(Util.getAppPlatform(context)).append(eol)
+            output.append("App version: ").append(settings.getVersion()).append(" (").append(settings.getVersionCode()).append(")").append(eol)
             output.append("Sync account: ").append(if (syncManager.isLoggedIn()) syncManager.getEmail() else "Not logged in").append(eol)
             if (syncManager.isLoggedIn()) {
                 output.append("Last Sync: ").append(settings.getLastModified() ?: "Never").append(eol)
@@ -229,7 +222,7 @@ class Support @Inject constructor(
             output.append(eol)
 
             output.append("Background refresh: ").append(settings.backgroundRefreshPodcasts.value).append(eol)
-            output.append("Battery restriction: ${systemBatteryRestrictions.status}")
+            output.append("Battery restriction: ${systemBatteryRestrictions.status}").append(eol)
             output.append(eol)
 
             if (Build.VERSION.SDK_INT >= 30) {
@@ -248,24 +241,24 @@ class Support @Inject constructor(
 
             val features = Feature.entries.map { "${it.key}: ${FeatureFlag.isEnabled(it)}" }
             output.append("Feature flags").append(eol)
-            features.forEach { output.append(it).append(eol) }
+            features.forEach { output.append("  ").append(it).append(eol) }
 
             val podcastsOutput = StringBuilder()
             podcastsOutput.append("Podcasts").append(eol).append("--------").append(eol).append(eol)
-            val autoDownloadOn = booleanArrayOf(false)
             val uuidToPodcast = HashMap<String, Podcast>()
-            try {
+            val hasAnyPodcastWithAddUpNext = try {
                 val podcasts = podcastManager.findSubscribedBlocking()
-                for (podcast in podcasts) {
-                    if (podcast.isAutoDownloadNewEpisodes) {
-                        autoDownloadOn[0] = true
-                    }
+                val upNextSettings = Array(podcasts.size) { false }
+                podcasts.forEachIndexed { index, podcast ->
                     podcastsOutput.append(podcast.uuid).append(eol)
                     podcastsOutput.append(if (podcast.title.isEmpty()) "-" else podcast.title).append(eol)
                     podcastsOutput.append("Last episode: ").append(podcast.latestEpisodeUuid).append(eol)
                     val effects = podcast.playbackEffects
-                    podcastsOutput.append("Audio effects: ").append(if (podcast.overrideGlobalEffects) "on" else "off").append(" Silence removed: ").append(effects.trimMode).append(" Speed: ").append(effects.playbackSpeed).append(" Boost: ")
-                        .append(if (effects.isVolumeBoosted) "on" else "off").append(eol)
+                    podcastsOutput.append("Audio effects: ").append(if (podcast.overrideGlobalEffects) "on" else "off")
+                        .append(" Silence removed: ").append(effects.trimMode.toString().lowercase())
+                        .append(" Speed: ").append(effects.playbackSpeed)
+                        .append(" Boost: ").append(if (effects.isVolumeBoosted) "on" else "off")
+                        .append(eol)
                     podcastsOutput.append("Auto download? ").append(podcast.isAutoDownloadNewEpisodes).append(eol)
                     podcastsOutput.append("Custom auto archive: ").append(podcast.overrideGlobalArchive.toString()).append(eol)
                     if (podcast.overrideGlobalArchive) {
@@ -277,37 +270,47 @@ class Support @Inject constructor(
                     podcastsOutput.append(eol)
 
                     uuidToPodcast[podcast.uuid] = podcast
+                    upNextSettings[index] = podcast.autoAddToUpNext != Podcast.AutoAddUpNext.OFF
                 }
+                upNextSettings.any { it }
             } catch (e: Exception) {
                 Timber.e(e)
+                false
             }
+            val isAutoDownloadEnabled = podcastManager.hasEpisodesWithAutoDownloadStatus(AUTO_DOWNLOAD_NEW_EPISODES)
 
             output.append(eol)
             output.append("Auto archive settings").append(eol)
-            output.append("Auto archive played episodes after: ${settings.autoArchiveAfterPlaying.value.analyticsValue}").append(eol)
-            output.append("Auto archive inactive episodes after: ${settings.autoArchiveInactive.value.analyticsValue}").append(eol)
-            output.append("Auto archive starred episodes: ${settings.autoArchiveIncludesStarred.value}").append(eol)
+            output.append("  Auto archive played episodes after: ${settings.autoArchiveAfterPlaying.value.analyticsValue}").append(eol)
+            output.append("  Auto archive inactive episodes after: ${settings.autoArchiveInactive.value.analyticsValue}").append(eol)
+            output.append("  Auto archive starred episodes: ${settings.autoArchiveIncludesStarred.value}").append(eol)
 
             output.append(eol)
             output.append("Auto downloads").append(eol)
-            output.append("  Any podcast? ").append(yesNoString(autoDownloadOn[0])).append(eol)
-            output.append("  New Episodes? ").append(yesNoString(settings.autoDownloadNewEpisodes.value == AUTO_DOWNLOAD_NEW_EPISODES)).append(eol)
-            output.append("  On Follow? ").append(yesNoString(settings.autoDownloadOnFollowPodcast.value)).append(eol)
-            output.append("  Limit Downloads ").append(settings.autoDownloadLimit.value).append(eol)
+            output.append("  Any podcast? ").append(yesNoString(isAutoDownloadEnabled)).append(eol)
+            output.append("  New episodes? ").append(yesNoString(settings.autoDownloadNewEpisodes.value == AUTO_DOWNLOAD_NEW_EPISODES)).append(eol)
+            output.append("  On follow? ").append(yesNoString(settings.autoDownloadOnFollowPodcast.value)).append(eol)
+            output.append("  Limit downloads: ").append(settings.autoDownloadLimit.value).append(eol)
+            output.append("  Any podcast new episode up next? ").append(yesNoString(hasAnyPodcastWithAddUpNext)).append(eol)
             output.append("  Up Next? ").append(yesNoString(settings.autoDownloadUpNext.value)).append(eol)
             output.append("  Only on unmetered WiFi? ").append(yesNoString(settings.autoDownloadUnmeteredOnly.value)).append(eol)
             output.append("  Only when charging? ").append(yesNoString(settings.autoDownloadOnlyWhenCharging.value)).append(eol)
-            output.append(eol)
 
+            output.append(eol)
+            output.append("Auto-play settings").append(eol)
+            output.append("  Is enabled? ${settings.autoPlayNextEpisodeOnEmpty.value}").append(eol)
+            output.append("  Latest source: ${settings.lastAutoPlaySource.value.prettyPrint(podcastManager, playlistManager)}").append(eol)
+
+            output.append(eol)
             output.append("Current connection").append(eol)
             output.append("  Type: ").append(Network.getConnectedNetworkTypeName(context).lowercase()).append(eol)
             output.append("  Metered? ").append(if (Network.isActiveNetworkMetered(context)) "yes (costs money)" else "no (unlimited, free)").append(eol)
             output.append("  Restrict Background Status: ").append(Network.getRestrictBackgroundStatusString(context)).append(eol)
-            output.append(eol)
 
+            output.append(eol)
             output.append("Warning when not on Wifi? ").append(yesNoString(settings.warnOnMeteredNetwork.value)).append(eol)
-            output.append(eol)
 
+            output.append(eol)
             output.append("Work Manager Tasks").append(eol)
             val workInfos = WorkManager.getInstance(context)
                 .getWorkInfosByTagLiveData(DownloadManager.WORK_MANAGER_DOWNLOAD_TAG)
@@ -392,13 +395,13 @@ class Support @Inject constructor(
                 output.append("Effects").append(eol)
                 output.append("Global Audio effects: ")
                     .append(" Playback speed: ").append(effects.playbackSpeed).append(eol)
-                    .append(" Silence removed: ").append(effects.trimMode).append(eol)
+                    .append(" Silence removed: ").append(effects.trimMode.toString().lowercase()).append(eol)
                     .append(" Volume boost: ").append(if (effects.isVolumeBoosted) "on" else "off").append(eol).append(eol)
 
                 output.append("Database").append(eol)
                     .append(" ").append(podcastManager.countPodcastsBlocking()).append(" Podcasts ").append(eol)
                     .append(" ").append(episodeManager.countEpisodes()).append(" Episodes ").append(eol)
-                    .append(" ").append(playlistManager.findAllBlocking().size).append(" Playlists ").append(eol)
+                    .append(" ").append(runBlocking { playlistManager.playlistPreviewsFlow() }.first().size).append(" Playlists ").append(eol)
                     .append(" ").append(queue.size).append(" Up Next ").append(eol).append(eol)
 
                 output.append(podcastsOutput.toString())
@@ -406,10 +409,10 @@ class Support @Inject constructor(
                 output.append("Filters").append(eol).append("-------").append(eol).append(eol)
 
                 try {
-                    val playlists = playlistManager.findAllBlocking()
+                    val playlists = runBlocking { playlistManager.playlistPreviewsFlow() }.first()
                     for (playlist in playlists) {
                         output.append(playlist.title).append(eol)
-                        output.append("Auto Download? ").append(playlist.autoDownload).append(" Unmetered only? ").append(playlist.autoDownloadUnmeteredOnly).append(" Power only? ").append(playlist.autoDownloadPowerOnly).append(eol)
+                        output.append("Auto Download? ").append(playlist.settings.isAutoDownloadEnabled).append(eol)
                         output.append(eol)
                     }
                 } catch (e: Exception) {
@@ -450,7 +453,6 @@ class Support @Inject constructor(
             Podcast.AutoAddUpNext.OFF -> "off"
             Podcast.AutoAddUpNext.PLAY_NEXT -> "to top (play next)"
             Podcast.AutoAddUpNext.PLAY_LAST -> "to bottom (play last)"
-            else -> "unknown value $autoAddToUpNext"
         }
     }
 
@@ -466,4 +468,26 @@ class Support @Inject constructor(
             return ""
         }
     }
+}
+
+private fun AutoPlaySource.prettyPrint(
+    podcastManager: PodcastManager,
+    playlistManager: PlaylistManager,
+): String = when (this) {
+    is AutoPlaySource.PodcastOrFilter -> {
+        podcastManager.findPodcastByUuidBlocking(uuid)?.let { podcast ->
+            return "Podcast / ${podcast.title} / ${podcast.uuid}"
+        }
+        runBlocking { playlistManager.playlistPreviewsFlow().first() }
+            .find { it.uuid == uuid }
+            ?.let { filter ->
+                return "Filter / ${filter.title} / ${filter.uuid}"
+            }
+        "Podcast or filter: $uuid"
+    }
+
+    AutoPlaySource.Predefined.Downloads -> "Downloads"
+    AutoPlaySource.Predefined.Files -> "Files"
+    AutoPlaySource.Predefined.Starred -> "Starred"
+    AutoPlaySource.Predefined.None -> "None"
 }

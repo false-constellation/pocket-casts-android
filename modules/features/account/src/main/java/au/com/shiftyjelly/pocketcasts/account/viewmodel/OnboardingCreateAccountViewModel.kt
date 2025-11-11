@@ -4,14 +4,19 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingLoginOrSignUpViewModel.Companion.AnalyticsProp
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.experiments.ExperimentProvider
+import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.repositories.sync.LoginResult
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
+import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.utils.Network
+import au.com.shiftyjelly.pocketcasts.utils.extensions.isGooglePlayServicesAvailableSuccess
+import com.google.android.gms.common.GoogleApiAvailability
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -32,9 +37,14 @@ class OnboardingCreateAccountViewModel @Inject constructor(
     private val podcastManager: PodcastManager,
     private val experimentProvider: ExperimentProvider,
     @ApplicationContext context: Context,
-) : AndroidViewModel(context as Application), CoroutineScope {
+) : AndroidViewModel(context as Application),
+    CoroutineScope {
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Default
+
+    val showGoogleSignUp =
+        Settings.GOOGLE_SIGN_IN_SERVER_CLIENT_ID.isNotEmpty() &&
+            GoogleApiAvailability.getInstance().isGooglePlayServicesAvailableSuccess(context)
 
     private val _stateFlow = MutableStateFlow(
         OnboardingCreateAccountState(
@@ -49,6 +59,13 @@ class OnboardingCreateAccountViewModel @Inject constructor(
 
     fun onBackPressed() {
         analyticsTracker.track(AnalyticsEvent.CREATE_ACCOUNT_DISMISSED)
+    }
+
+    fun onSignUpEmailPressed(flow: OnboardingFlow) {
+        analyticsTracker.track(
+            AnalyticsEvent.SETUP_ACCOUNT_BUTTON_TAPPED,
+            mapOf(AnalyticsProp.flow(flow), AnalyticsProp.ButtonTapped.createAccount),
+        )
     }
 
     fun updateEmail(email: String) {
@@ -74,7 +91,7 @@ class OnboardingCreateAccountViewModel @Inject constructor(
             )
         }
 
-        subscriptionManager.clearCachedStatus()
+        subscriptionManager.clearCachedMembership()
 
         viewModelScope.launch {
             val result = syncManager.createUserWithEmailAndPassword(

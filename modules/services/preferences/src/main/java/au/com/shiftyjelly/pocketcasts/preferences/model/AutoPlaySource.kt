@@ -4,40 +4,44 @@ import java.util.UUID
 
 sealed interface AutoPlaySource {
     val id: String
-
-    // We can safely use the ID as server ID. Keeping it if need to make changes in the future.
-    val serverId: String get() = id
+    val analyticsValue: String
 
     data class PodcastOrFilter(
         val uuid: String,
     ) : AutoPlaySource {
         override val id get() = uuid
+
+        override val analyticsValue: String
+            get() = "podcast_or_filter_$uuid"
     }
 
-    data object Downloads : AutoPlaySource {
-        override val id = "downloads"
-    }
-
-    data object Files : AutoPlaySource {
-        override val id = "files"
-    }
-
-    data object Starred : AutoPlaySource {
-        override val id = "starred"
-    }
-
-    data object None : AutoPlaySource {
-        override val id = ""
+    enum class Predefined(
+        override val id: String,
+        override val analyticsValue: String,
+    ) : AutoPlaySource {
+        Downloads(
+            id = "downloads",
+            analyticsValue = "downloads",
+        ),
+        Files(
+            id = "files",
+            analyticsValue = "files",
+        ),
+        Starred(
+            id = "starred",
+            analyticsValue = "starred",
+        ),
+        None(
+            id = "",
+            analyticsValue = "none",
+        ),
     }
 
     companion object {
-        private val Constants = listOf(None, Downloads, Files, Starred)
-
-        fun fromId(id: String) = when {
-            runCatching { UUID.fromString(id) }.isSuccess -> PodcastOrFilter(id)
-            else -> Constants.find { it.id == id } ?: None
-        }
-
-        fun fromServerId(id: String) = fromId(id)
+        fun fromId(id: String) = runCatching { UUID.fromString(id) }
+            .map { PodcastOrFilter(id) }
+            .recover { Predefined.entries.find { it.id == id } }
+            .getOrNull()
+            ?: Predefined.None
     }
 }

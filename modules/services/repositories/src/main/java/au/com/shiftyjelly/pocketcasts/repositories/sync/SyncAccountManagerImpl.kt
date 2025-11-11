@@ -7,7 +7,6 @@ import android.accounts.NetworkErrorException
 import android.accounts.OnAccountsUpdateListener
 import android.content.Intent
 import android.os.Bundle
-import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import au.com.shiftyjelly.pocketcasts.preferences.AccessToken
 import au.com.shiftyjelly.pocketcasts.preferences.AccountConstants
@@ -16,6 +15,7 @@ import au.com.shiftyjelly.pocketcasts.servers.sync.LoginIdentity
 import au.com.shiftyjelly.pocketcasts.servers.sync.TokenHandler
 import au.com.shiftyjelly.pocketcasts.servers.sync.exception.RefreshTokenExpiredException
 import au.com.shiftyjelly.pocketcasts.utils.Optional
+import au.com.shiftyjelly.pocketcasts.utils.extensions.findParcelable
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import io.reactivex.BackpressureStrategy
 import io.reactivex.Flowable
@@ -30,7 +30,8 @@ import kotlinx.coroutines.withContext
 open class SyncAccountManagerImpl @Inject constructor(
     private val tokenErrorNotification: TokenErrorNotification,
     private val accountManager: AccountManager,
-) : TokenHandler, SyncAccountManager {
+) : TokenHandler,
+    SyncAccountManager {
     override fun getAccount(): Account? {
         return accountManager.getAccountsByType(AccountConstants.ACCOUNT_TYPE).firstOrNull()
     }
@@ -75,10 +76,9 @@ open class SyncAccountManagerImpl @Inject constructor(
         }, BackpressureStrategy.BUFFER)
     }
 
-    override fun getUuid(): String? =
-        getAccount()?.let { account ->
-            accountManager.getUserData(account, AccountConstants.UUID)
-        }
+    override fun getUuid(): String? = getAccount()?.let { account ->
+        accountManager.getUserData(account, AccountConstants.UUID)
+    }
 
     override fun getLoginIdentity(): LoginIdentity? {
         val account = getAccount() ?: return null
@@ -86,14 +86,13 @@ open class SyncAccountManagerImpl @Inject constructor(
         return LoginIdentity.valueOf(loginIdentity) ?: LoginIdentity.PocketCasts
     }
 
-    override fun peekAccessToken(account: Account): AccessToken? =
-        accountManager.peekAuthToken(account, AccountConstants.TOKEN_TYPE)?.let {
-            if (it.isNotEmpty()) {
-                AccessToken(it)
-            } else {
-                null
-            }
+    override fun peekAccessToken(account: Account): AccessToken? = accountManager.peekAuthToken(account, AccountConstants.TOKEN_TYPE)?.let {
+        if (it.isNotEmpty()) {
+            AccessToken(it)
+        } else {
+            null
         }
+    }
 
     override suspend fun getAccessToken(): AccessToken? {
         val account = getAccount() ?: return null
@@ -111,7 +110,7 @@ open class SyncAccountManagerImpl @Inject constructor(
                 val token = bundle.getString(AccountManager.KEY_AUTHTOKEN)
                 // Token failed to refresh
                 if (token == null) {
-                    val intent = BundleCompat.getParcelable(bundle, AccountManager.KEY_INTENT, Intent::class.java)
+                    val intent = bundle.findParcelable<Intent>(AccountManager.KEY_INTENT)
                     if (intent == null) {
                         throw NetworkErrorException()
                     } else {
@@ -173,15 +172,14 @@ open class SyncAccountManagerImpl @Inject constructor(
         accountManager.setAuthToken(account, AccountConstants.TOKEN_TYPE, accessToken.value)
     }
 
-    override fun getRefreshToken(account: Account?): RefreshToken? =
-        (account ?: getAccount())?.let {
-            val refreshToken = accountManager.getPassword(it)
-            if (refreshToken != null && refreshToken.isNotEmpty()) {
-                RefreshToken(refreshToken)
-            } else {
-                null
-            }
+    override fun getRefreshToken(account: Account?): RefreshToken? = (account ?: getAccount())?.let {
+        val refreshToken = accountManager.getPassword(it)
+        if (refreshToken != null && refreshToken.isNotEmpty()) {
+            RefreshToken(refreshToken)
+        } else {
+            null
         }
+    }
 
     override fun setEmail(email: String) {
         val account = getAccount() ?: return

@@ -23,6 +23,7 @@ import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
+import au.com.shiftyjelly.pocketcasts.models.to.PlaylistEpisode
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.Settings.MediaNotificationControls
 import au.com.shiftyjelly.pocketcasts.preferences.model.HeadphoneAction
@@ -30,14 +31,13 @@ import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkHelper
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.auto.AutoConverter
 import au.com.shiftyjelly.pocketcasts.repositories.playback.auto.AutoMediaId
+import au.com.shiftyjelly.pocketcasts.repositories.playlist.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.utils.Optional
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.extensions.getLaunchActivityPendingIntent
 import au.com.shiftyjelly.pocketcasts.utils.extensions.roundedSpeed
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.BookmarkFeatureControl
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import io.reactivex.Completable
 import io.reactivex.Observable
@@ -49,8 +49,6 @@ import io.reactivex.rxkotlin.Observables
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
-import java.util.Timer
-import java.util.TimerTask
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,9 +58,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -76,18 +76,14 @@ class MediaSessionManager(
     val context: Context,
     val episodeAnalytics: EpisodeAnalytics,
     val bookmarkManager: BookmarkManager,
-    val bookmarkFeature: BookmarkFeatureControl,
     applicationScope: CoroutineScope,
 ) : CoroutineScope {
     companion object {
         const val EXTRA_TRANSIENT = "pocketcasts_transient_loss"
         const val ACTION_NOT_SUPPORTED = "action_not_supported"
 
-        // there's an issue on Samsung phones that if you don't say you support ACTION_SKIP_TO_PREVIOUS and
-        // ACTION_SKIP_TO_NEXT then the skip buttons on the lock screen are disabled. We work around this
-        // by hiding our custom buttons on Samsung phones. It means the buttons in Android Auto aren't our
-        // custom skip buttons, but it all still works.
-        private val MANUFACTURERS_TO_HIDE_CUSTOM_SKIP_BUTTONS = listOf("samsung", "mercedes-benz")
+        // These manufacturers have issues when the skip to next/previous track are missing from the media session.
+        private val MANUFACTURERS_TO_HIDE_CUSTOM_SKIP_BUTTONS = listOf("mercedes-benz")
 
         fun calculateSearchQueryOptions(query: String): List<String> {
             val options = mutableListOf<String>()
@@ -148,7 +144,6 @@ class MediaSessionManager(
             playbackManager,
             bookmarkManager,
             settings,
-            bookmarkFeature,
         )
 
         connect()
@@ -277,20 +272,8 @@ class MediaSessionManager(
             return PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH or
                 PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
                 prepareActions
-        } else if (shouldHideCustomSkipButtons()) {
-            return PlaybackStateCompat.ACTION_PLAY or
-                PlaybackStateCompat.ACTION_PAUSE or
-                PlaybackStateCompat.ACTION_SEEK_TO or
-                PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH or
-                PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
-                PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                PlaybackStateCompat.ACTION_STOP or
-                PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM or
-                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                prepareActions
         } else {
-            return PlaybackStateCompat.ACTION_PLAY or
+            val actions = PlaybackStateCompat.ACTION_PLAY or
                 PlaybackStateCompat.ACTION_PAUSE or
                 PlaybackStateCompat.ACTION_SEEK_TO or
                 PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH or
@@ -298,7 +281,17 @@ class MediaSessionManager(
                 PlaybackStateCompat.ACTION_PLAY_PAUSE or
                 PlaybackStateCompat.ACTION_STOP or
                 PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM or
+                PlaybackStateCompat.ACTION_FAST_FORWARD or
+                PlaybackStateCompat.ACTION_REWIND or
                 prepareActions
+
+            return if (useCustomSkipButtons()) {
+                actions
+            } else {
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                    actions
+            }
         }
     }
 
@@ -433,9 +426,9 @@ class MediaSessionManager(
     }
 
     private fun addCustomActions(stateBuilder: PlaybackStateCompat.Builder, currentEpisode: BaseEpisode, playbackState: PlaybackState) {
-        if (!shouldHideCustomSkipButtons()) {
-            addCustomAction(stateBuilder, APP_ACTION_SKIP_BACK, "Skip back", IR.drawable.auto_skipback)
-            addCustomAction(stateBuilder, APP_ACTION_SKIP_FWD, "Skip forward", IR.drawable.auto_skipforward)
+        if (useCustomSkipButtons()) {
+            addCustomAction(stateBuilder, APP_ACTION_SKIP_BACK, "Skip back", IR.drawable.media_skipback)
+            addCustomAction(stateBuilder, APP_ACTION_SKIP_FWD, "Skip forward", IR.drawable.media_skipforward)
         }
 
         val visibleCount = if (settings.customMediaActionsVisibility.value) MediaNotificationControls.MAX_VISIBLE_OPTIONS else 0
@@ -529,29 +522,44 @@ class MediaSessionManager(
         val enqueueCommand: (String, suspend () -> Unit) -> Unit,
     ) : MediaSessionCompat.Callback() {
 
-        private var playPauseTimer: Timer? = null
         private var playFromSearchDisposable: Disposable? = null
+        private val mediaEventQueue = MediaEventQueue(scope = this@MediaSessionManager)
 
         override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {
             if (Intent.ACTION_MEDIA_BUTTON == mediaButtonEvent.action) {
-                val keyEvent = IntentCompat.getParcelableExtra(mediaButtonEvent, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
-                    ?: return false
+                val keyEvent = IntentCompat.getParcelableExtra(mediaButtonEvent, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java) ?: return false
+                logEvent(keyEvent.toString())
                 if (keyEvent.action == KeyEvent.ACTION_DOWN) {
-                    when (keyEvent.keyCode) {
-                        KeyEvent.KEYCODE_HEADSETHOOK -> {
-                            handleMediaButtonSingleTap()
-                            return true
+                    LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Media button Android event: ${keyEvent.action}")
+                    val inputEvent = when (keyEvent.keyCode) {
+                        /**
+                         * KEYCODE_MEDIA_PLAY_PAUSE - called when the player audio has focus
+                         * KEYCODE_MEDIA_PLAY - can be called when the player doesn't have focus such when sleep mode
+                         * KEYCODE_HEADSETHOOK - called on most wired headsets
+                         */
+                        KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK -> MediaEvent.SingleTap
+                        KeyEvent.KEYCODE_MEDIA_NEXT -> MediaEvent.DoubleTap
+                        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> MediaEvent.TripleTap
+                        else -> null
+                    }
+                    LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Media button input event: ${keyEvent.action}")
+
+                    if (inputEvent != null) {
+                        launch {
+                            val outputEvent = mediaEventQueue.consumeEvent(inputEvent)
+                            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Media button output event: ${keyEvent.action}")
+                            when (outputEvent) {
+                                MediaEvent.SingleTap -> handleMediaButtonSingleTap()
+                                MediaEvent.DoubleTap -> handleMediaButtonDoubleTap()
+                                MediaEvent.TripleTap -> handleMediaButtonTripleTap()
+                                null -> Unit
+                            }
                         }
-                        KeyEvent.KEYCODE_MEDIA_NEXT -> {
-                            handleMediaButtonDoubleTap()
-                            return true
-                        }
-                        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                            handleMediaButtonTripleTap()
-                            return true
-                        }
+                        return true
                     }
                 }
+            } else {
+                logEvent("onMediaButtonEvent(${mediaButtonEvent.action ?: "unknown action"})")
             }
 
             return super.onMediaButtonEvent(mediaButtonEvent)
@@ -569,38 +577,15 @@ class MediaSessionManager(
             }
         }
 
-        private fun getCurrentControllerInfo(): String {
-            val info = mediaSession.currentControllerInfo
-            return "Controller: ${info.packageName} pid: ${info.pid} uid: ${info.uid}"
+        private fun logEvent(action: String) {
+            val userInfo = runCatching {
+                val info = mediaSession.currentControllerInfo
+                "Controller: ${info.packageName} pid: ${info.pid} uid: ${info.uid}"
+            }.getOrNull()
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Event from Media Session to $action. ${userInfo.orEmpty()}")
         }
-
-        // The parameter inSessionCallback can only be set to true if being called from the MediaSession.Callback thread. The method getCurrentControllerInfo() can only be called from this thread.
-        private fun logEvent(action: String, inSessionCallback: Boolean = true) {
-            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Event from Media Session to $action. ${if (inSessionCallback) getCurrentControllerInfo() else ""}")
-        }
-
         private fun handleMediaButtonSingleTap() {
-            // this code allows the user to double tap their play pause button to skip ahead. Basically it allows them 600ms to press it again to cause a skip instead of a play/pause
-            if (playPauseTimer == null) {
-                playPauseTimer = Timer().apply {
-                    schedule(
-                        object : TimerTask() {
-                            override fun run() {
-                                logEvent("play from headset hook", inSessionCallback = false)
-                                playbackManager.playPause(sourceView = source)
-                                playPauseTimer = null
-                            }
-                        },
-                        600,
-                    )
-                }
-            } else {
-                // timer is not null, which means they pressed play pause in the last 300ms, fire a next instead
-                playPauseTimer?.cancel()
-                playPauseTimer = null
-
-                playbackManager.skipForward(sourceView = source)
-            }
+            playbackManager.playPause(sourceView = source)
         }
 
         private fun handleMediaButtonDoubleTap() {
@@ -614,8 +599,15 @@ class MediaSessionManager(
         private fun handleMediaButtonAction(action: HeadphoneAction) {
             when (action) {
                 HeadphoneAction.ADD_BOOKMARK -> onAddBookmark()
-                HeadphoneAction.SKIP_FORWARD -> onSkipToNext()
-                HeadphoneAction.SKIP_BACK -> onSkipToPrevious()
+                HeadphoneAction.SKIP_FORWARD -> {
+                    onSkipToNext()
+                    if (!playbackManager.isPlaying()) {
+                        enqueueCommand("play") { playbackManager.playQueueSuspend(source) }
+                    }
+                }
+                HeadphoneAction.SKIP_BACK -> {
+                    onSkipToPrevious()
+                }
                 HeadphoneAction.NEXT_CHAPTER,
                 HeadphoneAction.PREVIOUS_CHAPTER,
                 -> Timber.e(ACTION_NOT_SUPPORTED)
@@ -660,16 +652,27 @@ class MediaSessionManager(
 
         // note: the stop event is called from cars when they only want to pause, this is less destructive and doesn't cause issues if they try to play again
         override fun onStop() {
-            logEvent("stop")
-            enqueueCommand("stop") { playbackManager.pauseSuspend(sourceView = source) }
+            // This event is causing issues during casting, so as a temporary solution, we are going to ignore it for now
+            if (playbackManager.player !is CastPlayer) {
+                logEvent("stop")
+                enqueueCommand("stop") { playbackManager.pauseSuspend(sourceView = source) }
+            }
         }
 
         override fun onSkipToPrevious() {
+            onRewind()
+        }
+
+        override fun onSkipToNext() {
+            onFastForward()
+        }
+
+        override fun onRewind() {
             logEvent("skip backwards")
             enqueueCommand("skip backwards") { playbackManager.skipBackwardSuspend(sourceView = source) }
         }
 
-        override fun onSkipToNext() {
+        override fun onFastForward() {
             logEvent("skip forwards")
             enqueueCommand("skip forwards") { playbackManager.skipForwardSuspend(sourceView = source) }
         }
@@ -687,7 +690,7 @@ class MediaSessionManager(
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
             mediaId ?: return
             launch {
-                logEvent("play from media id", inSessionCallback = false)
+                logEvent("play from media id")
 
                 val autoMediaId = AutoMediaId.fromMediaId(mediaId)
                 val episodeId = autoMediaId.episodeId
@@ -875,18 +878,18 @@ class MediaSessionManager(
             }
 
             for (option in options) {
-                val playlist = playlistManager.findFirstByTitleBlocking(option) ?: continue
+                val playlist = runBlocking {
+                    val playlistPreviews = playlistManager.playlistPreviewsFlow().first()
+                    val playlistPreview = playlistPreviews.find { it.title.equals(option, ignoreCase = true) } ?: return@runBlocking null
 
-                Timber.i("Playing matched playlist '$option'")
+                    playlistManager.smartPlaylistFlow(playlistPreview.uuid).first() ?: playlistManager.manualPlaylistFlow(playlistPreview.uuid).first()
+                } ?: continue
 
-                val episodeCount = playlistManager.countEpisodesBlocking(playlist.id, episodeManager, playbackManager)
-                if (episodeCount == 0) return@launch
-
-                val episodesToPlay = playlistManager.findEpisodesBlocking(playlist, episodeManager, playbackManager).take(5)
-                if (episodesToPlay.isEmpty()) return@launch
-
-                playEpisodes(episodesToPlay, sourceView)
-
+                val episodes = playlist.episodes.mapNotNull(PlaylistEpisode::toPodcastEpisode)
+                if (episodes.isEmpty()) {
+                    return@launch
+                }
+                playEpisodes(episodes, sourceView)
                 return@launch
             }
 
@@ -925,8 +928,9 @@ class MediaSessionManager(
         playbackManager.playNow(episode = latestEpisode, sourceView = sourceView)
     }
 
-    private fun shouldHideCustomSkipButtons(): Boolean {
-        return MANUFACTURERS_TO_HIDE_CUSTOM_SKIP_BUTTONS.contains(Build.MANUFACTURER.lowercase())
+    private fun useCustomSkipButtons(): Boolean {
+        return !MANUFACTURERS_TO_HIDE_CUSTOM_SKIP_BUTTONS.contains(Build.MANUFACTURER.lowercase()) &&
+            !settings.nextPreviousTrackSkipButtons.value
     }
 }
 

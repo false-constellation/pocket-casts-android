@@ -20,10 +20,8 @@ dependencies {
     ksp(libs.dagger.hilt.compiler)
     ksp(libs.hilt.compiler)
     ksp(libs.moshi.kotlin.codegen)
-    ksp(libs.showkase.processor)
 
     api(libs.dagger.hilt.android)
-    api(libs.showkase)
 
     api(projects.modules.services.analytics)
     api(projects.modules.services.model)
@@ -36,7 +34,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
 
     implementation(libs.androidx.core.ktx)
-    implementation(projects.modules.services.capturable)
+    implementation(libs.capturable)
     implementation(libs.compose.animation)
     implementation(libs.compose.material)
     implementation(libs.compose.ui)

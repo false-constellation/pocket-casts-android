@@ -1,8 +1,10 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.compose.compiler)
 }
 
 android {
@@ -10,7 +12,7 @@ android {
     buildFeatures {
         buildConfig = true
         viewBinding = true
-        compose = false
+        compose = true
     }
 }
 
@@ -34,14 +36,24 @@ dependencies {
     api(projects.modules.services.repositories)
     api(projects.modules.services.ui)
     api(projects.modules.services.views)
+    api(projects.modules.services.compose)
+
+    implementation(platform(libs.compose.bom))
 
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.preference.ktx)
+    implementation(libs.compose.material)
+    implementation(libs.compose.material3.adaptive)
+    implementation(libs.navigation.compose)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.tooling.preview)
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.rx2)
+    implementation(libs.fragment.compose)
     implementation(libs.fragment.ktx)
     implementation(libs.lifecycle.reactivestreams.ktx)
+    implementation(libs.reorderable)
     implementation(libs.rx2.android)
     implementation(libs.rx2.kotlin)
     implementation(libs.timber)
@@ -49,4 +61,14 @@ dependencies {
     implementation(projects.modules.services.images)
     implementation(projects.modules.services.localization)
     implementation(projects.modules.services.utils)
+
+    implementation(libs.compose.ui.tooling.preview)
+
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.turbine)
+
+    testImplementation(projects.modules.services.sharedtest)
 }

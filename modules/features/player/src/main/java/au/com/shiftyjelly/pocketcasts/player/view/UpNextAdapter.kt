@@ -9,6 +9,9 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import androidx.annotation.ColorInt
 import androidx.appcompat.widget.TooltipCompat
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.DiffUtil
@@ -16,6 +19,8 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.compose.AppTheme
+import au.com.shiftyjelly.pocketcasts.compose.extensions.setContentWithViewCompositionStrategy
 import au.com.shiftyjelly.pocketcasts.localization.helper.RelativeDateFormatter
 import au.com.shiftyjelly.pocketcasts.localization.helper.TimeHelper
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
@@ -42,11 +47,11 @@ import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
 import au.com.shiftyjelly.pocketcasts.utils.extensions.dpToPx
 import au.com.shiftyjelly.pocketcasts.utils.extensions.getActivity
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
-import au.com.shiftyjelly.pocketcasts.views.helper.SwipeButtonLayoutFactory
 import au.com.shiftyjelly.pocketcasts.views.helper.setEpisodeTimeLeft
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectEpisodesHelper
+import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectEpisodesHelper.Companion.MULTI_SELECT_TOGGLE_PAYLOAD
+import au.com.shiftyjelly.pocketcasts.views.swipe.SwipeAction
+import au.com.shiftyjelly.pocketcasts.views.swipe.SwipeRowActions
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieProperty
 import com.airbnb.lottie.SimpleColorFilter
@@ -66,10 +71,13 @@ class UpNextAdapter(
     private val analyticsTracker: AnalyticsTracker,
     private val upNextSource: UpNextSource,
     private val settings: Settings,
-    private val swipeButtonLayoutFactory: SwipeButtonLayoutFactory,
     private val playbackManager: PlaybackManager,
+    private val swipeRowActionsFactory: SwipeRowActions.Factory,
+    private val onSortClick: () -> Unit,
+    private val onSwipeAction: (BaseEpisode, SwipeAction) -> Unit,
 ) : ListAdapter<Any, RecyclerView.ViewHolder>(UPNEXT_ADAPTER_DIFF) {
     private val dateFormatter = RelativeDateFormatter(context)
+
     private val imageRequestFactory = PocketCastsImageRequestFactory(
         context,
         cornerRadius = 4,
@@ -93,16 +101,43 @@ class UpNextAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
-            R.layout.adapter_up_next -> UpNextEpisodeViewHolder(
-                binding = AdapterUpNextBinding.inflate(inflater, parent, false),
-                listener = listener,
-                dateFormatter = dateFormatter,
-                imageRequestFactory = imageRequestFactory,
-                episodeManager = episodeManager,
-                swipeButtonLayoutFactory = swipeButtonLayoutFactory,
-                settings = settings,
+            R.layout.adapter_up_next -> {
+                val binding = AdapterUpNextBinding.inflate(inflater, parent, false)
+                UpNextEpisodeViewHolder(
+                    binding = binding,
+                    episodeManager = episodeManager,
+                    imageRequestFactory = imageRequestFactory,
+                    swipeRowActionsFactory = swipeRowActionsFactory,
+                    listener = listener,
+                    onRowClick = { episode ->
+                        if (multiSelectHelper.isMultiSelecting) {
+                            binding.checkbox.isChecked = multiSelectHelper.toggle(episode)
+                        } else {
+                            val podcastUuid = (episode as? PodcastEpisode)?.podcastUuid
+                            val playOnTap = settings.tapOnUpNextShouldPlay.value
+                            trackUpNextEvent(AnalyticsEvent.UP_NEXT_QUEUE_EPISODE_TAPPED, mapOf(WILL_PLAY_KEY to playOnTap))
+                            listener.onEpisodeActionsClick(episodeUuid = episode.uuid, podcastUuid = podcastUuid)
+                        }
+                    },
+                    onRowLongClick = { episode ->
+                        if (multiSelectHelper.isMultiSelecting) {
+                            multiSelectHelper.defaultLongPress(multiSelectable = episode, fragmentManager = fragmentManager)
+                        } else {
+                            val podcastUuid = (episode as? PodcastEpisode)?.podcastUuid
+                            val playOnLongPress = !settings.tapOnUpNextShouldPlay.value
+                            trackUpNextEvent(AnalyticsEvent.UP_NEXT_QUEUE_EPISODE_LONG_PRESSED, mapOf(WILL_PLAY_KEY to playOnLongPress))
+                            listener.onEpisodeActionsLongPress(episodeUuid = episode.uuid, podcastUuid = podcastUuid)
+                        }
+                    },
+                    onSwipeAction = onSwipeAction,
+                )
+            }
+
+            R.layout.adapter_up_next_footer -> HeaderViewHolder(
+                binding = AdapterUpNextFooterBinding.inflate(inflater, parent, false),
+                onSortClick = onSortClick,
             )
-            R.layout.adapter_up_next_footer -> HeaderViewHolder(AdapterUpNextFooterBinding.inflate(inflater, parent, false))
+
             R.layout.adapter_up_next_playing -> PlayingViewHolder(AdapterUpNextPlayingBinding.inflate(inflater, parent, false))
             else -> throw IllegalStateException("Unknown view type in up next")
         }
@@ -110,9 +145,16 @@ class UpNextAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
-            is BaseEpisode -> bindEpisodeRow(holder as UpNextEpisodeViewHolder, item)
+            is BaseEpisode -> bindEpisodeRow(holder as UpNextEpisodeViewHolder, item, animateMultiSelection = false)
             is PlayerViewModel.UpNextSummary -> (holder as HeaderViewHolder).bind(item)
             is UpNextPlaying -> (holder as PlayingViewHolder).bind(item)
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: List<Any?>) {
+        when (val item = getItem(position)) {
+            is BaseEpisode -> bindEpisodeRow(holder as UpNextEpisodeViewHolder, item, animateMultiSelection = MULTI_SELECT_TOGGLE_PAYLOAD in payloads)
+            else -> super.onBindViewHolder(holder, position, payloads)
         }
     }
 
@@ -126,44 +168,28 @@ class UpNextAdapter(
         }
     }
 
-    private fun bindEpisodeRow(holder: UpNextEpisodeViewHolder, episode: BaseEpisode) {
+    private fun bindEpisodeRow(
+        holder: UpNextEpisodeViewHolder,
+        episode: BaseEpisode,
+        animateMultiSelection: Boolean,
+    ) {
         holder.bind(
             episode = episode,
-            isMultiSelecting = multiSelectHelper.isMultiSelecting,
+            isMultiSelectEnabled = multiSelectHelper.isMultiSelecting,
             isSelected = multiSelectHelper.isSelected(episode),
+            useEpisodeArtwork = settings.artworkConfiguration.value.useEpisodeArtwork(Element.UpNext),
+            animateMultiSelection = animateMultiSelection,
         )
-
-        holder.binding.itemContainer.setOnClickListener {
-            if (multiSelectHelper.isMultiSelecting) {
-                holder.binding.checkbox.isChecked = multiSelectHelper.toggle(episode)
-            } else {
-                val podcastUuid = (episode as? PodcastEpisode)?.podcastUuid
-                val playOnTap = settings.tapOnUpNextShouldPlay.value
-                trackUpNextEvent(AnalyticsEvent.UP_NEXT_QUEUE_EPISODE_TAPPED, mapOf(WILL_PLAY_KEY to playOnTap))
-                listener.onEpisodeActionsClick(episodeUuid = episode.uuid, podcastUuid = podcastUuid)
-            }
-        }
-        holder.binding.itemContainer.setOnLongClickListener {
-            if (multiSelectHelper.isMultiSelecting) {
-                multiSelectHelper.defaultLongPress(multiSelectable = episode, fragmentManager = fragmentManager)
-            } else {
-                val podcastUuid = (episode as? PodcastEpisode)?.podcastUuid
-                val playOnLongPress = !settings.tapOnUpNextShouldPlay.value
-                trackUpNextEvent(AnalyticsEvent.UP_NEXT_QUEUE_EPISODE_LONG_PRESSED, mapOf(WILL_PLAY_KEY to playOnLongPress))
-                listener.onEpisodeActionsLongPress(episodeUuid = episode.uuid, podcastUuid = podcastUuid)
-            }
-            true
-        }
     }
 
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         super.onViewRecycled(holder)
-        (holder as? UpNextEpisodeViewHolder)?.clearDisposable()
+        (holder as? UpNextEpisodeViewHolder)?.unbind()
     }
 
     override fun onViewDetachedFromWindow(holder: RecyclerView.ViewHolder) {
         super.onViewDetachedFromWindow(holder)
-        (holder as? UpNextEpisodeViewHolder)?.clearDisposable()
+        (holder as? UpNextEpisodeViewHolder)?.unbind()
     }
 
     fun updateUserSignInState(isSignedInAsPaidUser: Boolean) {
@@ -174,11 +200,28 @@ class UpNextAdapter(
         this.isUpNextNotEmpty = isUpNextNotEmpty
     }
 
-    inner class HeaderViewHolder(val binding: AdapterUpNextFooterBinding) : RecyclerView.ViewHolder(binding.root) {
+    inner class HeaderViewHolder(
+        val binding: AdapterUpNextFooterBinding,
+        val onSortClick: () -> Unit,
+    ) : RecyclerView.ViewHolder(binding.root) {
+
+        init {
+            binding.sort.setOnClickListener { onSortClick() }
+        }
 
         fun bind(header: PlayerViewModel.UpNextSummary) {
             with(binding) {
-                emptyUpNextContainer.isVisible = header.episodeCount == 0
+                binding.emptyUpNextComposeView.setContentWithViewCompositionStrategy {
+                    AppTheme(theme) {
+                        if (header.episodePlaying && header.episodeCount == 0) {
+                            UpNextNoContentBanner(
+                                onDiscoverClick = listener::onDiscoverTapped,
+                                modifier = Modifier.padding(top = 24.dp),
+                            )
+                        }
+                    }
+                }
+
                 val time = TimeHelper.getTimeDurationShortString(timeMs = (header.totalTimeSecs * 1000).toLong(), context = root.context)
                 lblUpNextTime.isVisible = hasEpisodeInProgress()
                 lblUpNextTime.text = if (header.episodeCount == 0) {
@@ -187,7 +230,8 @@ class UpNextAdapter(
                     root.resources.getQuantityString(LR.plurals.player_up_next_header_title, header.episodeCount, header.episodeCount, time)
                 }
 
-                shuffle.isVisible = isUpNextNotEmpty && FeatureFlag.isEnabled(Feature.UP_NEXT_SHUFFLE)
+                sort.isVisible = isUpNextNotEmpty
+                shuffle.isVisible = isUpNextNotEmpty
                 shuffle.updateShuffleButton()
 
                 shuffle.setOnClickListener {
@@ -203,7 +247,10 @@ class UpNextAdapter(
 
                         settings.upNextShuffle.set(newValue, updateModifiedAt = false)
                     } else {
-                        OnboardingLauncher.openOnboardingFlow(root.context.getActivity(), OnboardingFlow.Upsell(OnboardingUpgradeSource.UP_NEXT_SHUFFLE))
+                        OnboardingLauncher.openOnboardingFlow(
+                            requireNotNull(root.context.getActivity()),
+                            OnboardingFlow.Upsell(OnboardingUpgradeSource.UP_NEXT_SHUFFLE),
+                        )
                     }
 
                     shuffle.updateShuffleButton()
@@ -214,8 +261,6 @@ class UpNextAdapter(
         }
 
         private fun ImageButton.updateShuffleButton() {
-            if (!FeatureFlag.isEnabled(Feature.UP_NEXT_SHUFFLE)) return
-
             this.setImageResource(
                 when {
                     !isSignedInAsPaidUser -> IR.drawable.shuffle_plus_feature_icon

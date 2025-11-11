@@ -46,9 +46,11 @@ dependencies {
     implementation(libs.rx2.java)
     implementation(libs.rx2.kotlin)
     implementation(libs.rx2.relay)
+    implementation(libs.coroutines.rx2)
     implementation(libs.timber)
 
     implementation(projects.modules.services.compose)
+    implementation(libs.hilt.navigation.compose)
     implementation(projects.modules.services.images)
     implementation(projects.modules.services.localization)
     implementation(projects.modules.services.utils)

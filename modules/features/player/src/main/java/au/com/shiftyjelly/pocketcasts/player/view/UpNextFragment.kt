@@ -3,26 +3,36 @@ package au.com.shiftyjelly.pocketcasts.player.view
 import android.content.Context
 import android.os.Bundle
 import android.view.ContextThemeWrapper
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.compose.AppTheme
+import au.com.shiftyjelly.pocketcasts.compose.extensions.setContentWithViewCompositionStrategy
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeViewSource
 import au.com.shiftyjelly.pocketcasts.player.R
@@ -31,38 +41,47 @@ import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.UpNextViewModel
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextSource
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
-import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarColor
+import au.com.shiftyjelly.pocketcasts.ui.helper.NavigationBarColor
+import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarIconColor
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
 import au.com.shiftyjelly.pocketcasts.utils.extensions.hideShadow
+import au.com.shiftyjelly.pocketcasts.views.extensions.quickScrollToTop
 import au.com.shiftyjelly.pocketcasts.views.extensions.tintIcons
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragmentToolbar.ChromeCastButton
-import au.com.shiftyjelly.pocketcasts.views.helper.EpisodeItemTouchHelper
-import au.com.shiftyjelly.pocketcasts.views.helper.EpisodeItemTouchHelper.SwipeSource
+import au.com.shiftyjelly.pocketcasts.views.fragments.TopScrollable
 import au.com.shiftyjelly.pocketcasts.views.helper.NavigationIcon
-import au.com.shiftyjelly.pocketcasts.views.helper.SwipeButtonLayoutFactory
-import au.com.shiftyjelly.pocketcasts.views.helper.SwipeButtonLayoutViewModel
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectEpisodesHelper
+import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectEpisodesHelper.Companion.MULTI_SELECT_TOGGLE_PAYLOAD
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectHelper
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectToolbar
-import au.com.shiftyjelly.pocketcasts.views.tour.TourStep
-import au.com.shiftyjelly.pocketcasts.views.tour.TourViewTag
+import au.com.shiftyjelly.pocketcasts.views.swipe.SwipeActionViewModel
+import au.com.shiftyjelly.pocketcasts.views.swipe.SwipeRowActions
+import au.com.shiftyjelly.pocketcasts.views.swipe.SwipeSource
+import au.com.shiftyjelly.pocketcasts.views.swipe.handleAction
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.lifecycle.withCreationCallback
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx2.asFlow
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 import au.com.shiftyjelly.pocketcasts.views.R as VR
 
 @AndroidEntryPoint
-class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemTouchHelperAdapter {
+class UpNextFragment :
+    BaseFragment(),
+    UpNextListener,
+    UpNextTouchCallback.ItemTouchHelperAdapter,
+    TopScrollable {
     companion object {
         private const val ARG_EMBEDDED = "embedded"
         private const val ARG_SOURCE = "source"
@@ -82,21 +101,36 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
         }
     }
 
-    @Inject lateinit var settings: Settings
+    @Inject
+    lateinit var settings: Settings
 
-    @Inject lateinit var episodeManager: EpisodeManager
+    @Inject
+    lateinit var episodeManager: EpisodeManager
 
-    @Inject lateinit var playbackManager: PlaybackManager
+    @Inject
+    lateinit var playbackManager: PlaybackManager
 
-    @Inject lateinit var multiSelectHelper: MultiSelectEpisodesHelper
+    @Inject
+    lateinit var multiSelectHelper: MultiSelectEpisodesHelper
 
-    @Inject lateinit var analyticsTracker: AnalyticsTracker
+    @Inject
+    lateinit var analyticsTracker: AnalyticsTracker
+
+    @Inject
+    lateinit var swipeRowActionsFactory: SwipeRowActions.Factory
 
     lateinit var adapter: UpNextAdapter
     private val sourceView = SourceView.UP_NEXT
-    private val playerViewModel: PlayerViewModel by activityViewModels()
-    private val upNextViewModel: UpNextViewModel by viewModels<UpNextViewModel>()
-    private val swipeButtonLayoutViewModel: SwipeButtonLayoutViewModel by activityViewModels()
+    private val playerViewModel by activityViewModels<PlayerViewModel>()
+    private val upNextViewModel by viewModels<UpNextViewModel>()
+    private val swipeActionViewModel by viewModels<SwipeActionViewModel>(
+        extrasProducer = {
+            defaultViewModelCreationExtras.withCreationCallback<SwipeActionViewModel.Factory> { factory ->
+                factory.create(SwipeSource.Files, playlistUuid = null)
+            }
+        },
+    )
+
     private var userRearrangingFrom: Int? = null
     private var userDraggingStart: Int? = null
     private var playingEpisodeAtStartOfDrag: String? = null
@@ -104,7 +138,6 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
     private var realBinding: FragmentUpnextBinding? = null
     private val binding: FragmentUpnextBinding get() = realBinding ?: throw IllegalStateException("Trying to access the binding outside of the view lifecycle.")
 
-    private var episodeItemTouchHelper: EpisodeItemTouchHelper? = null
     private var itemTouchHelper: ItemTouchHelper? = null
 
     private var upNextItems: List<Any> = emptyList()
@@ -118,13 +151,7 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
         get() = arguments?.getString(ARG_SOURCE)?.let { UpNextSource.fromString(it) } ?: UpNextSource.UNKNOWN
 
     val overrideTheme: Theme.ThemeType
-        get() = if (settings.useDarkUpNextTheme.value &&
-            upNextSource != UpNextSource.UP_NEXT_TAB
-        ) {
-            Theme.ThemeType.DARK
-        } else {
-            theme.activeTheme
-        }
+        get() = theme.getUpNextTheme(isFullScreen = upNextSource != UpNextSource.UP_NEXT_TAB)
 
     val multiSelectListener = object : MultiSelectHelper.Listener<BaseEpisode> {
         override fun multiSelectSelectAll() {
@@ -193,11 +220,30 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
         if (upNextSource == UpNextSource.UP_NEXT_TAB) {
             analyticsTracker.track(AnalyticsEvent.UP_NEXT_SHOWN, mapOf("source" to "tab_bar"))
         }
+
+        binding.emptyUpNextView.setContentWithViewCompositionStrategy {
+            val upNextState by remember {
+                playerViewModel.upNextStateObservable.asFlow()
+            }.collectAsStateWithLifecycle(null)
+
+            AppTheme(theme.activeTheme) {
+                if (upNextState is UpNextQueue.State.Empty) {
+                    Column(
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                    ) {
+                        UpNextNoContentBanner(
+                            onDiscoverClick = ::onDiscoverTapped,
+                            modifier = Modifier.padding(vertical = 24.dp),
+                        )
+                    }
+                }
+            }
+        }
         return binding.root
     }
 
     override fun onDestroyView() {
-        episodeItemTouchHelper = null
         itemTouchHelper = null
         binding.recyclerView.adapter = null
         super.onDestroyView()
@@ -218,14 +264,14 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
             analyticsTracker = analyticsTracker,
             upNextSource = upNextSource,
             settings = settings,
-            swipeButtonLayoutFactory = SwipeButtonLayoutFactory(
-                swipeButtonLayoutViewModel = swipeButtonLayoutViewModel,
-                onItemUpdated = this::clearViewAtPosition,
-                defaultUpNextSwipeAction = { settings.upNextSwipe.value },
-                fragmentManager = parentFragmentManager,
-                swipeSource = SwipeSource.UP_NEXT,
-            ),
             playbackManager = playbackManager,
+            swipeRowActionsFactory = swipeRowActionsFactory,
+            onSwipeAction = { episode, swipeAction ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    swipeActionViewModel.handleAction(swipeAction, episode.uuid, childFragmentManager)
+                }
+            },
+            onSortClick = ::showSortDialog,
         )
         adapter.theme = overrideTheme
     }
@@ -237,24 +283,10 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
         }
     }
 
-    private fun clearViewAtPosition(
-        @Suppress("UNUSED_PARAMETER") episode: BaseEpisode,
-        position: Int,
-    ) {
-        val recyclerView = realBinding?.recyclerView ?: return
-        recyclerView.findViewHolderForAdapterPosition(position)?.let {
-            episodeItemTouchHelper?.clearView(recyclerView, it)
-        }
-    }
-
     private fun updateStatusAndNavColors() {
         activity?.let {
-            theme.setNavigationBarColor(it.window, true, ThemeColor.primaryUi03(overrideTheme))
-            theme.updateWindowStatusBar(
-                it.window,
-                StatusBarColor.Custom(ThemeColor.secondaryUi01(overrideTheme), overrideTheme.darkTheme),
-                it,
-            )
+            theme.updateWindowNavigationBarColor(window = it.window, navigationBarColor = NavigationBarColor.UpNext(isFullScreen = true))
+            theme.updateWindowStatusBarIcons(window = it.window, statusBarIconColor = StatusBarIconColor.Theme)
         }
     }
 
@@ -289,10 +321,12 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
                     multiSelectHelper.isMultiSelecting = true
                     true
                 }
+
                 R.id.clear_up_next -> {
                     onClearUpNext()
                     true
                 }
+
                 else -> false
             }
         }
@@ -327,16 +361,16 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
             attachToRecyclerView(recyclerView)
         }
 
-        episodeItemTouchHelper = EpisodeItemTouchHelper().apply {
-            attachToRecyclerView(recyclerView)
-        }
-
         (recyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         (recyclerView.itemAnimator as? SimpleItemAnimator)?.changeDuration = 0
 
         val multiSelectToolbar = view.findViewById<MultiSelectToolbar>(R.id.multiSelectToolbar)
         multiSelectHelper.isMultiSelectingLive.observe(viewLifecycleOwner) { isMultiSelecting ->
             val wasMultiSelecting = multiSelectToolbar.isVisible
+            if (wasMultiSelecting == isMultiSelecting) {
+                return@observe
+            }
+
             multiSelectToolbar.isVisible = isMultiSelecting
             toolbar.isVisible = !isMultiSelecting
 
@@ -344,23 +378,19 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
             if (!isEmbedded || isEmbeddedExpanded()) {
                 if (isMultiSelecting) {
                     trackUpNextEvent(AnalyticsEvent.UP_NEXT_MULTI_SELECT_ENTERED)
-                } else if (wasMultiSelecting) {
+                } else {
                     trackUpNextEvent(AnalyticsEvent.UP_NEXT_MULTI_SELECT_EXITED)
                 }
             }
 
             multiSelectToolbar.setNavigationIcon(IR.drawable.ic_arrow_back)
 
-            adapter.notifyDataSetChanged()
+            adapter.notifyItemRangeChanged(0, adapter.itemCount, MULTI_SELECT_TOGGLE_PAYLOAD)
         }
         multiSelectHelper.listener = multiSelectListener
 
         multiSelectHelper.context = view.context
         multiSelectToolbar.setup(viewLifecycleOwner, multiSelectHelper, menuRes = VR.menu.menu_multiselect_upnext, activity = requireActivity())
-
-        if (!isEmbedded) {
-            startTour()
-        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -380,53 +410,43 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
 
     fun onExpanded() {
         multiSelectHelper.listener = multiSelectListener
-        startTour()
     }
 
     fun onCollapsed() {
         multiSelectHelper.listener = null
     }
 
-    private fun startTour() {
-        val upNextTourView = realBinding?.upNextTourView ?: return
-        if (settings.getSeenUpNextTour()) {
-            (upNextTourView.parent as? ViewGroup)?.removeView(upNextTourView)
-        } else {
-            settings.setSeenUpNextTour(true)
-            upNextTourView.startTour(tour, UPNEXT_TOUR_NAME)
-        }
-    }
-
     private fun close() {
         if (!isEmbedded) {
-            (activity as? FragmentHostListener)?.bottomSheetClosePressed(this)
+            (activity as? FragmentHostListener)?.closeBottomSheet()
         } else {
             (parentFragment as? PlayerContainerFragment)?.upNextBottomSheetBehavior?.state = BottomSheetBehavior.STATE_COLLAPSED
         }
     }
 
-    private fun isEmbeddedExpanded() =
-        isEmbedded && (parentFragment as? PlayerContainerFragment)?.upNextBottomSheetBehavior?.state == BottomSheetBehavior.STATE_EXPANDED
+    private fun isEmbeddedExpanded() = isEmbedded &&
+        (parentFragment as? PlayerContainerFragment)?.upNextBottomSheetBehavior?.state == BottomSheetBehavior.STATE_EXPANDED
 
     override fun onClearUpNext() {
         playerViewModel.clearUpNext(context = requireContext(), upNextSource = upNextSource)
             .showClearUpNextConfirmationDialog(parentFragmentManager, tag = "up_next_clear_dialog")
     }
 
-    override fun onUpNextEpisodeStartDrag(viewHolder: RecyclerView.ViewHolder) {
-        val recyclerView = realBinding?.recyclerView ?: return
-        val itemTouchHelper = itemTouchHelper ?: return
+    override fun onDiscoverTapped() {
+        if (upNextSource == UpNextSource.NOW_PLAYING) {
+            (activity as FragmentHostListener).closePlayer()
+        } else if (upNextSource == UpNextSource.MINI_PLAYER) {
+            close()
+        }
+        analyticsTracker.track(AnalyticsEvent.UP_NEXT_DISCOVER_BUTTON_TAPPED, mapOf("source" to upNextSource.analyticsValue))
+        (activity as FragmentHostListener).openTab(VR.id.navigation_discover)
+    }
 
+    override fun onUpNextEpisodeStartDrag(viewHolder: RecyclerView.ViewHolder) {
+        val itemTouchHelper = itemTouchHelper ?: return
         itemTouchHelper.startDrag(viewHolder)
         viewHolder.setIsRecyclable(false)
         userDraggingStart = viewHolder.bindingAdapterPosition
-
-        // Clear out any open swipes on drag
-        val firstPosition = (recyclerView.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
-        val lastPosition = (recyclerView.layoutManager as LinearLayoutManager).findLastVisibleItemPosition()
-
-        (firstPosition..lastPosition).map { recyclerView.findViewHolderForAdapterPosition(it) }
-            .forEach { episodeItemTouchHelper?.clearView(recyclerView, it) }
     }
 
     override fun onEpisodeActionsClick(episodeUuid: String, podcastUuid: String?) {
@@ -517,28 +537,17 @@ class UpNextFragment : BaseFragment(), UpNextListener, UpNextTouchCallback.ItemT
         properties.putAll(props)
         analyticsTracker.track(event, properties)
     }
-}
 
-private const val UPNEXT_TOUR_NAME = "upnext"
-private val step1 = TourStep(
-    "Discover the changes to Up Next",
-    "In this update Up Next has been moved into its own screen. We’ve also added some new features.",
-    "Take a quick tour",
-    null,
-    Gravity.BOTTOM,
-)
-private val step2 = TourStep(
-    "Now Playing",
-    "The Now Playing row shows your progress in the current episode. You can tap here to quickly jump to the player.",
-    "Next",
-    TourViewTag.ViewId(R.id.itemContainer),
-    Gravity.BOTTOM,
-)
-private val step3 = TourStep(
-    "Multi-select",
-    "Tap the Select Button to enter multi-select mode. You can then select multiple episodes and perform actions in bulk. Actions will appear at the top of the screen.",
-    "Finish",
-    TourViewTag.ChildWithClass(R.id.toolbar, androidx.appcompat.widget.ActionMenuView::class.java),
-    Gravity.BOTTOM,
-)
-private val tour = listOf(step1, step2, step3)
+    override fun scrollToTop(): Boolean {
+        val canScroll = binding.recyclerView.canScrollVertically(-1)
+        binding.recyclerView.quickScrollToTop()
+        return canScroll
+    }
+
+    private fun showSortDialog() {
+        if (childFragmentManager.findFragmentByTag("up-next-sort") != null) {
+            return
+        }
+        UpNextSortFragment().show(childFragmentManager, "up-next-sort")
+    }
+}

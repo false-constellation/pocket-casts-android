@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.foundation.lazy.items
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration.Element
@@ -18,15 +18,15 @@ import java.util.Date
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 object DownloadsScreen {
-    const val route = "downloads_screen"
+    const val ROUTE = "downloads_screen"
 }
 
 @Composable
 fun DownloadsScreen(
     columnState: ScalingLazyColumnState,
+    viewModel: DownloadsScreenViewModel = hiltViewModel(),
     onItemClick: (PodcastEpisode) -> Unit,
 ) {
-    val viewModel = hiltViewModel<DownloadsScreenViewModel>()
     val state by viewModel.stateFlow.collectAsState()
     val artworkConfiguration by viewModel.artworkConfiguration.collectAsState()
 

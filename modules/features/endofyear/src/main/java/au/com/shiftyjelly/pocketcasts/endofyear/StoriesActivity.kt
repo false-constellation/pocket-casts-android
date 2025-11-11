@@ -87,18 +87,18 @@ class StoriesActivity : ComponentActivity() {
 
     private val onboardingLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(OnboardingActivityContract()) { result ->
         when (result) {
-            OnboardingFinish.Done, OnboardingFinish.DoneGoToDiscover -> {
+            is OnboardingFinish.Done, is OnboardingFinish.DoneGoToDiscover -> {
                 settings.setHasDoneInitialOnboarding()
             }
-            OnboardingFinish.DoneShowPlusPromotion -> {
+            is OnboardingFinish.DoneShowPlusPromotion -> {
                 settings.setHasDoneInitialOnboarding()
                 OnboardingLauncher.openOnboardingFlow(this, OnboardingFlow.Upsell(OnboardingUpgradeSource.LOGIN_PLUS_PROMOTION))
             }
-            OnboardingFinish.DoneShowWelcomeInReferralFlow -> {
+            is OnboardingFinish.DoneShowWelcomeInReferralFlow -> {
                 settings.showReferralWelcome.set(true, updateModifiedAt = false)
             }
-            null -> {
-                Timber.e("Unexpected null result from onboarding activity")
+            is OnboardingFinish.DoneApplySuggestedFolders, null -> {
+                Timber.e("Unexpected result $result from onboarding activity")
             }
         }
     }
@@ -142,7 +142,9 @@ class StoriesActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         val state by viewModel.uiState.collectAsState()
         val pagerState = rememberPagerState(pageCount = { (state as? UiState.Synced)?.stories?.size ?: 0 })
-        val storyChanger = rememberStoryChanger(pagerState, viewModel)
+        val storyChanger = remember(pagerState, scope) {
+            StoryChanger(pagerState, viewModel, scope)
+        }
         val captureController = rememberStoryCaptureController()
         var showScreenshotDialog by remember { mutableStateOf(false) }
 
@@ -321,15 +323,6 @@ class StoriesActivity : ComponentActivity() {
             activity.startActivity(intent)
         }
     }
-}
-
-@Composable
-private fun rememberStoryChanger(
-    pagerState: PagerState,
-    viewModel: EndOfYearViewModel,
-): StoryChanger {
-    val scope = rememberCoroutineScope()
-    return remember(pagerState) { StoryChanger(pagerState, viewModel, scope) }
 }
 
 private class StoryChanger(

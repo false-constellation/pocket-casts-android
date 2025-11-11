@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -124,8 +125,10 @@ internal fun StoriesPage(
         TopControls(
             pagerState = pagerState,
             progress = state.storyProgress,
+            color = (state as? UiState.Synced)?.stories?.get(pagerState.currentPage)?.controlsColor ?: Color.White,
             measurements = measurements,
             onClose = onClose,
+            controller = controller,
         )
 
         // Use an invisible 'PLAYBACK' text to compute an appropriate font size.
@@ -219,7 +222,6 @@ private fun Stories(
             )
             is Story.TotalTime -> TotalTimeStory(
                 story = story,
-                measurements = measurements,
                 controller = controller,
                 onShareStory = { file -> onShareStory(story, file) },
             )
@@ -259,21 +261,29 @@ private fun Stories(
 internal fun BoxScope.TopControls(
     pagerState: PagerState,
     progress: Float,
+    color: Color,
     measurements: EndOfYearMeasurements,
     onClose: () -> Unit,
+    controller: StoryCaptureController,
 ) {
+    val density = LocalDensity.current
+    // Calculate the height so that we can remove it from the share images
+    val statusBarHeightPx = measurements.statusBarInsets.getTop(density)
+    val extraPaddingPx = with(density) { 24.dp.roundToPx() }
+
     Column(
         horizontalAlignment = Alignment.End,
         modifier = Modifier
             .align(Alignment.TopCenter)
             .fillMaxWidth()
             .windowInsetsPadding(measurements.statusBarInsets)
-            .padding(start = 16.dp, end = 16.dp),
+            .padding(start = 16.dp, end = 16.dp)
+            .onGloballyPositioned { controller.topControlsHeightPx = it.size.height + statusBarHeightPx - extraPaddingPx },
     ) {
         PagerProgressingIndicator(
             state = pagerState,
             progress = progress,
-            activeColor = Color.Black,
+            activeColor = color,
         )
         Spacer(
             modifier = Modifier.height(10.dp),
@@ -281,10 +291,10 @@ internal fun BoxScope.TopControls(
         Image(
             painter = painterResource(IR.drawable.ic_close),
             contentDescription = stringResource(LR.string.close),
-            colorFilter = ColorFilter.tint(Color.Black),
+            colorFilter = ColorFilter.tint(color),
             modifier = Modifier
                 // Increase touch target of the image
-                .offset(x = 12.dp, y = -12.dp)
+                .offset(x = 12.dp, y = (-12).dp)
                 .size(48.dp)
                 .clickable(
                     interactionSource = remember(::MutableInteractionSource),
@@ -293,7 +303,7 @@ internal fun BoxScope.TopControls(
                     role = Role.Button,
                     onClick = onClose,
                 )
-                .padding(12.dp),
+                .padding(10.dp),
         )
     }
 }
@@ -355,7 +365,7 @@ private val Context.sizeLimit: DpSize?
         }
     }
 
-@Preview(device = Devices.PortraitRegular)
+@Preview(device = Devices.PORTRAIT_REGULAR)
 @Composable
 private fun ErrorMessagePreview() {
     ErrorMessage(

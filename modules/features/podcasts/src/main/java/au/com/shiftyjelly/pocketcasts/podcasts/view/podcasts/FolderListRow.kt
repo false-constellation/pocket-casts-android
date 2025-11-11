@@ -29,10 +29,10 @@ fun FolderListRow(
     color: Color,
     name: String,
     podcastUuids: List<String>,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     badgeCount: Int = 0,
     badgeType: BadgeType = BadgeType.OFF,
-    onClick: (() -> Unit)?,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -40,10 +40,9 @@ fun FolderListRow(
             .height(80.dp)
             .fillMaxWidth()
             .background(MaterialTheme.theme.colors.primaryUi01)
-            .padding(horizontal = 16.dp)
             .then(if (onClick == null) Modifier else Modifier.clickable { onClick() }),
     ) {
-        FolderImageSmall(color = color, podcastUuids = podcastUuids, folderImageSize = 64.dp)
+        FolderImageSmall(color = color, podcastUuids = podcastUuids, size = 64.dp)
         Column(
             modifier = Modifier
                 .padding(start = 16.dp)

@@ -29,7 +29,7 @@ class ShowPageDeepLinkTest {
 
     @Test
     fun createShowUpNextIntent() {
-        val intent = ShowUpNextDeepLink.toIntent(context)
+        val intent = ShowUpNextModalDeepLink.toIntent(context)
 
         assertEquals(ACTION_VIEW, intent.action)
         assertEquals("upnext", intent.getStringExtra("launch-page"))
@@ -37,10 +37,11 @@ class ShowPageDeepLinkTest {
 
     @Test
     fun createShowFilterIntent() {
-        val intent = ShowFilterDeepLink(filterId = 15L).toIntent(context)
+        val intent = ShowPlaylistDeepLink(playlistUuid = "id", playlistType = "smart").toIntent(context)
 
         assertEquals(ACTION_VIEW, intent.action)
         assertEquals("playlist", intent.getStringExtra("launch-page"))
-        assertEquals(15L, intent.getLongExtra("playlist-id", -1L))
+        assertEquals("id", intent.getStringExtra("playlist_uuid"))
+        assertEquals("smart", intent.getStringExtra("playlist_type"))
     }
 }

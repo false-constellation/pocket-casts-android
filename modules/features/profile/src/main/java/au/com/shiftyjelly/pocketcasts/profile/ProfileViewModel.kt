@@ -4,9 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.models.to.RefreshState
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.models.type.SignInState
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.reactive.asFlow
-import kotlinx.coroutines.rx2.asFlow
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
@@ -52,18 +51,14 @@ class ProfileViewModel @Inject constructor(
         when (state) {
             is SignInState.SignedIn -> ProfileHeaderState(
                 imageUrl = Gravatar.getUrl(state.email),
-                subscriptionTier = when {
-                    state.isSignedInAsPatron -> SubscriptionTier.PATRON
-                    state.isSignedInAsPlus -> SubscriptionTier.PLUS
-                    else -> SubscriptionTier.NONE
-                },
+                subscriptionTier = state.subscription?.tier,
                 email = state.email,
-                expiresIn = state.subscriptionStatus.expiryDate?.toDurationFromNow(),
+                expiresIn = state.subscription?.expiryDate?.toDurationFromNow(),
             )
 
             is SignInState.SignedOut -> ProfileHeaderState(
                 imageUrl = null,
-                subscriptionTier = SubscriptionTier.NONE,
+                subscriptionTier = null,
                 email = null,
                 expiresIn = null,
             )
@@ -73,7 +68,7 @@ class ProfileViewModel @Inject constructor(
         started = SharingStarted.Eagerly,
         initialValue = ProfileHeaderState(
             imageUrl = null,
-            subscriptionTier = SubscriptionTier.NONE,
+            subscriptionTier = null,
             email = null,
             expiresIn = null,
         ),
@@ -81,7 +76,7 @@ class ProfileViewModel @Inject constructor(
 
     internal val profileStatsState = combine(
         refreshStatsTrigger.onStart { emit(Unit) },
-        podcastManager.countSubscribedRxFlowable().asFlow(),
+        podcastManager.countSubscribedFlow(),
     ) { _, count ->
         ProfileStatsState(
             podcastsCount = count,
@@ -109,11 +104,18 @@ class ProfileViewModel @Inject constructor(
         initialValue = false,
     )
 
-    internal val refreshState = settings.refreshStateObservable.asFlow().stateIn(
+    internal val isFreeAccountBannerVisible = combine(
+        signInState.map { it.isSignedIn },
+        settings.isFreeAccountProfileBannerDismissed.flow,
+    ) { isSignedIn, isBannerDismissed ->
+        !isSignedIn && !isBannerDismissed
+    }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = null,
+        initialValue = false,
     )
+
+    internal val refreshState = settings.refreshStateFlow
 
     internal val showUpgradeBanner = combine(
         settings.upgradeProfileClosed.flow,
@@ -178,7 +180,17 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    internal fun closeUpgradeProfile() {
+    internal fun closeUpgradeProfile(source: SourceView) {
+        tracker.track(AnalyticsEvent.UPGRADE_BANNER_DISMISSED, mapOf("source" to source.analyticsValue))
         settings.upgradeProfileClosed.set(true, updateModifiedAt = false)
+    }
+
+    internal fun onCreateFreeAccountClick() {
+        tracker.track(AnalyticsEvent.INFORMATIONAL_BANNER_VIEW_CREATE_ACCOUNT_TAP, mapOf("source" to "profile"))
+    }
+
+    internal fun dismissFreeAccountBanner() {
+        tracker.track(AnalyticsEvent.INFORMATIONAL_BANNER_VIEW_DISMISSED, mapOf("source" to "profile"))
+        settings.isFreeAccountProfileBannerDismissed.set(true, updateModifiedAt = true)
     }
 }

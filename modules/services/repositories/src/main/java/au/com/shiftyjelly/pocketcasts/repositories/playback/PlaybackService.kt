@@ -26,7 +26,7 @@ import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.FolderItem
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
+import au.com.shiftyjelly.pocketcasts.models.to.PlaylistEpisode
 import au.com.shiftyjelly.pocketcasts.models.type.PodcastsSortType
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.AutoPlaySource
@@ -37,18 +37,21 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.auto.AutoConverter
 import au.com.shiftyjelly.pocketcasts.repositories.playback.auto.AutoConverter.convertFolderToMediaItem
 import au.com.shiftyjelly.pocketcasts.repositories.playback.auto.AutoConverter.convertPodcastToMediaItem
 import au.com.shiftyjelly.pocketcasts.repositories.playback.auto.PackageValidator
+import au.com.shiftyjelly.pocketcasts.repositories.playlist.Playlist
+import au.com.shiftyjelly.pocketcasts.repositories.playlist.PlaylistManager
+import au.com.shiftyjelly.pocketcasts.repositories.playlist.PlaylistPreview
+import au.com.shiftyjelly.pocketcasts.repositories.playlist.SmartPlaylistPreview
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.FolderManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
-import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.servers.ServiceManager
-import au.com.shiftyjelly.pocketcasts.servers.list.ListServiceManager
 import au.com.shiftyjelly.pocketcasts.servers.podcast.PodcastCacheServiceManager
 import au.com.shiftyjelly.pocketcasts.utils.IS_RUNNING_UNDER_TEST
 import au.com.shiftyjelly.pocketcasts.utils.SchedulerProvider
 import au.com.shiftyjelly.pocketcasts.utils.Util
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import com.jakewharton.rxrelay2.BehaviorRelay
 import dagger.hilt.android.AndroidEntryPoint
@@ -71,6 +74,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -109,7 +113,9 @@ const val CONTENT_STYLE_GRID_ITEM_HINT_VALUE = 2
 private const val EPISODE_LIMIT = 100
 
 @AndroidEntryPoint
-open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
+open class PlaybackService :
+    MediaBrowserServiceCompat(),
+    CoroutineScope {
     inner class LocalBinder : Binder() {
         val service: PlaybackService
             get() = this@PlaybackService
@@ -136,10 +142,6 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
     @Inject lateinit var serviceManager: ServiceManager
 
     @Inject lateinit var notificationHelper: NotificationHelper
-
-    @Inject lateinit var subscriptionManager: SubscriptionManager
-
-    @Inject lateinit var listServiceManager: ListServiceManager
 
     @Inject lateinit var podcastCacheServiceManager: PodcastCacheServiceManager
 
@@ -444,7 +446,8 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
         }
     }
 
-    private val NUM_SUGGESTED_ITEMS = 8
+    private val numSuggestedItems = 8
+
     suspend fun loadSuggestedChildren(): List<MediaBrowserCompat.MediaItem> {
         Timber.d("Loading suggested children")
         val episodes = mutableListOf<BaseEpisode>()
@@ -453,14 +456,23 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
         if (currentEpisode != null) {
             episodes.add(currentEpisode)
         }
-        episodes.addAll(upNextQueue.queueEpisodes.take(NUM_SUGGESTED_ITEMS - 1))
+        episodes.addAll(upNextQueue.queueEpisodes.take(numSuggestedItems - 1))
         // add episodes from the top filter
-        if (episodes.size < NUM_SUGGESTED_ITEMS) {
-            val topFilter = playlistManager.findAll().firstOrNull()
-            if (topFilter != null) {
-                val filterEpisodes = playlistManager.findEpisodesBlocking(topFilter, episodeManager, playbackManager)
+        if (episodes.size < numSuggestedItems) {
+            val showPlayed = settings.autoShowPlayed.value
+            val topPlaylist = getPlaylistPreviews().firstOrNull()
+            if (topPlaylist != null) {
+                val filterEpisodes = getPlaylistEpisodes(
+                    uuid = topPlaylist.uuid,
+                    filterEpisode = { playlistType, episode ->
+                        when (playlistType) {
+                            Playlist.Type.Manual -> showPlayed || !(episode.isFinished || episode.isArchived)
+                            Playlist.Type.Smart -> true
+                        }
+                    },
+                ).orEmpty()
                 for (filterEpisode in filterEpisodes) {
-                    if (episodes.size >= NUM_SUGGESTED_ITEMS) {
+                    if (episodes.size >= numSuggestedItems) {
                         break
                     }
                     if (episodes.none { it.uuid == filterEpisode.uuid }) {
@@ -470,7 +482,7 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
             }
         }
         // add the latest episode
-        if (episodes.size < NUM_SUGGESTED_ITEMS) {
+        if (episodes.size < numSuggestedItems) {
             val latestEpisode = episodeManager.findLatestEpisodeToPlayBlocking()
             if (latestEpisode != null && episodes.none { it.uuid == latestEpisode.uuid }) {
                 episodes.add(latestEpisode)
@@ -507,7 +519,7 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
         rootItems.add(podcastItem)
 
         // playlists
-        for (playlist in playlistManager.findAllBlocking().filterNot { it.manual }) {
+        for (playlist in getPlaylistPreviews()) {
             if (playlist.title.equals("video", ignoreCase = true)) continue
 
             val playlistItem = AutoConverter.convertPlaylistToMediaItem(this, playlist)
@@ -536,7 +548,7 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
     }
 
     suspend fun loadPodcastsChildren(): List<MediaBrowserCompat.MediaItem> {
-        return if (subscriptionManager.getCachedStatus() is SubscriptionStatus.Paid) {
+        return if (settings.cachedSubscription.value != null) {
             folderManager.getHomeFolder().mapNotNull { item ->
                 when (item) {
                     is FolderItem.Folder -> convertFolderToMediaItem(this, item.folder)
@@ -551,7 +563,7 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
     }
 
     suspend fun loadFolderPodcastsChildren(folderUuid: String): List<MediaBrowserCompat.MediaItem> {
-        return if (subscriptionManager.getCachedStatus() is SubscriptionStatus.Paid) {
+        return if (settings.cachedSubscription.value != null) {
             folderManager.findFolderPodcastsSorted(folderUuid).mapNotNull { podcast ->
                 convertPodcastToMediaItem(podcast = podcast, context = this, useEpisodeArtwork = settings.artworkConfiguration.value.useEpisodeArtwork)
             }
@@ -565,29 +577,41 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
         val episodeItems = mutableListOf<MediaBrowserCompat.MediaItem>()
         val autoPlaySource: AutoPlaySource
 
-        val playlist = if (DOWNLOADS_ROOT == parentId) playlistManager.getSystemDownloadsFilter() else playlistManager.findByUuidBlocking(parentId)
-        if (playlist != null) {
-            val episodeList = if (DOWNLOADS_ROOT == parentId) {
-                autoPlaySource = AutoPlaySource.Downloads
-                episodeManager.findDownloadedEpisodesRxFlowable().blockingFirst()
+        val showPlayed = settings.autoShowPlayed.value
+
+        val episodesWithSource = if (DOWNLOADS_ROOT == parentId) {
+            autoPlaySource = AutoPlaySource.Predefined.Downloads
+            episodeManager.findDownloadedEpisodesRxFlowable().blockingFirst() to ""
+        } else {
+            autoPlaySource = AutoPlaySource.fromId(parentId)
+            val episodes = getPlaylistEpisodes(
+                uuid = parentId,
+                filterEpisode = { playlistType, episode ->
+                    when (playlistType) {
+                        Playlist.Type.Manual -> showPlayed || !(episode.isFinished || episode.isArchived)
+                        Playlist.Type.Smart -> true
+                    }
+                },
+            )
+            if (episodes != null) {
+                episodes to parentId
             } else {
-                autoPlaySource = AutoPlaySource.fromId(parentId)
-                playlistManager.findEpisodesBlocking(playlist, episodeManager, playbackManager)
+                null
             }
+        }
+        if (episodesWithSource != null) {
+            val (episodeList, sourceId) = episodesWithSource
             val topEpisodes = episodeList.take(EPISODE_LIMIT)
             if (topEpisodes.isNotEmpty()) {
                 for (episode in topEpisodes) {
                     podcastManager.findPodcastByUuid(episode.podcastUuid)?.let { parentPodcast ->
-                        episodeItems.add(AutoConverter.convertEpisodeToMediaItem(this, episode, parentPodcast, sourceId = playlist.uuid, useEpisodeArtwork = settings.artworkConfiguration.value.useEpisodeArtwork))
+                        episodeItems.add(AutoConverter.convertEpisodeToMediaItem(this, episode, parentPodcast, sourceId = sourceId, useEpisodeArtwork = settings.artworkConfiguration.value.useEpisodeArtwork))
                     }
                 }
             }
         } else {
-            autoPlaySource = AutoPlaySource.fromId(parentId)
             val podcastFound = podcastManager.findPodcastByUuid(parentId) ?: podcastManager.findOrDownloadPodcastRxSingle(parentId).toMaybe().onErrorComplete().awaitSingleOrNull()
             podcastFound?.let { podcast ->
-
-                val showPlayed = settings.autoShowPlayed.value
                 val episodes = episodeManager
                     .findEpisodesByPodcastOrderedBlocking(podcast)
                     .filterNot { !showPlayed && (it.isFinished || it.isArchived) }
@@ -612,14 +636,14 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
     }
 
     protected suspend fun loadFilesChildren(): List<MediaBrowserCompat.MediaItem> {
-        setAutoPlaySource(AutoPlaySource.Files)
+        setAutoPlaySource(AutoPlaySource.Predefined.Files)
         return userEpisodeManager.findUserEpisodes().map {
             AutoConverter.convertEpisodeToMediaItem(this, it, Podcast.userPodcast, useEpisodeArtwork = settings.artworkConfiguration.value.useEpisodeArtwork)
         }
     }
 
     protected suspend fun loadStarredChildren(): List<MediaBrowserCompat.MediaItem> {
-        setAutoPlaySource(AutoPlaySource.Starred)
+        setAutoPlaySource(AutoPlaySource.Predefined.Starred)
         return episodeManager.findStarredEpisodes().take(EPISODE_LIMIT).mapNotNull { episode ->
             podcastManager.findPodcastByUuidBlocking(episode.podcastUuid)?.let { podcast ->
                 AutoConverter.convertEpisodeToMediaItem(context = this, episode = episode, parentPodcast = podcast, useEpisodeArtwork = settings.artworkConfiguration.value.useEpisodeArtwork)
@@ -737,5 +761,25 @@ open class PlaybackService : MediaBrowserServiceCompat(), CoroutineScope {
         sleepTimerDisposable?.dispose()
         sleepTimerDisposable = null
         currentTimeLeft = ZERO
+    }
+
+    protected suspend fun getPlaylistPreviews(): List<PlaylistPreview> {
+        val playlists = playlistManager.playlistPreviewsFlow().first()
+        return if (FeatureFlag.isEnabled(Feature.PLAYLISTS_REBRANDING, immutable = true)) {
+            playlists
+        } else {
+            playlists.filterIsInstance<SmartPlaylistPreview>()
+        }
+    }
+
+    protected suspend fun getPlaylistEpisodes(
+        uuid: String,
+        filterEpisode: (Playlist.Type, PodcastEpisode) -> Boolean,
+    ): List<PodcastEpisode>? {
+        val playlist = playlistManager.smartPlaylistFlow(uuid).first() ?: playlistManager.manualPlaylistFlow(uuid).first()
+        return playlist
+            ?.episodes
+            ?.mapNotNull(PlaylistEpisode::toPodcastEpisode)
+            ?.filter { filterEpisode(playlist.type, it) }
     }
 }

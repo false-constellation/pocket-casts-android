@@ -2,7 +2,6 @@ package au.com.shiftyjelly.pocketcasts.analytics
 
 import android.content.Context
 import android.content.SharedPreferences
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.di.PublicSharedPreferences
 import au.com.shiftyjelly.pocketcasts.utils.AppPlatform
@@ -24,7 +23,8 @@ class TracksAnalyticsTracker @Inject constructor(
     private val displayUtil: DisplayUtil,
     private val settings: Settings,
     private val accountStatusInfo: AccountStatusInfo,
-) : IdentifyingTracker(preferences), CoroutineScope {
+) : IdentifyingTracker(preferences),
+    CoroutineScope {
     private val tracksClient: TracksClient? = TracksClient.getClient(appContext)
     override val anonIdPrefKey: String = TRACKS_ANON_ID
     override val coroutineContext: CoroutineContext = Dispatchers.IO
@@ -55,25 +55,21 @@ class TracksAnalyticsTracker @Inject constructor(
 
             tracksClient.track(EVENTS_PREFIX + eventKey, propertiesToJSON, user, userType)
             if (propertiesToJSON.length() > 0) {
-                Timber.i("\uD83D\uDD35 Tracked: $eventKey, Properties: $propertiesToJSON")
+                Timber.tag("Tracks").i("\uD83D\uDD35 Tracked: $eventKey, Properties: $propertiesToJSON")
             } else {
-                Timber.i("\uD83D\uDD35 Tracked: $eventKey")
+                Timber.tag("Tracks").i("\uD83D\uDD35 Tracked: $eventKey")
             }
         }
     }
 
     private fun updatePredefinedEventProperties() {
-        val paidSubscription = settings.cachedSubscriptionStatus.value as? SubscriptionStatus.Paid
+        val subscription = settings.cachedSubscription.value
         val isLoggedIn = accountStatusInfo.isLoggedIn()
-        val hasSubscription = paidSubscription != null
-        val isPocketCastsChampion = paidSubscription?.isPocketCastsChampion
-            ?: false
-        val subscriptionTier = paidSubscription?.tier?.toString()
-            ?: INVALID_OR_NULL_VALUE
-        val subscriptionPlatform = paidSubscription?.platform?.toString()
-            ?: INVALID_OR_NULL_VALUE
-        val subscriptionFrequency = paidSubscription?.frequency?.toString()
-            ?: INVALID_OR_NULL_VALUE
+        val hasSubscription = subscription != null
+        val isPocketCastsChampion = subscription?.isChampion == true
+        val subscriptionTier = subscription?.tier?.analyticsValue ?: INVALID_OR_NULL_VALUE
+        val subscriptionPlatform = subscription?.platform?.analyticsValue ?: INVALID_OR_NULL_VALUE
+        val subscriptionFrequency = subscription?.billingCycle?.analyticsValue ?: INVALID_OR_NULL_VALUE
 
         predefinedEventProperties = mapOf(
             PredefinedEventProperty.HAS_DYNAMIC_FONT_SIZE to displayUtil.hasDynamicFontSize(),
@@ -83,6 +79,10 @@ class TracksAnalyticsTracker @Inject constructor(
             PredefinedEventProperty.PLUS_SUBSCRIPTION_TIER to subscriptionTier,
             PredefinedEventProperty.PLUS_SUBSCRIPTION_PLATFORM to subscriptionPlatform,
             PredefinedEventProperty.PLUS_SUBSCRIPTION_FREQUENCY to subscriptionFrequency,
+            PredefinedEventProperty.THEME_SELECTED to settings.theme.value.analyticsValue,
+            PredefinedEventProperty.THEME_DARK_PREFERENCE to settings.darkThemePreference.value.analyticsValue,
+            PredefinedEventProperty.THEME_LIGHT_PREFERENCE to settings.lightThemePreference.value.analyticsValue,
+            PredefinedEventProperty.THEME_USE_SYSTEM_SETTINGS to settings.useSystemTheme.value,
             PredefinedEventProperty.PLATFORM to when (Util.getAppPlatform(appContext)) {
                 AppPlatform.Automotive -> "automotive"
                 AppPlatform.Phone -> "phone"
@@ -129,6 +129,10 @@ class TracksAnalyticsTracker @Inject constructor(
         PLUS_SUBSCRIPTION_PLATFORM("plus_subscription_platform"),
         PLUS_SUBSCRIPTION_FREQUENCY("plus_subscription_frequency"),
         PLATFORM("platform"),
+        THEME_SELECTED("theme_selected"),
+        THEME_DARK_PREFERENCE("theme_dark_preference"),
+        THEME_LIGHT_PREFERENCE("theme_light_preference"),
+        THEME_USE_SYSTEM_SETTINGS("theme_use_system_settings"),
     }
 
     companion object {

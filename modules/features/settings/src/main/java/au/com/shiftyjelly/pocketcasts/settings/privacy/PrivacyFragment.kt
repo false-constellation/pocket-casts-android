@@ -23,7 +23,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
@@ -32,6 +31,7 @@ import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRow
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRowToggle
 import au.com.shiftyjelly.pocketcasts.compose.components.TextP50
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.compose.text.LinkText
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -56,7 +56,7 @@ class PrivacyFragment : BaseFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         LaunchedEffect(Unit) {
             if (!viewModel.isFragmentChangingConfigurations) {
                 analyticsTracker.track(AnalyticsEvent.PRIVACY_SHOWN)
@@ -81,7 +81,7 @@ class PrivacyFragment : BaseFragment() {
                     analyticsTracker.track(AnalyticsEvent.SETTINGS_SHOW_PRIVACY_POLICY)
                     context.startActivityViewUrl(Settings.INFO_PRIVACY_URL)
                 },
-                onBackClick = {
+                onBackPress = {
                     @Suppress("DEPRECATION")
                     activity?.onBackPressed()
                 },
@@ -102,7 +102,7 @@ class PrivacyFragment : BaseFragment() {
         onCrashReportsClick: (Boolean) -> Unit,
         onLinkAccountClick: (Boolean) -> Unit,
         onPrivacyPolicyClick: () -> Unit,
-        onBackClick: () -> Unit,
+        onBackPress: () -> Unit,
         bottomInset: Dp,
         modifier: Modifier = Modifier,
     ) {
@@ -113,7 +113,7 @@ class PrivacyFragment : BaseFragment() {
         ) {
             ThemedTopAppBar(
                 title = stringResource(LR.string.settings_title_privacy),
-                onNavigationClick = onBackClick,
+                onNavigationClick = onBackPress,
             )
             LazyColumn(
                 contentPadding = PaddingValues(bottom = bottomInset),
@@ -129,7 +129,7 @@ class PrivacyFragment : BaseFragment() {
                 if (state is PrivacyViewModel.UiState.Loaded) {
                     item {
                         SettingRow(
-                            primaryText = stringResource(LR.string.settings_privacy_analytics),
+                            primaryText = stringResource(LR.string.settings_privacy_analytics_first_party),
                             secondaryText = stringResource(LR.string.settings_privacy_analytics_summary),
                             toggle = SettingRowToggle.Switch(checked = state.analytics),
                             modifier = Modifier.toggleable(

@@ -39,7 +39,12 @@ import au.com.shiftyjelly.pocketcasts.compose.components.TextC70
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH40
 import au.com.shiftyjelly.pocketcasts.compose.preview.ThemePreviewParameterProvider
 import au.com.shiftyjelly.pocketcasts.compose.theme
-import au.com.shiftyjelly.pocketcasts.models.type.ReferralsOfferInfoMock
+import au.com.shiftyjelly.pocketcasts.payment.BillingCycle
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionOffer
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionPlans
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.flatMap
+import au.com.shiftyjelly.pocketcasts.payment.getOrNull
 import au.com.shiftyjelly.pocketcasts.referrals.ReferralsViewModel.UiState
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
@@ -49,19 +54,19 @@ fun ReferralsClaimGuestPassBannerCard(
     state: UiState,
     onClick: () -> Unit,
     onHideBannerClick: () -> Unit,
-    onBannerShown: () -> Unit,
+    onBannerShow: () -> Unit,
     onShowReferralsSheet: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     CallOnce {
-        onBannerShown()
+        onBannerShow()
     }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(onShowReferralsSheet) {
         onShowReferralsSheet()
     }
 
     when (state) {
-        is UiState.Loading -> Unit
+        is UiState.Loading, UiState.NoOffer -> Unit
         is UiState.Loaded -> {
             ReferralsClaimGuestPassBannerCard(
                 state = state,
@@ -112,10 +117,7 @@ private fun ReferralsClaimGuestPassBannerCard(
                         LR.string.referrals_claim_guess_pass_banner_card_title
                     }
                     TextH40(
-                        text = stringResource(
-                            textResId,
-                            requireNotNull(state.referralsOfferInfo).localizedOfferDurationAdjective,
-                        ),
+                        text = stringResource(textResId, state.referralPlan.offerName),
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -129,11 +131,11 @@ private fun ReferralsClaimGuestPassBannerCard(
                 Spacer(modifier = Modifier.width(16.dp))
 
                 ReferralGuestPassCardView(
+                    referralPlan = state.referralPlan,
+                    source = ReferralGuestPassCardViewSource.ProfileBanner,
                     modifier = Modifier
                         .width(guestPassCardWidth)
                         .height(guestPassCardWidth * ReferralGuestPassCardDefaults.cardAspectRatio),
-                    source = ReferralGuestPassCardViewSource.ProfileBanner,
-                    referralsOfferInfo = requireNotNull(state.referralsOfferInfo),
                 )
             }
             Box(modifier = Modifier.align(Alignment.BottomEnd)) {
@@ -163,12 +165,15 @@ private fun ReferralsClaimGuestPassBannerCardPreview(
     AppTheme(themeType) {
         ReferralsClaimGuestPassBannerCard(
             state = UiState.Loaded(
+                referralPlan = SubscriptionPlans.Preview
+                    .findOfferPlan(SubscriptionTier.Plus, BillingCycle.Yearly, SubscriptionOffer.Referral)
+                    .flatMap(ReferralSubscriptionPlan::create)
+                    .getOrNull()!!,
                 showProfileBanner = true,
-                referralsOfferInfo = ReferralsOfferInfoMock,
             ),
             onClick = {},
             onHideBannerClick = {},
-            onBannerShown = {},
+            onBannerShow = {},
             onShowReferralsSheet = {},
         )
     }

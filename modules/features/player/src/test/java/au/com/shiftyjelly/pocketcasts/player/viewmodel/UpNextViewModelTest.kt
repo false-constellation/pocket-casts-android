@@ -1,22 +1,26 @@
 package au.com.shiftyjelly.pocketcasts.player.viewmodel
 
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionFrequency
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.models.type.SignInState
+import au.com.shiftyjelly.pocketcasts.models.type.Subscription
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionPlatform
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.BillingCycle
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
+import au.com.shiftyjelly.pocketcasts.sharedtest.MainCoroutineRule
 import io.reactivex.Flowable
-import java.util.Date
+import java.time.Instant
 import junit.framework.TestCase.assertEquals
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
 class UpNextViewModelTest {
+    @get:Rule
+    val coroutineRule = MainCoroutineRule()
 
     @Test
     fun `initial state isSignedInAsPaidUser should be true for paid user`() = runTest {
@@ -43,23 +47,21 @@ class UpNextViewModelTest {
                 Flowable.just(
                     SignInState.SignedIn(
                         email = "",
-                        subscriptionStatus = if (isPaidUser) {
-                            SubscriptionStatus.Paid(
-                                expiryDate = Date(),
-                                autoRenew = true,
+                        subscription = if (isPaidUser) {
+                            Subscription(
+                                tier = SubscriptionTier.Plus,
+                                billingCycle = BillingCycle.Monthly,
+                                platform = SubscriptionPlatform.Android,
+                                expiryDate = Instant.now(),
+                                isAutoRenewing = true,
                                 giftDays = 0,
-                                frequency = SubscriptionFrequency.MONTHLY,
-                                platform = SubscriptionPlatform.ANDROID,
-                                subscriptions = emptyList(),
-                                tier = SubscriptionTier.PLUS,
-                                index = 0,
                             )
                         } else {
-                            SubscriptionStatus.Free()
+                            null
                         },
                     ),
                 ),
             )
-        return UpNextViewModel(userManager, UnconfinedTestDispatcher())
+        return UpNextViewModel(userManager, mock(), AnalyticsTracker.test())
     }
 }

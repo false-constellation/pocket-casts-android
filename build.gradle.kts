@@ -6,6 +6,7 @@ import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.LibraryPlugin
 import com.android.build.gradle.internal.dsl.BaseAppModuleExtension
 import com.automattic.android.measure.reporters.InternalA8cCiReporter
+import com.automattic.android.measure.reporters.RemoteBuildCacheMetricsReporter
 import com.automattic.android.measure.reporters.SlowSlowTasksMetricsReporter
 import com.diffplug.gradle.spotless.SpotlessTask
 import com.google.devtools.ksp.gradle.KspExtension
@@ -13,6 +14,7 @@ import com.google.devtools.ksp.gradle.KspGradleSubplugin
 import io.sentry.android.gradle.extensions.InstrumentationFeature
 import io.sentry.android.gradle.extensions.SentryPluginExtension
 import java.util.EnumSet
+import kotlin.collections.addAll
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompilerOptions
 import org.jetbrains.kotlin.gradle.plugin.KotlinBasePlugin
@@ -34,6 +36,7 @@ plugins {
     alias(libs.plugins.protobuf) apply false
     alias(libs.plugins.compose.compiler) apply false
     alias(libs.plugins.dependency.analysis)
+    alias(libs.plugins.room) apply false
 }
 
 apply(from = rootProject.file("dependencies.gradle.kts"))
@@ -44,6 +47,7 @@ measureBuilds {
     onBuildMetricsReadyListener {
         val report = this@onBuildMetricsReadyListener
         SlowSlowTasksMetricsReporter.report(report)
+        RemoteBuildCacheMetricsReporter.report(report)
         InternalA8cCiReporter.reportBlocking(
             metricsReport = report,
             projectName = "pocketcasts",
@@ -99,9 +103,20 @@ dependencyAnalysis {
     }
 }
 
-val ktlintVersion = libs.versions.ktlint.get()
+val ktlintVersion = libs.versions.ktlint.asProvider().get()
+val ktlintComposeRules = libs.ktlint.compose.rules.get().toString()
 
 spotless {
+    val ktLintConfigOverride = mapOf(
+        "ktlint_standard_function-expression-body" to "disabled",
+        "ktlint_standard_multiline-expression-wrapping" to "disabled",
+        "ktlint_standard_backing-property-naming" to "disabled",
+        "ktlint_function_naming_ignore_when_annotated_with" to "Composable",
+    )
+    val ktLintConfigComposeOverride = mapOf(
+        "ktlint_compose_compositionlocal-allowlist" to "disabled",
+    )
+
     kotlin {
         target(
             "app/src/**/*.kt",
@@ -110,11 +125,13 @@ spotless {
             "wear/src/**/*.kt",
         )
         ktlint(ktlintVersion)
+            .editorConfigOverride(ktLintConfigOverride + ktLintConfigComposeOverride)
+            .customRuleSets(listOf(ktlintComposeRules))
     }
 
     kotlinGradle {
         target("*.kts")
-        ktlint(ktlintVersion)
+        ktlint(ktlintVersion).editorConfigOverride(ktLintConfigOverride)
     }
 }
 
@@ -142,6 +159,9 @@ subprojects {
             compilerOptions {
                 jvmTarget.set(javaTarget)
                 allWarningsAsErrors.set(true)
+                freeCompilerArgs.addAll(
+                    "-Xannotation-default-target=param-property",
+                )
                 optIn.addAll("kotlin.RequiresOptIn")
             }
         }
@@ -182,7 +202,6 @@ subprojects {
         checkAllWarnings = false
         warningsAsErrors = false
 
-        checkDependencies = true
         checkTestSources = false
         checkGeneratedSources = false
 
@@ -193,18 +212,6 @@ subprojects {
         // since we execute lint explicitly on CI in a separate action
         checkReleaseBuilds = false
     }
-
-    val SERVER_MAIN_URL_PROD = "\"https://refresh.pocketcasts.com\""
-    val SERVER_API_URL_PROD = "\"https://api.pocketcasts.com\""
-    val SERVER_CACHE_URL_PROD = "\"https://cache.pocketcasts.com\""
-    val SERVER_CACHE_HOST_PROD = "\"cache.pocketcasts.com\""
-    val SERVER_STATIC_URL_PROD = "\"https://static.pocketcasts.com\""
-    val SERVER_SHARING_URL_PROD = "\"https://sharing.pocketcasts.com\""
-    val SERVER_LIST_URL_PROD = "\"https://lists.pocketcasts.com\""
-    val SERVER_LIST_HOST_PROD = "\"lists.pocketcasts.com\""
-    val SERVER_SHORT_URL_PROD = "\"https://pca.st\""
-    val SERVER_SHORT_HOST_PROD = "\"pca.st\""
-    val WEB_BASE_HOST_PROD = "\"pocketcasts.com\""
 
     plugins.withType<BasePlugin>().configureEach {
         configure<BaseExtension> {
@@ -218,9 +225,10 @@ subprojects {
 
             defaultConfig {
                 minSdk = project.property("minSdkVersion") as Int
-                targetSdk = project.property("targetSdkVersion") as Int
                 versionCode = project.property("versionCode") as Int
                 versionName = project.property("versionName") as String
+
+                buildConfigField("boolean", "IS_PROTOTYPE", "false")
 
                 buildConfigField("int", "VERSION_CODE", "${project.property("versionCode")}")
                 buildConfigField("String", "VERSION_NAME", "\"${project.property("versionName")}\"")
@@ -232,6 +240,20 @@ subprojects {
                 buildConfigField("String", "ENCRYPTION_KEY", "\"${project.property("encryptionKey")}\"")
                 buildConfigField("String", "APP_SECRET", "\"${project.property("appSecret")}\"")
                 buildConfigField("String", "META_APP_ID", "\"${project.property("metaAppId")}\"")
+
+                buildConfigField("String", "SERVER_MAIN_URL", "\"https://refresh.pocketcasts.com\"")
+                buildConfigField("String", "SERVER_API_URL", "\"https://api.pocketcasts.com\"")
+                buildConfigField("String", "SERVER_CACHE_URL", "\"https://cache.pocketcasts.com\"")
+                buildConfigField("String", "SEARCH_API_URL", "\"https://search.pocketcasts.com\"")
+                buildConfigField("String", "SERVER_CACHE_HOST", "\"cache.pocketcasts.com\"")
+                buildConfigField("String", "SERVER_STATIC_URL", "\"https://static.pocketcasts.com\"")
+                buildConfigField("String", "SERVER_SHARING_URL", "\"https://sharing.pocketcasts.com\"")
+                buildConfigField("String", "SERVER_SHORT_URL", "\"https://pca.st\"")
+                buildConfigField("String", "SERVER_SHORT_HOST", "\"pca.st\"")
+                buildConfigField("String", "SERVER_WEB_PLAYER_HOST", "\"play.pocketcasts.com\"")
+                buildConfigField("String", "WEB_BASE_HOST", "\"pocketcasts.com\"")
+                buildConfigField("String", "SERVER_LIST_URL", "\"https://lists.pocketcasts.com\"")
+                buildConfigField("String", "SERVER_LIST_HOST", "\"lists.pocketcasts.com\"")
 
                 testInstrumentationRunner = project.property("testInstrumentationRunner") as String
                 testApplicationId = "au.com.shiftyjelly.pocketcasts.test${project.name.replace("-", "_")}"
@@ -281,12 +303,14 @@ subprojects {
                     buildConfigField("String", "SERVER_MAIN_URL", "\"https://refresh.pocketcasts.net\"")
                     buildConfigField("String", "SERVER_API_URL", "\"https://api.pocketcasts.net\"")
                     buildConfigField("String", "SERVER_CACHE_URL", "\"https://podcast-api.pocketcasts.net\"")
+                    buildConfigField("String", "SEARCH_API_URL", "\"https://search.pocketcasts.net\"")
                     buildConfigField("String", "SERVER_CACHE_HOST", "\"podcast-api.pocketcasts.net\"")
                     buildConfigField("String", "SERVER_STATIC_URL", "\"https://static.pocketcasts.net\"")
                     buildConfigField("String", "SERVER_SHARING_URL", "\"https://sharing.pocketcasts.net\"")
                     buildConfigField("String", "SERVER_SHORT_URL", "\"https://pcast.pocketcasts.net\"")
                     buildConfigField("String", "SERVER_SHORT_HOST", "\"pcast.pocketcasts.net\"")
-                    buildConfigField("String", "WEB_BASE_HOST", "\"pocket-casts-main-development.mystagingwebsite.com\"")
+                    buildConfigField("String", "SERVER_WEB_PLAYER_HOST", "\"play.pocketcasts.net\"")
+                    buildConfigField("String", "WEB_BASE_HOST", "\"pocketcasts.net\"")
                     buildConfigField("String", "SERVER_LIST_URL", "\"https://lists.pocketcasts.net\"")
                     buildConfigField("String", "SERVER_LIST_HOST", "\"lists.pocketcasts.net\"")
 
@@ -300,35 +324,18 @@ subprojects {
                     enableAndroidTestCoverage = false
                     ext.set("alwaysUpdateBuildId", false)
 
-                    buildConfigField("String", "SERVER_MAIN_URL", SERVER_MAIN_URL_PROD)
-                    buildConfigField("String", "SERVER_API_URL", SERVER_API_URL_PROD)
-                    buildConfigField("String", "SERVER_CACHE_URL", SERVER_CACHE_URL_PROD)
-                    buildConfigField("String", "SERVER_CACHE_HOST", SERVER_CACHE_HOST_PROD)
-                    buildConfigField("String", "SERVER_STATIC_URL", SERVER_STATIC_URL_PROD)
-                    buildConfigField("String", "SERVER_SHARING_URL", SERVER_SHARING_URL_PROD)
-                    buildConfigField("String", "SERVER_SHORT_URL", SERVER_SHORT_URL_PROD)
-                    buildConfigField("String", "SERVER_SHORT_HOST", SERVER_SHORT_HOST_PROD)
-                    buildConfigField("String", "WEB_BASE_HOST", WEB_BASE_HOST_PROD)
-                    buildConfigField("String", "SERVER_LIST_URL", SERVER_LIST_URL_PROD)
-                    buildConfigField("String", "SERVER_LIST_HOST", SERVER_LIST_HOST_PROD)
-
                     signingConfig = signingConfigs.getByName("debug")
                 }
 
+                maybeCreate("prototype").apply {
+                    buildConfigField("boolean", "IS_PROTOTYPE", "true")
+
+                    if (canSignRelease) {
+                        signingConfig = signingConfigs.getByName("release")
+                    }
+                }
+
                 named("release") {
-
-                    buildConfigField("String", "SERVER_MAIN_URL", SERVER_MAIN_URL_PROD)
-                    buildConfigField("String", "SERVER_API_URL", SERVER_API_URL_PROD)
-                    buildConfigField("String", "SERVER_CACHE_URL", SERVER_CACHE_URL_PROD)
-                    buildConfigField("String", "SERVER_CACHE_HOST", SERVER_CACHE_HOST_PROD)
-                    buildConfigField("String", "SERVER_STATIC_URL", SERVER_STATIC_URL_PROD)
-                    buildConfigField("String", "SERVER_SHARING_URL", SERVER_SHARING_URL_PROD)
-                    buildConfigField("String", "SERVER_SHORT_URL", SERVER_SHORT_URL_PROD)
-                    buildConfigField("String", "SERVER_SHORT_HOST", SERVER_SHORT_HOST_PROD)
-                    buildConfigField("String", "WEB_BASE_HOST", WEB_BASE_HOST_PROD)
-                    buildConfigField("String", "SERVER_LIST_URL", SERVER_LIST_URL_PROD)
-                    buildConfigField("String", "SERVER_LIST_HOST", SERVER_LIST_HOST_PROD)
-
                     if (canSignRelease) {
                         signingConfig = signingConfigs.getByName("release")
                     }
@@ -350,6 +357,11 @@ subprojects {
                 }
             }
         }
+        dependencies {
+            val lintChecks by configurations
+            lintChecks(libs.security.lint)
+            lintChecks(libs.wordpress.lint)
+        }
     }
 
     plugins.withType<AppPlugin>().configureEach {
@@ -365,15 +377,27 @@ subprojects {
                     applicationIdSuffix = ".debug"
                 }
 
+                maybeCreate("prototype").apply {
+                    isMinifyEnabled = true
+                    isShrinkResources = true
+                    proguardFiles.addAll(
+                        listOf(
+                            getDefaultProguardFile("proguard-android-optimize.txt"),
+                            rootProject.file("proguard-rules.pro"),
+                            rootProject.file("proguard-rules-no-obfuscate.pro"),
+                        ),
+                    )
+                }
+
                 named("release") {
                     isMinifyEnabled = true
+                    isShrinkResources = true
                     proguardFiles.addAll(
                         listOf(
                             getDefaultProguardFile("proguard-android-optimize.txt"),
                             rootProject.file("proguard-rules.pro"),
                         ),
                     )
-                    isShrinkResources = true
                 }
             }
         }
@@ -390,6 +414,7 @@ subprojects {
         dependencies {
             val lintChecks by configurations
             lintChecks(libs.security.lint)
+            lintChecks(libs.wordpress.lint)
         }
     }
 }

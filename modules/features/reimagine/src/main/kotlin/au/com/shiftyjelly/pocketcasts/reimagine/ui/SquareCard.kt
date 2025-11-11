@@ -25,7 +25,6 @@ import au.com.shiftyjelly.pocketcasts.compose.components.TextH40
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH70
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 import dev.shreyaspatil.capturable.capturable
 import dev.shreyaspatil.capturable.controller.CaptureController
 import dev.shreyaspatil.capturable.controller.rememberCaptureController
@@ -152,10 +151,9 @@ private fun SquareCard(
     }
 }
 
-@ShowkaseComposable(name = "Square podcast card", group = "Sharing")
 @Preview(name = "SquarePodcastCardDark")
 @Composable
-fun SquarePodcastCardDarkPreview() = SquarePodcastCardPreview(
+private fun SquarePodcastCardDarkPreview() = SquarePodcastCardPreview(
     baseColor = Color(0xFFEC0404),
 )
 
@@ -165,10 +163,9 @@ private fun SquarePodcastCardLightPreview() = SquarePodcastCardPreview(
     baseColor = Color(0xFFFBCB04),
 )
 
-@ShowkaseComposable(name = "Square episode card", group = "Sharing")
 @Preview(name = "SquareEpisodeCardDark")
 @Composable
-fun SquareEpisodeCardDarkPreview() = SquareEpisodeCardPreview(
+private fun SquareEpisodeCardDarkPreview() = SquareEpisodeCardPreview(
     baseColor = Color(0xFFEC0404),
 )
 

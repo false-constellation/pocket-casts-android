@@ -25,7 +25,9 @@ class EpisodeSearchView @JvmOverloads constructor(context: Context, attrs: Attri
                 searchText.setSelection(value.length)
             }
         }
-        get() { return searchText.text.toString() }
+        get() {
+            return searchText.text.toString()
+        }
 
     private val textChangeListener = object : TextWatcher {
         override fun afterTextChanged(text: Editable) {}
@@ -43,7 +45,9 @@ class EpisodeSearchView @JvmOverloads constructor(context: Context, attrs: Attri
         val cancelSearchBtn = findViewById<ImageButton>(R.id.cancelSearchBtn)
         searchText.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
-                onFocus?.invoke()
+                if (searchText.text.isEmpty()) {
+                    onFocus?.invoke()
+                }
                 cancelSearchBtn.show()
             } else {
                 cancelSearchBtn.hide()

@@ -15,10 +15,11 @@ import kotlinx.coroutines.test.setMain
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 
-@ExperimentalCoroutinesApi
+@OptIn(ExperimentalCoroutinesApi::class)
 class MainCoroutineRule(
     val testDispatcher: TestDispatcher = UnconfinedTestDispatcher(),
 ) : TestWatcher() {
+
     // This is needed due to RxJava and Coroutines interop
     private val immediateScheduler = Schedulers.trampoline()
     private val androidSchedulerHandler = Function<Callable<Scheduler>, Scheduler> { immediateScheduler }

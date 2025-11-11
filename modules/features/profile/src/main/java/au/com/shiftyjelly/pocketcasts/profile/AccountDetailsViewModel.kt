@@ -2,21 +2,27 @@ package au.com.shiftyjelly.pocketcasts.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.OnboardingSubscriptionPlan
+import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.ProfileUpgradeBannerState
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.NewsletterSource
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
-import au.com.shiftyjelly.pocketcasts.models.to.SignInState
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
-import au.com.shiftyjelly.pocketcasts.models.type.Subscription
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionMapper
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.models.type.SignInState
+import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionPlatform
+import au.com.shiftyjelly.pocketcasts.payment.BillingCycle
+import au.com.shiftyjelly.pocketcasts.payment.PaymentClient
+import au.com.shiftyjelly.pocketcasts.payment.PaymentResult
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionOffer
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionPlan
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.getOrNull
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
-import au.com.shiftyjelly.pocketcasts.repositories.subscription.ProductDetailsState
-import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
+import au.com.shiftyjelly.pocketcasts.profile.winback.WinbackInitParams
 import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
 import au.com.shiftyjelly.pocketcasts.utils.Gravatar
-import au.com.shiftyjelly.pocketcasts.utils.Optional
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.toDurationFromNow
 import com.automattic.android.tracks.crashlogging.CrashLogging
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,105 +40,101 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 @HiltViewModel
-class AccountDetailsViewModel
-@Inject constructor(
-    subscriptionManager: SubscriptionManager,
+class AccountDetailsViewModel @Inject constructor(
     userManager: UserManager,
-    private val settings: Settings,
+    private val paymentClient: PaymentClient,
     private val syncManager: SyncManager,
+    private val settings: Settings,
     private val analyticsTracker: AnalyticsTracker,
     private val crashLogging: CrashLogging,
-    private val subscriptionMapper: SubscriptionMapper,
 ) : ViewModel() {
     internal val deleteAccountState = MutableStateFlow<DeleteAccountState>(DeleteAccountState.Empty)
+    internal val selectedFeatureCard = MutableStateFlow<SubscriptionPlan.Key?>(null)
     internal val signInState = userManager.getSignInState()
     internal val marketingOptIn = settings.marketingOptIn.flow
-    private val subscription = subscriptionManager.observeProductDetails().map { state ->
-        if (state is ProductDetailsState.Loaded) {
-            val subscriptions = state.productDetails
-                .mapNotNull {
-                    subscriptionMapper.mapFromProductDetails(
-                        productDetails = it,
-                        isOfferEligible = subscriptionManager.isOfferEligible(
-                            SubscriptionTier.fromProductId(it.productId),
-                        ),
-                    )
-                }
-            val filteredOffer = Subscription.filterOffers(subscriptions)
-            Optional.of(subscriptionManager.getDefaultSubscription(filteredOffer))
-        } else {
-            Optional.empty()
-        }
-    }
 
     internal val headerState = signInState.asFlow().map { state ->
         when (state) {
             is SignInState.SignedOut -> AccountHeaderState.empty()
             is SignInState.SignedIn -> {
-                val status = state.subscriptionStatus
+                val subscription = state.subscription
                 AccountHeaderState(
                     email = state.email,
                     imageUrl = Gravatar.getUrl(state.email),
-                    subscription = when (status) {
-                        is SubscriptionStatus.Free -> SubscriptionHeaderState.Free
-                        is SubscriptionStatus.Paid -> {
-                            val activeSubscription = status.subscriptions.getOrNull(status.index)
-                            if (activeSubscription == null || activeSubscription.tier in paidTiers) {
-                                if (status.autoRenew) {
-                                    SubscriptionHeaderState.PaidRenew(
-                                        tier = status.tier,
-                                        expiresIn = status.expiryDate.toDurationFromNow(),
-                                        frequency = status.frequency,
-                                    )
-                                } else {
-                                    SubscriptionHeaderState.PaidCancel(
-                                        tier = status.tier,
-                                        expiresIn = status.expiryDate.toDurationFromNow(),
-                                        isChampion = status.isPocketCastsChampion,
-                                        platform = status.platform,
-                                        giftDaysLeft = status.giftDays,
-                                    )
-                                }
-                            } else if (activeSubscription.autoRenewing) {
-                                SubscriptionHeaderState.SupporterRenew(
-                                    tier = activeSubscription.tier,
-                                    expiresIn = activeSubscription.expiryDate?.toDurationFromNow(),
-                                    isChampion = status.isPocketCastsChampion,
-                                )
-                            } else {
-                                SubscriptionHeaderState.SupporterCancel(
-                                    tier = activeSubscription.tier,
-                                    expiresIn = activeSubscription.expiryDate?.toDurationFromNow(),
-                                    isChampion = status.isPocketCastsChampion,
-                                )
-                            }
-                        }
+                    subscription = if (subscription == null) {
+                        SubscriptionHeaderState.Free
+                    } else if (subscription.isAutoRenewing) {
+                        SubscriptionHeaderState.PaidRenew(
+                            tier = subscription.tier,
+                            expiresIn = subscription.expiryDate.toDurationFromNow(),
+                            billingCycle = subscription.billingCycle,
+                        )
+                    } else {
+                        SubscriptionHeaderState.PaidCancel(
+                            tier = subscription.tier,
+                            expiresIn = subscription.expiryDate.toDurationFromNow(),
+                            isChampion = subscription.isChampion,
+                            platform = subscription.platform,
+                            giftDaysLeft = subscription.giftDays,
+                        )
                     },
                 )
             }
         }
     }.stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = AccountHeaderState.empty())
 
-    internal val showUpgradeBanner = combine(
+    internal val upgradeBannerState = combine(
         signInState.asFlow(),
-        subscription.asFlow(),
-    ) { signInState, subscription ->
+        selectedFeatureCard,
+    ) { signInState, featureCard ->
         val signedInState = signInState as? SignInState.SignedIn
-        val isGiftExpiring = (signedInState?.subscriptionStatus as? SubscriptionStatus.Paid)?.isExpiring == true
-        subscription != null && (signInState.isSignedInAsFree || isGiftExpiring)
-    }.stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = false)
+        val isExpiring = signedInState?.subscription?.isExpiring == true
+
+        val subscriptionPlans = paymentClient.loadSubscriptionPlans().getOrNull()
+        return@combine if (subscriptionPlans == null) {
+            null
+        } else {
+            if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)) {
+                if (signedInState?.subscription != null) {
+                    null
+                } else {
+                    val recommendedPlan = subscriptionPlans.findOfferPlan(tier = SubscriptionTier.Plus, BillingCycle.Yearly, offer = SubscriptionOffer.Trial).getOrNull()?.let {
+                        OnboardingSubscriptionPlan.create(plan = it).getOrNull()
+                    } ?: OnboardingSubscriptionPlan.create(subscriptionPlans.getBasePlan(tier = SubscriptionTier.Plus, billingCycle = BillingCycle.Yearly))
+                    ProfileUpgradeBannerState.NewOnboardingUpgradeState(
+                        recommendedSubscription = recommendedPlan,
+                    )
+                }
+            } else {
+                ProfileUpgradeBannerState.OldProfileUpgradeBannerState(
+                    subscriptionPlans = subscriptionPlans,
+                    selectedFeatureCard = featureCard,
+                    currentSubscription = signedInState?.subscription?.let { subscription ->
+                        SubscriptionPlan.Key(
+                            tier = subscription.tier,
+                            billingCycle = subscription.billingCycle ?: return@let null,
+                            offer = null,
+                        )
+                    },
+                    isRenewingSubscription = isExpiring,
+                )
+            }
+        }
+            .takeIf { signInState.isSignedInAsFree || isExpiring }
+    }.stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = null)
 
     internal val sectionsState = combine(
         signInState.asFlow(),
         marketingOptIn,
     ) { signInState, marketingOptIn ->
         val signedInState = signInState as? SignInState.SignedIn
-        val isGiftExpiring = (signedInState?.subscriptionStatus as? SubscriptionStatus.Paid)?.isExpiring == true
+        val isGiftExpiring = signedInState?.subscription?.isExpiring == true
         AccountSectionsState(
             isSubscribedToNewsLetter = marketingOptIn,
             email = signedInState?.email,
+            winbackInitParams = computeWinbackParams(signInState),
             canChangeCredentials = !syncManager.isGoogleLogin(),
-            canUpgradeAccount = signedInState?.isSignedInAsPlus == true && isGiftExpiring,
+            canUpgradeAccount = signedInState?.isSignedInAsPlus == true && (isGiftExpiring || FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)),
             canCancelSubscription = signedInState?.isSignedInAsPaid == true,
         )
     }.stateIn(
@@ -141,11 +143,27 @@ class AccountDetailsViewModel
         initialValue = AccountSectionsState(
             isSubscribedToNewsLetter = false,
             email = null,
+            winbackInitParams = WinbackInitParams.Empty,
             canChangeCredentials = false,
             canUpgradeAccount = false,
             canCancelSubscription = false,
         ),
     )
+
+    private suspend fun computeWinbackParams(signInState: SignInState): WinbackInitParams {
+        val subscription = (signInState as? SignInState.SignedIn)?.subscription
+
+        return if (subscription?.platform != SubscriptionPlatform.Android) {
+            WinbackInitParams.Empty
+        } else {
+            when (val subscriptionsResult = paymentClient.loadAcknowledgedSubscriptions()) {
+                is PaymentResult.Failure -> WinbackInitParams.Empty
+                is PaymentResult.Success -> WinbackInitParams(
+                    hasGoogleSubscription = subscriptionsResult.value.any { it.isAutoRenewing },
+                )
+            }
+        }
+    }
 
     internal val miniPlayerInset = settings.bottomInset.stateIn(
         scope = viewModelScope,
@@ -187,11 +205,13 @@ class AccountDetailsViewModel
         settings.marketingOptIn.set(isChecked, updateModifiedAt = true)
     }
 
+    internal fun changeSelectedFeatureCard(key: SubscriptionPlan.Key) {
+        selectedFeatureCard.value = key
+    }
+
     companion object {
         private const val SOURCE_KEY = "source"
         private const val ENABLED_KEY = "enabled"
-
-        private val paidTiers = listOf(SubscriptionTier.PLUS, SubscriptionTier.PATRON)
     }
 }
 

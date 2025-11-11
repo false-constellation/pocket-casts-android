@@ -34,7 +34,6 @@ import au.com.shiftyjelly.pocketcasts.compose.components.TextH30
 import au.com.shiftyjelly.pocketcasts.compose.extensions.nonScaledSp
 import au.com.shiftyjelly.pocketcasts.images.R
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 private val outlinedBorder: BorderStroke
@@ -44,6 +43,7 @@ private val outlinedBorder: BorderStroke
 @Composable
 fun RowOutlinedButton(
     text: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
     includePadding: Boolean = true,
     border: BorderStroke? = outlinedBorder,
@@ -51,12 +51,12 @@ fun RowOutlinedButton(
     disableScale: Boolean = false,
     textIcon: Painter? = null,
     textPadding: Dp = 6.dp,
+    maxLines: Int = Int.MAX_VALUE,
     fontFamily: FontFamily? = null,
     fontSize: TextUnit? = null,
     fontWeight: FontWeight? = null,
     leadingIcon: Painter? = null,
     tintIcon: Boolean = true,
-    onClick: () -> Unit,
     fullWidth: Boolean = true,
 ) {
     Row(
@@ -94,6 +94,7 @@ fun RowOutlinedButton(
                         fontFamily = fontFamily,
                         fontWeight = fontWeight,
                         fontSize = if (disableScale) fontSize?.value?.nonScaledSp else fontSize,
+                        maxLines = maxLines,
                         modifier = Modifier.padding(textPadding),
                     )
                 }
@@ -113,10 +114,9 @@ private fun RowOutlinedImage(image: Painter?, colors: ButtonColors, tintIcon: Bo
     )
 }
 
-@ShowkaseComposable(name = "RowOutlinedButton", group = "Button", styleName = "Light", defaultStyle = true)
 @Preview(name = "Light")
 @Composable
-fun RowOutlinedButtonLightPreview() {
+private fun RowOutlinedButtonLightPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         RowOutlinedButton(
             text = "Share",
@@ -126,10 +126,9 @@ fun RowOutlinedButtonLightPreview() {
     }
 }
 
-@ShowkaseComposable(name = "RowOutlinedButton", group = "Button", styleName = "Dark")
 @Preview(name = "Dark")
 @Composable
-fun RowOutlinedButtonDarkPreview() {
+private fun RowOutlinedButtonDarkPreview() {
     AppThemeWithBackground(Theme.ThemeType.DARK) {
         RowOutlinedButton(
             text = "Share",
@@ -139,10 +138,9 @@ fun RowOutlinedButtonDarkPreview() {
     }
 }
 
-@ShowkaseComposable(name = "RowOutlinedButton", group = "Button", styleName = "Leading icon")
 @Preview(name = "Leading icon")
 @Composable
-fun RowOutlinedButtonLeadingIconPreview() {
+private fun RowOutlinedButtonLeadingIconPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         RowOutlinedButton(
             text = stringResource(LR.string.onboarding_continue_with_google),

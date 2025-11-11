@@ -15,11 +15,11 @@ import androidx.compose.ui.unit.dp
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 
 @Composable
 fun RowLoadingButton(
     text: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
     includePadding: Boolean = true,
     enabled: Boolean = true,
@@ -28,7 +28,6 @@ fun RowLoadingButton(
     colors: ButtonColors = ButtonDefaults.buttonColors(),
     textColor: Color = MaterialTheme.theme.colors.primaryInteractive02,
     elevation: ButtonElevation? = ButtonDefaults.elevation(),
-    onClick: () -> Unit,
 ) {
     BaseRowButton(
         text = text,
@@ -58,10 +57,9 @@ fun RowLoadingButton(
     )
 }
 
-@ShowkaseComposable(name = "RowLoadingButton", group = "Button", styleName = "Light", defaultStyle = true)
 @Preview(name = "Light")
 @Composable
-fun RowLoadingButtonLightPreview() {
+private fun RowLoadingButtonLightPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         RowLoadingButton(
             text = "Accept",
@@ -71,10 +69,9 @@ fun RowLoadingButtonLightPreview() {
     }
 }
 
-@ShowkaseComposable(name = "RowLoadingButton", group = "Button", styleName = "Dark")
 @Preview(name = "Dark")
 @Composable
-fun RowLoadingButtonDarkPreview() {
+private fun RowLoadingButtonDarkPreview() {
     AppThemeWithBackground(Theme.ThemeType.DARK) {
         RowLoadingButton(
             text = "Accept",
@@ -84,10 +81,9 @@ fun RowLoadingButtonDarkPreview() {
     }
 }
 
-@ShowkaseComposable(name = "RowLoadingButton", group = "Button", styleName = "Disabled")
 @Preview(name = "Disabled")
 @Composable
-fun RowLoadingButtonDisabledPreview() {
+private fun RowLoadingButtonDisabledPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         RowLoadingButton(
             text = "Accept",
@@ -98,10 +94,9 @@ fun RowLoadingButtonDisabledPreview() {
     }
 }
 
-@ShowkaseComposable(name = "RowLoadingButton", group = "Button", styleName = "No padding")
 @Preview(name = "No padding")
 @Composable
-fun RowLoadingButtonNoPaddingPreview() {
+private fun RowLoadingButtonNoPaddingPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         RowLoadingButton(
             text = "Accept",
@@ -112,10 +107,9 @@ fun RowLoadingButtonNoPaddingPreview() {
     }
 }
 
-@ShowkaseComposable(name = "RowLoadingButton", group = "Button", styleName = "Text icon")
 @Preview(name = "Text icon")
 @Composable
-fun RowLoadingButtonTextIconPreview() {
+private fun RowLoadingButtonTextIconPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         RowLoadingButton(
             text = "Share",

@@ -52,7 +52,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
@@ -134,7 +133,7 @@ class EpisodeViewModel @Inject constructor(
     val showNowPlaying = _showNowPlaying.asSharedFlow()
 
     init {
-        val episodeUuid = savedStateHandle.get<String>(EpisodeScreenFlow.episodeUuidArgument)
+        val episodeUuid = savedStateHandle.get<String>(EpisodeScreenFlow.EPISODE_UUID_ARGUMENT)
             ?: throw IllegalStateException("EpisodeViewModel must have an episode uuid in the SavedStateHandle")
 
         val episodeFlow = episodeManager.findEpisodeByUuidFlow(episodeUuid)
@@ -149,16 +148,9 @@ class EpisodeViewModel @Inject constructor(
 
         val inUpNextFlow = playbackManager.upNextQueue.changesObservable.asFlow()
 
-        val downloadProgressFlow = combine(
-            episodeFlow,
-            downloadManager.progressUpdateRelay.asFlow(),
-        ) { episode, downloadProgressUpdate ->
-            (episode to downloadProgressUpdate)
-        }.filter { (episode, downloadProgressUpdate) ->
-            episode.uuid == downloadProgressUpdate.episodeUuid
-        }.map { (_, downloadProgressUpdate) ->
-            downloadProgressUpdate.downloadProgress
-        }
+        val downloadProgressFlow = downloadManager
+            .episodeDownloadProgressFlow(episodeUuid)
+            .map { it.downloadProgress }
 
         val showNotesFlow = episodeFlow
             .flatMapLatest {
@@ -179,7 +171,7 @@ class EpisodeViewModel @Inject constructor(
             podcastFlow.onStart { emit(null) },
             isPlayingEpisodeFlow.onStart { emit(false) },
             inUpNextFlow,
-            downloadProgressFlow.onStart<Float?> { emit(null) },
+            downloadProgressFlow.onStart { emit(0f) },
             showNotesFlow,
         ) { episode, podcast, isPlayingEpisode, upNext, downloadProgress, showNotesState ->
 
@@ -235,11 +227,10 @@ class EpisodeViewModel @Inject constructor(
     private fun isInUpNext(
         upNext: UpNextQueue.State?,
         episode: BaseEpisode,
-    ) =
-        (upNext is UpNextQueue.State.Loaded) &&
-            (upNext.queue + upNext.episode)
-                .map { it.uuid }
-                .contains(episode.uuid)
+    ) = (upNext is UpNextQueue.State.Loaded) &&
+        (upNext.queue + upNext.episode)
+            .map { it.uuid }
+            .contains(episode.uuid)
 
     private suspend fun getTintColor(
         episode: BaseEpisode,
@@ -251,6 +242,7 @@ class EpisodeViewModel @Inject constructor(
                 val tint = ThemeColor.podcastIcon02(theme.activeTheme, podcastTint)
                 Color(tint)
             }
+
         is UserEpisode ->
             // First check if the user has set a custom color for this episode
             AddFileActivity.darkThemeColors().find {
@@ -270,6 +262,7 @@ class EpisodeViewModel @Inject constructor(
                     is PodcastEpisode -> {
                         episodeManager.stopDownloadAndCleanUp(episode, fromString)
                     }
+
                     is UserEpisode -> {
                         downloadManager.removeEpisodeFromQueue(episode, fromString)
                     }
@@ -312,9 +305,9 @@ class EpisodeViewModel @Inject constructor(
                         episode,
                         playbackManager,
                         disableAutoDownload = true,
-                        removeFromUpNext = true,
                     )
                 }
+
                 is UserEpisode -> {
                     CloudDeleteHelper.deleteEpisode(
                         episode = episode,
@@ -469,34 +462,33 @@ class EpisodeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun extractColorFromEpisodeArtwork(userEpisode: UserEpisode): Color =
-        userEpisode.artworkUrl?.let { artworkUrl ->
-            val context = getApplication<Application>()
-            val loader = ImageLoader(context)
-            val request = ImageRequest.Builder(context)
-                .data(artworkUrl)
-                .allowHardware(false) // Disable hardware bitmaps.
-                .build()
+    private suspend fun extractColorFromEpisodeArtwork(userEpisode: UserEpisode): Color = userEpisode.artworkUrl?.let { artworkUrl ->
+        val context = getApplication<Application>()
+        val loader = ImageLoader(context)
+        val request = ImageRequest.Builder(context)
+            .data(artworkUrl)
+            .allowHardware(false) // Disable hardware bitmaps.
+            .build()
 
-            val successResult = loader.execute(request) as? SuccessResult
-                ?: return@let null
-            val resultDrawable = successResult.drawable as? BitmapDrawable
-                ?: return@let null
-            val bitmap = resultDrawable.bitmap
+        val successResult = loader.execute(request) as? SuccessResult
+            ?: return@let null
+        val resultDrawable = successResult.drawable as? BitmapDrawable
+            ?: return@let null
+        val bitmap = resultDrawable.bitmap
 
-            // Set a timeout to make sure the user isn't blocked for too long just
-            // because we're trying to extract a tint color.
-            withTimeoutOrNull(2000L) {
-                suspendCoroutine { continuation ->
-                    Palette.from(bitmap).generate { palette ->
-                        val lightVibrantHsl = palette?.lightVibrantSwatch?.hsl
-                        continuation.resume(
-                            lightVibrantHsl?.let { hsl ->
-                                Color.hsl(hsl[0], hsl[1], hsl[2])
-                            },
-                        )
-                    }
+        // Set a timeout to make sure the user isn't blocked for too long just
+        // because we're trying to extract a tint color.
+        withTimeoutOrNull(2000L) {
+            suspendCoroutine { continuation ->
+                Palette.from(bitmap).generate { palette ->
+                    val lightVibrantHsl = palette?.lightVibrantSwatch?.hsl
+                    continuation.resume(
+                        lightVibrantHsl?.let { hsl ->
+                            Color.hsl(hsl[0], hsl[1], hsl[2])
+                        },
+                    )
                 }
             }
-        } ?: Color.White
+        }
+    } ?: Color.White
 }

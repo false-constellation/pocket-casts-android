@@ -8,15 +8,16 @@ import android.support.v4.media.MediaDescriptionCompat
 import android.util.Log
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.core.net.toUri
 import androidx.core.os.bundleOf
 import androidx.media.utils.MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE
 import androidx.media.utils.MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.localization.helper.tryToLocalise
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.repositories.images.PodcastImage
+import au.com.shiftyjelly.pocketcasts.repositories.lists.ListRepository
 import au.com.shiftyjelly.pocketcasts.repositories.playback.EXTRA_CONTENT_STYLE_GROUP_TITLE_HINT
 import au.com.shiftyjelly.pocketcasts.repositories.playback.FOLDER_ROOT_PREFIX
 import au.com.shiftyjelly.pocketcasts.repositories.playback.MEDIA_ID_ROOT
@@ -27,10 +28,13 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.SUGGESTED_ROOT
 import au.com.shiftyjelly.pocketcasts.repositories.playback.auto.AutoConverter
 import au.com.shiftyjelly.pocketcasts.repositories.refresh.RefreshPodcastsTask
 import au.com.shiftyjelly.pocketcasts.servers.model.Discover
+import au.com.shiftyjelly.pocketcasts.servers.model.DiscoverPodcast
+import au.com.shiftyjelly.pocketcasts.servers.model.DiscoverRow
 import au.com.shiftyjelly.pocketcasts.servers.model.DisplayStyle
 import au.com.shiftyjelly.pocketcasts.servers.model.ListType
 import au.com.shiftyjelly.pocketcasts.servers.model.transformWithRegion
-import au.com.shiftyjelly.pocketcasts.servers.server.ListRepository
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -112,7 +116,20 @@ class AutoPlaybackService : PlaybackService() {
         val extrasContentAsList = bundleOf(DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE to DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM)
 
         val podcastsItem = buildListMediaItem(id = PODCASTS_ROOT, title = LR.string.podcasts, drawable = IR.drawable.auto_tab_podcasts)
-        val filtersItem = buildListMediaItem(id = FILTERS_ROOT, title = LR.string.filters, drawable = IR.drawable.auto_tab_filter, extras = extrasContentAsList)
+        val filtersItem = buildListMediaItem(
+            id = FILTERS_ROOT,
+            title = if (FeatureFlag.isEnabled(Feature.PLAYLISTS_REBRANDING, immutable = true)) {
+                LR.string.playlists
+            } else {
+                LR.string.filters
+            },
+            drawable = if (FeatureFlag.isEnabled(Feature.PLAYLISTS_REBRANDING, immutable = true)) {
+                IR.drawable.auto_tab_playlists
+            } else {
+                IR.drawable.auto_tab_filter
+            },
+            extras = extrasContentAsList,
+        )
         val discoverItem = buildListMediaItem(id = DISCOVER_ROOT, title = LR.string.discover, drawable = IR.drawable.auto_tab_discover)
         val profileItem = buildListMediaItem(id = PROFILE_ROOT, title = LR.string.profile, drawable = IR.drawable.auto_tab_profile, extras = extrasContentAsList)
 
@@ -125,7 +142,7 @@ class AutoPlaybackService : PlaybackService() {
     }
 
     suspend fun loadFiltersRoot(): List<MediaBrowserCompat.MediaItem> {
-        return playlistManager.findAll().mapNotNull {
+        return getPlaylistPreviews().mapNotNull {
             Log.d(Settings.LOG_TAG_AUTO, "Filters ${it.title}")
 
             try {
@@ -142,7 +159,7 @@ class AutoPlaybackService : PlaybackService() {
     private fun loadProfileRoot(): List<MediaBrowserCompat.MediaItem> {
         return buildList {
             // Add the user uploaded Files if they are a paying subscriber
-            val isPaidUser = subscriptionManager.getCachedStatus() is SubscriptionStatus.Paid
+            val isPaidUser = settings.cachedSubscription.value != null
             if (isPaidUser) {
                 add(buildListMediaItem(id = PROFILE_FILES, title = LR.string.profile_navigation_files, drawable = IR.drawable.automotive_files))
             }
@@ -165,7 +182,7 @@ class AutoPlaybackService : PlaybackService() {
         Log.d(Settings.LOG_TAG_AUTO, "Loading discover root")
         val discoverFeed: Discover
         try {
-            discoverFeed = listSource.getDiscoverFeedSuspend()
+            discoverFeed = listSource.getDiscoverFeed()
         } catch (e: Exception) {
             Log.e(Settings.LOG_TAG_AUTO, "Error loading discover", e)
             return emptyList()
@@ -178,11 +195,24 @@ class AutoPlaybackService : PlaybackService() {
         )
 
         val updatedList = discoverFeed.layout.transformWithRegion(region, replacements, resources)
-            .filter { it.type is ListType.PodcastList && it.displayStyle !is DisplayStyle.CollectionList && !it.sponsored && it.displayStyle !is DisplayStyle.SinglePodcast }
-            .map { discoverItem ->
+            .filter {
+                it.type is ListType.PodcastList &&
+                    it.displayStyle !is DisplayStyle.CollectionList &&
+                    !it.sponsored &&
+                    it.authenticated == false &&
+                    it.displayStyle !is DisplayStyle.SinglePodcast
+            }
+            .mapNotNull<DiscoverRow, Pair<String, List<DiscoverPodcast>>> { discoverItem ->
                 Log.d(Settings.LOG_TAG_AUTO, "Loading discover feed ${discoverItem.source}")
-                val listFeed = listSource.getListFeedSuspend(discoverItem.source)
-                Pair(discoverItem.title, listFeed.podcasts?.take(6) ?: emptyList())
+                listSource.getListFeed(
+                    url = discoverItem.source,
+                    authenticated = discoverItem.authenticated,
+                )?.run {
+                    Pair(
+                        title.orEmpty().ifEmpty { discoverItem.title },
+                        podcasts?.take(6) ?: emptyList(),
+                    )
+                }
             }
             .flatMap { (title, podcasts) ->
                 Log.d(Settings.LOG_TAG_AUTO, "Mapping $title to media item")
@@ -192,7 +222,7 @@ class AutoPlaybackService : PlaybackService() {
                     extras.putString(EXTRA_CONTENT_STYLE_GROUP_TITLE_HINT, groupTitle)
 
                     val artworkUri = PodcastImage.getArtworkUrl(size = 480, uuid = it.uuid)
-                    val localUri = AutoConverter.getArtworkUriForContentProvider(Uri.parse(artworkUri), this)
+                    val localUri = AutoConverter.getArtworkUriForContentProvider(artworkUri.toUri(), this)
 
                     val discoverDescription = MediaDescriptionCompat.Builder()
                         .setTitle(it.title)
@@ -208,8 +238,3 @@ class AutoPlaybackService : PlaybackService() {
         return updatedList
     }
 }
-
-private const val ERROR_RESOLUTION_ACTION_LABEL =
-    "android.media.extras.ERROR_RESOLUTION_ACTION_LABEL"
-private const val ERROR_RESOLUTION_ACTION_INTENT =
-    "android.media.extras.ERROR_RESOLUTION_ACTION_INTENT"

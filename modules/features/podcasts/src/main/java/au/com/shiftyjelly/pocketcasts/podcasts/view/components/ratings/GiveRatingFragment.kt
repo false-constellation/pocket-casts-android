@@ -5,13 +5,17 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
 import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
+import au.com.shiftyjelly.pocketcasts.compose.layout.verticalNavigationBars
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.GiveRatingViewModel
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
@@ -42,11 +46,11 @@ class GiveRatingFragment : BaseDialogFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         val podcastUuid = remember { arguments?.getString(ARG_PODCAST_UUID) }
         if (podcastUuid == null) {
             exitWithError("${this@GiveRatingFragment::class.simpleName} is missing podcastUuid argument")
-            return@content
+            return@contentWithoutConsumedInsets
         }
 
         AppThemeWithBackground(theme.activeTheme) {
@@ -83,6 +87,7 @@ class GiveRatingFragment : BaseDialogFragment() {
                         dismiss()
                     }
                 },
+                modifier = Modifier.windowInsetsPadding(WindowInsets.verticalNavigationBars),
             )
         }
     }

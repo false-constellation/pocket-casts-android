@@ -5,7 +5,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
+import androidx.core.view.updatePadding
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
@@ -15,25 +19,24 @@ import au.com.shiftyjelly.pocketcasts.podcasts.databinding.FragmentShareIncoming
 import au.com.shiftyjelly.pocketcasts.podcasts.view.podcast.PodcastFragment
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
-import au.com.shiftyjelly.pocketcasts.servers.ServiceManager
-import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeTintedDrawable
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
 import au.com.shiftyjelly.pocketcasts.views.dialog.OptionsDialog
 import au.com.shiftyjelly.pocketcasts.views.extensions.hide
+import au.com.shiftyjelly.pocketcasts.views.extensions.setup
 import au.com.shiftyjelly.pocketcasts.views.extensions.show
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
+import au.com.shiftyjelly.pocketcasts.views.helper.NavigationIcon
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import au.com.shiftyjelly.pocketcasts.images.R as IR
+import kotlinx.coroutines.launch
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
-import au.com.shiftyjelly.pocketcasts.ui.R as UR
 
 @AndroidEntryPoint
-class ShareListIncomingFragment : BaseFragment(), ShareListIncomingAdapter.ClickListener {
+class ShareListIncomingFragment :
+    BaseFragment(),
+    ShareListIncomingAdapter.ClickListener {
 
     @Inject lateinit var podcastManager: PodcastManager
-
-    @Inject lateinit var serviceManager: ServiceManager
 
     @Inject lateinit var settings: Settings
 
@@ -92,12 +95,7 @@ class ShareListIncomingFragment : BaseFragment(), ShareListIncomingAdapter.Click
         recyclerView.adapter = adapter
         recyclerView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
-        val toolbar = binding.toolbar
-        toolbar.setNavigationOnClickListener {
-            @Suppress("DEPRECATION")
-            activity?.onBackPressed()
-        }
-        toolbar.navigationIcon = context.getThemeTintedDrawable(IR.drawable.ic_cancel, UR.attr.secondary_icon_01)
+        binding.toolbar.setup(navigationIcon = NavigationIcon.Close, activity = activity, theme = theme, includeStatusBarPadding = false)
 
         viewModel.share.observe(viewLifecycleOwner) { share ->
             when (share) {
@@ -121,6 +119,15 @@ class ShareListIncomingFragment : BaseFragment(), ShareListIncomingAdapter.Click
 
         if (!viewModel.isFragmentChangingConfigurations) {
             viewModel.trackShareEvent(AnalyticsEvent.INCOMING_SHARE_LIST_SHOWN, mapOf("source" to source.analyticsValue))
+        }
+
+        // add bottom padding to make sure the content isn't hidden by the mini player
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settings.bottomInset.collect {
+                    binding.recyclerView.updatePadding(bottom = it)
+                }
+            }
         }
     }
 
@@ -177,11 +184,10 @@ class ShareListIncomingFragment : BaseFragment(), ShareListIncomingAdapter.Click
     }
 
     private object AnalyticsProp {
-        private const val count = "count"
-        private const val source = "source"
-        private const val uuid = "uuid"
-        fun countMap(count: Int) = mapOf(this.count to count)
-        fun subscribeToggledMap(uuid: String) =
-            mapOf(this.source to "incoming_share_list", this.uuid to uuid)
+        private const val COUNT = "count"
+        private const val SOURCE = "source"
+        private const val UUID = "uuid"
+        fun countMap(count: Int) = mapOf(this.COUNT to count)
+        fun subscribeToggledMap(uuid: String) = mapOf(this.SOURCE to "incoming_share_list", this.UUID to uuid)
     }
 }

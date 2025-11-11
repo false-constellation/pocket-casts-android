@@ -1,30 +1,39 @@
 package au.com.shiftyjelly.pocketcasts.compose
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.background
 import androidx.compose.material.Colors
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.unit.sp
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 
-val LocalColors = staticCompositionLocalOf { PocketCastsTheme(colors = ThemeLightColors, isLight = true) }
+val LocalColors = staticCompositionLocalOf { PocketCastsTheme(type = Theme.ThemeType.LIGHT, colors = ThemeLightColors) }
 
 /**
  * This theme should be used to support light/dark colors if the composable root of the view tree
  * does not support the use of contentColor.
  * @see <a href="https://developer.android.com/jetpack/compose/themes/material#content-color</a> for more details
  */
+@Suppress("ktlint:compose:modifier-missing-check")
 @Composable
 fun AppThemeWithBackground(
     themeType: Theme.ThemeType,
     content: @Composable () -> Unit,
 ) {
     AppTheme(themeType) {
-        SurfacedContent(content)
+        // Use surface so Material uses appropraite tinting for icons etc.
+        Surface(color = MaterialTheme.colors.background) {
+            content()
+        }
     }
 }
 
@@ -34,44 +43,33 @@ fun AppTheme(
     content: @Composable () -> Unit,
 ) {
     val colors = themeTypeToColors(themeType)
-    val isLight = !themeType.darkTheme
-    val theme = PocketCastsTheme(colors = colors, isLight = isLight)
+    val theme = PocketCastsTheme(type = themeType, colors = colors)
 
     CompositionLocalProvider(LocalColors provides theme) {
         MaterialTheme(
-            colors = buildMaterialColors(colors, isLight),
+            colors = buildMaterialColors(colors, theme.isLight),
             content = content,
         )
     }
 }
 
 @Composable
-fun themeTypeToColors(themeType: Theme.ThemeType) =
-    when (themeType) {
-        Theme.ThemeType.LIGHT -> ThemeLightColors
-        Theme.ThemeType.DARK -> ThemeDarkColors
-        Theme.ThemeType.EXTRA_DARK -> ThemeExtraDarkColors
-        Theme.ThemeType.CLASSIC_LIGHT -> ThemeClassicLightColors
-        Theme.ThemeType.ELECTRIC -> ThemeElectricityColors
-        Theme.ThemeType.INDIGO -> ThemeIndigoColors
-        Theme.ThemeType.RADIOACTIVE -> ThemeRadioactiveColors
-        Theme.ThemeType.ROSE -> ThemeRoseColors
-        Theme.ThemeType.LIGHT_CONTRAST -> ThemeLightContrastColors
-        Theme.ThemeType.DARK_CONTRAST -> ThemeDarkContrastColors
-    }
-
-@Composable
-private fun SurfacedContent(
-    content: @Composable () -> Unit,
-) {
-    Surface(color = MaterialTheme.colors.background) {
-        content()
-    }
+fun themeTypeToColors(themeType: Theme.ThemeType) = when (themeType) {
+    Theme.ThemeType.LIGHT -> ThemeLightColors
+    Theme.ThemeType.DARK -> ThemeDarkColors
+    Theme.ThemeType.EXTRA_DARK -> ThemeExtraDarkColors
+    Theme.ThemeType.CLASSIC_LIGHT -> ThemeClassicLightColors
+    Theme.ThemeType.ELECTRIC -> ThemeElectricityColors
+    Theme.ThemeType.INDIGO -> ThemeIndigoColors
+    Theme.ThemeType.RADIOACTIVE -> ThemeRadioactiveColors
+    Theme.ThemeType.ROSE -> ThemeRoseColors
+    Theme.ThemeType.LIGHT_CONTRAST -> ThemeLightContrastColors
+    Theme.ThemeType.DARK_CONTRAST -> ThemeDarkContrastColors
 }
 
 @Composable
 fun AutomotiveTheme(content: @Composable () -> Unit) {
-    val theme = PocketCastsTheme(colors = ThemeDarkColors, isLight = false)
+    val theme = PocketCastsTheme(type = Theme.ThemeType.DARK, colors = ThemeDarkColors)
     val typography = MaterialTheme.typography
     // Increase the size of the fonts on Automotive to match the system
     CompositionLocalProvider(LocalColors provides theme) {
@@ -97,10 +95,36 @@ fun AutomotiveTheme(content: @Composable () -> Unit) {
     }
 }
 
-data class PocketCastsTheme(
-    val colors: ThemeColors,
-    val isLight: Boolean,
+private val radioactiveColorFilter = ColorFilter.tint(
+    color = Color.radioactiveGreen,
+    blendMode = BlendMode.Modulate,
 )
+
+data class PocketCastsTheme(
+    val type: Theme.ThemeType,
+    val colors: ThemeColors,
+) {
+    val isDark get() = type.darkTheme
+    val isLight get() = !isDark
+    val imageColorFilter get() = if (type == Theme.ThemeType.RADIOACTIVE) radioactiveColorFilter else null
+
+    @Composable
+    fun rememberPlayerColors(): PlayerColors? {
+        return LocalPodcastColors.current?.let { podcastColors ->
+            rememberPlayerColors(podcastColors)
+        }
+    }
+
+    @Composable
+    fun rememberPlayerColorsOrDefault(): PlayerColors {
+        return rememberPlayerColors(LocalPodcastColors.current ?: PodcastColors.ForUserEpisode)
+    }
+
+    @Composable
+    private fun rememberPlayerColors(podcastColors: PodcastColors): PlayerColors {
+        return remember(podcastColors) { PlayerColors(type, podcastColors) }
+    }
+}
 
 @SuppressLint("ConflictingOnColor")
 private fun buildMaterialColors(colors: ThemeColors, isLight: Boolean): Colors {

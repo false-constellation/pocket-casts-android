@@ -30,8 +30,6 @@ import au.com.shiftyjelly.pocketcasts.compose.preview.ThemePreviewParameterProvi
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.settings.viewmodel.AdvancedSettingsViewModel
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 /**
@@ -42,14 +40,14 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 @Composable
 fun AdvancedSettingsPage(
     viewModel: AdvancedSettingsViewModel,
-    onBackPressed: () -> Unit,
+    onBackPress: () -> Unit,
     bottomInset: Dp,
     modifier: Modifier = Modifier,
 ) {
     val state: AdvancedSettingsViewModel.State by viewModel.state.collectAsState()
     AdvancedSettingsView(
         state = state,
-        onBackPressed = onBackPressed,
+        onBackPress = onBackPress,
         bottomInset = bottomInset,
         modifier = modifier,
     )
@@ -62,22 +60,24 @@ fun AdvancedSettingsPage(
 @Composable
 fun AdvancedSettingsView(
     state: AdvancedSettingsViewModel.State,
-    onBackPressed: () -> Unit,
+    onBackPress: () -> Unit,
     bottomInset: Dp,
     modifier: Modifier = Modifier,
 ) {
-    Column {
+    Column(
+        modifier = modifier,
+    ) {
         ThemedTopAppBar(
             title = stringResource(LR.string.settings_title_advanced),
             bottomShadow = true,
-            onNavigationClick = { onBackPressed() },
+            onNavigationClick = { onBackPress() },
         )
 
         LazyColumn(
-            modifier
+            contentPadding = PaddingValues(bottom = bottomInset),
+            modifier = Modifier
                 .background(MaterialTheme.theme.colors.primaryUi02)
                 .fillMaxHeight(),
-            contentPadding = PaddingValues(bottom = bottomInset),
         ) {
             item {
                 TextP50(
@@ -99,9 +99,7 @@ fun AdvancedSettingsView(
                     heading = stringResource(LR.string.settings_advanced_heading_playback),
                     indent = false,
                 ) {
-                    if (FeatureFlag.isEnabled(Feature.CACHE_ENTIRE_PLAYING_EPISODE)) {
-                        CacheEntirePlayingEpisodeRow(state.cacheEntirePlayingEpisodeState)
-                    }
+                    CacheEntirePlayingEpisodeRow(state.cacheEntirePlayingEpisodeState)
                     PrioritizeSeekAccuracydRow(state.prioritizeSeekAccuracyState)
                 }
             }
@@ -185,7 +183,7 @@ private fun AdvancedSettingsPreview(
                     onCheckedChange = {},
                 ),
             ),
-            onBackPressed = {},
+            onBackPress = {},
             bottomInset = 0.dp,
         )
     }

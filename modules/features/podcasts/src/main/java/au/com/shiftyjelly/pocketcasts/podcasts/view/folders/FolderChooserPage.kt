@@ -1,17 +1,21 @@
 package au.com.shiftyjelly.pocketcasts.podcasts.view.folders
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.Card
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
@@ -47,10 +51,21 @@ fun FolderChooserPage(
     onCloseClick: () -> Unit,
     onNewFolderClick: () -> Unit,
     viewModel: FolderEditViewModel,
+    modifier: Modifier = Modifier,
 ) {
     val state: FolderEditViewModel.State by viewModel.state.collectAsState()
-    Surface(modifier = Modifier.nestedScroll(rememberViewInteropNestedScrollConnection())) {
-        Column {
+    Surface(
+        modifier = modifier
+            .nestedScroll(rememberViewInteropNestedScrollConnection()),
+    ) {
+        Column(
+            modifier = Modifier
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(
+                        WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                    ),
+                ),
+        ) {
             BottomSheetAppBar(
                 title = null,
                 navigationButton = NavigationButton.Close,
@@ -68,15 +83,12 @@ fun FolderChooserPage(
                 onNewFolderClick = onNewFolderClick,
                 modifier = Modifier.weight(1f),
             )
-            Card(
-                elevation = if (isSystemInDarkTheme()) 0.dp else 8.dp,
-                backgroundColor = Color.Transparent,
-            ) {
-                RowButton(
-                    text = stringResource(LR.string.done),
-                    onClick = { onCloseClick() },
-                )
-            }
+            RowButton(
+                modifier = Modifier
+                    .navigationBarsPadding(),
+                text = stringResource(LR.string.done),
+                onClick = { onCloseClick() },
+            )
         }
     }
 }
@@ -88,7 +100,7 @@ private fun FolderList(
     folderUuidToPodcastCount: Map<String?, Int>,
     onFolderClick: (Folder) -> Unit,
     onNewFolderClick: () -> Unit,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier = modifier) {
         item {
@@ -99,18 +111,21 @@ private fun FolderList(
         }
         item {
             Column {
-                FolderMoveRow {
-                    onNewFolderClick()
-                }
+                FolderMoveRow(
+                    onClick = onNewFolderClick,
+                )
                 HorizontalDivider()
             }
         }
         items(folders) { folder ->
             Column {
                 val selected = currentFolder != null && currentFolder.uuid == folder.uuid
-                FolderSelectRow(folder = folder, podcastCount = folderUuidToPodcastCount[folder.uuid] ?: 0, selected = selected) {
-                    onFolderClick(folder)
-                }
+                FolderSelectRow(
+                    folder = folder,
+                    podcastCount = folderUuidToPodcastCount[folder.uuid] ?: 0,
+                    selected = selected,
+                    onClick = { onFolderClick(folder) },
+                )
                 HorizontalDivider()
             }
         }
@@ -121,7 +136,13 @@ private fun FolderList(
 }
 
 @Composable
-private fun FolderSelectRow(folder: Folder, podcastCount: Int, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun FolderSelectRow(
+    folder: Folder,
+    podcastCount: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -161,7 +182,10 @@ private fun FolderSelectRow(folder: Folder, podcastCount: Int, selected: Boolean
 }
 
 @Composable
-fun FolderMoveRow(modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun FolderMoveRow(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier

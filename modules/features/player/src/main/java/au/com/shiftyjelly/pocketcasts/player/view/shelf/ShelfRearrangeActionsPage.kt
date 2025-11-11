@@ -6,6 +6,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -23,7 +24,6 @@ import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.map
-import android.graphics.Color as AndroidColor
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @Composable
@@ -32,11 +32,13 @@ fun ShelfRearrangeActionsPage(
     shelfViewModel: ShelfViewModel,
     shelfSharedViewModel: ShelfSharedViewModel,
     playerViewModel: PlayerViewModel,
-    onBackPressed: () -> Unit,
+    onBackPress: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val iconColorInt = ThemeColor.playerContrast01(theme.activeTheme)
+    val iconColor = Color(ThemeColor.playerContrast01(theme.activeTheme))
     val backgroundColorInt = theme.playerBackground2Color(playerViewModel.podcast)
-    val toolbarColorInt = theme.playerBackgroundColor(playerViewModel.podcast)
+    val backgroundColor = Color(backgroundColorInt)
+    val toolbarColor = Color(theme.playerBackgroundColor(playerViewModel.podcast))
     val selectedColorInt = theme.playerHighlight7Color(playerViewModel.podcast)
     val selectedBackgroundInt = remember(backgroundColorInt, selectedColorInt) { ColorUtils.calculateCombinedColor(backgroundColorInt, selectedColorInt) }
 
@@ -48,15 +50,18 @@ fun ShelfRearrangeActionsPage(
     }.collectAsStateWithLifecycle(null)
 
     Content(
-        backgroundColorInt = backgroundColorInt,
-        toolbarColorInt = toolbarColorInt,
-        iconColorInt = iconColorInt,
-        onBackPressed = onBackPressed,
+        backgroundColor = backgroundColor,
+        toolbarColor = toolbarColor,
+        iconColor = iconColor,
+        onBackPress = onBackPress,
+        modifier = modifier,
     ) {
+        val uiState by shelfViewModel.uiState.collectAsState()
         MenuShelfItems(
-            shelfViewModel = shelfViewModel,
-            normalBackgroundColor = Color(AndroidColor.parseColor(ColorUtils.colorIntToHexString(backgroundColorInt))),
-            selectedBackgroundColor = Color(AndroidColor.parseColor(ColorUtils.colorIntToHexString(selectedBackgroundInt))),
+            state = uiState,
+            normalBackgroundColor = Color(backgroundColorInt),
+            selectedBackgroundColor = Color(selectedBackgroundInt),
+            onMove = { from, to -> shelfViewModel.onShelfItemMove(from, to) },
         )
     }
 
@@ -75,23 +80,21 @@ fun ShelfRearrangeActionsPage(
 
 @Composable
 private fun Content(
-    backgroundColorInt: Int,
-    toolbarColorInt: Int,
-    iconColorInt: Int,
-    onBackPressed: () -> Unit,
+    backgroundColor: Color,
+    toolbarColor: Color,
+    iconColor: Color,
+    onBackPress: () -> Unit,
+    modifier: Modifier = Modifier,
     menuShelfItems: @Composable () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .background(Color(AndroidColor.parseColor(ColorUtils.colorIntToHexString(backgroundColorInt)))),
-    ) {
+    Column(modifier = modifier.background(backgroundColor)) {
         ThemedTopAppBar(
             title = stringResource(LR.string.rearrange_actions),
-            backgroundColor = Color(AndroidColor.parseColor(ColorUtils.colorIntToHexString(toolbarColorInt))),
+            backgroundColor = toolbarColor,
             textColor = MaterialTheme.theme.colors.playerContrast01,
-            iconColor = Color(AndroidColor.parseColor(ColorUtils.colorIntToHexString(iconColorInt))),
+            iconColor = iconColor,
             bottomShadow = true,
-            onNavigationClick = { onBackPressed() },
+            onNavigationClick = onBackPress,
         )
 
         menuShelfItems()

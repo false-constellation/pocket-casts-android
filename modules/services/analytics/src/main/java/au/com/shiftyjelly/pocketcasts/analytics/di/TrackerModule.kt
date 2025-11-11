@@ -27,7 +27,7 @@ object TrackerModule {
         settings: Settings,
     ): AnalyticsTracker = AnalyticsTracker(
         trackers = listOf(tracksTracker, bumpStatsTracker, firebaseAnalyticsTracker),
-        isTrackingEnabled = { settings.collectAnalytics.value },
+        isFirstPartyTrackingEnabled = { settings.collectAnalytics.value },
     )
 
     @Provides

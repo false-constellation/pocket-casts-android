@@ -1,11 +1,9 @@
 package au.com.shiftyjelly.pocketcasts.views.activity
 
 import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Bundle
 import android.view.MenuItem
 import android.webkit.WebResourceRequest
@@ -14,8 +12,10 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
+import au.com.shiftyjelly.pocketcasts.preferences.BuildConfig
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.views.databinding.ActivityWebViewBinding
+import au.com.shiftyjelly.pocketcasts.views.extensions.includeStatusBarPadding
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
@@ -26,7 +26,9 @@ private const val EXTRA_TITLE = "EXTRA_TITLE"
 private const val EXTRA_URL = "EXTRA_URL"
 
 @AndroidEntryPoint
-class WebViewActivity : AppCompatActivity(), CoroutineScope {
+class WebViewActivity :
+    AppCompatActivity(),
+    CoroutineScope {
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Main
 
@@ -61,6 +63,7 @@ class WebViewActivity : AppCompatActivity(), CoroutineScope {
         setContentView(binding.root)
 
         binding.toolbar.title = intent.extras?.getString(EXTRA_TITLE)
+        binding.toolbar.includeStatusBarPadding()
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
@@ -88,29 +91,18 @@ class WebViewActivity : AppCompatActivity(), CoroutineScope {
                 binding.loading.isVisible = false
             }
 
-            // Any link you tap on we will open in the external browser
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val url = request.url.toString()
-                if (extraUrl == url) {
-                    return false
-                }
-                val parsedUri = Uri.parse(url)
-                return if (parsedUri != null) {
-                    val intent = Intent(Intent.ACTION_VIEW)
-                    intent.data = Uri.parse(url)
-                    try {
-                        startActivity(intent)
-                        true
-                    } catch (e: ActivityNotFoundException) {
-                        false
-                    }
-                } else {
-                    false
+                val uri = request.url
+                return when {
+                    uri.host == BuildConfig.WEB_BASE_HOST -> false
+                    uri.toString() == extraUrl -> false
+                    else -> runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }.isSuccess
                 }
             }
         }
 
         binding.webview.settings.javaScriptEnabled = true
+        binding.webview.settings.domStorageEnabled = true
 
         if (savedInstanceState == null) {
             extraUrl?.let { url ->

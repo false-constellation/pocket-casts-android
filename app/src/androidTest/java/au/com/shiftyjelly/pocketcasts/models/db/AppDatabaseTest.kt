@@ -174,6 +174,23 @@ class AppDatabaseTest {
                 // 102 to 103 added via auto migration
                 AppDatabase.MIGRATION_103_104,
                 AppDatabase.MIGRATION_104_105,
+                AppDatabase.MIGRATION_105_106,
+                AppDatabase.MIGRATION_106_107,
+                AppDatabase.MIGRATION_107_108,
+                AppDatabase.MIGRATION_108_109,
+                AppDatabase.MIGRATION_109_110,
+                AppDatabase.MIGRATION_110_111,
+                AppDatabase.MIGRATION_111_112,
+                AppDatabase.MIGRATION_112_113,
+                AppDatabase.MIGRATION_113_114,
+                AppDatabase.MIGRATION_114_115,
+                AppDatabase.MIGRATION_115_116,
+                AppDatabase.MIGRATION_116_117,
+                AppDatabase.MIGRATION_117_118,
+                AppDatabase.MIGRATION_118_119,
+                AppDatabase.MIGRATION_119_120,
+                AppDatabase.MIGRATION_120_121,
+                AppDatabase.MIGRATION_121_122,
             )
             .build()
         // close the database and release any stream resources when the test finishes

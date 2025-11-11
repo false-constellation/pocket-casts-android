@@ -10,16 +10,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedTextField
-import androidx.compose.material.Text
-import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -28,29 +22,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.fragment.compose.content
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
-import au.com.shiftyjelly.pocketcasts.compose.components.DialogButtonState
-import au.com.shiftyjelly.pocketcasts.compose.components.DialogFrame
+import au.com.shiftyjelly.pocketcasts.compose.components.FormFieldDialog
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRadioDialogRow
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRow
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRowToggle
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingSectionHeader
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingsSection
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.images.R
 import au.com.shiftyjelly.pocketcasts.models.to.PodcastGrouping
@@ -59,7 +48,6 @@ import au.com.shiftyjelly.pocketcasts.repositories.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.settings.notification.MediaActionsFragment
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
-import au.com.shiftyjelly.pocketcasts.utils.extensions.isPositive
 import au.com.shiftyjelly.pocketcasts.utils.extensions.pxToDp
 import au.com.shiftyjelly.pocketcasts.views.dialog.ConfirmationDialog
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
@@ -67,7 +55,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
@@ -91,14 +78,14 @@ class PlaybackSettingsFragment : BaseFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         val scrollToSleepTimer = arguments?.getBoolean(SCROLL_TO_SLEEP_TIMER, false) ?: false
 
         AppThemeWithBackground(theme.activeTheme) {
             val bottomInset = settings.bottomInset.collectAsStateWithLifecycle(0)
             PlaybackSettings(
                 settings = settings,
-                onBackClick = {
+                onBackPress = {
                     @Suppress("DEPRECATION")
                     activity?.onBackPressed()
                 },
@@ -111,7 +98,7 @@ class PlaybackSettingsFragment : BaseFragment() {
     @Composable
     private fun PlaybackSettings(
         settings: Settings,
-        onBackClick: () -> Unit,
+        onBackPress: () -> Unit,
         scrollToSleepTimer: Boolean,
         bottomInset: Dp,
     ) {
@@ -132,7 +119,7 @@ class PlaybackSettingsFragment : BaseFragment() {
         Column {
             ThemedTopAppBar(
                 title = stringResource(LR.string.settings_title_playback),
-                onNavigationClick = onBackClick,
+                onNavigationClick = onBackPress,
                 bottomShadow = true,
             )
             LazyColumn(
@@ -346,6 +333,19 @@ class PlaybackSettingsFragment : BaseFragment() {
                             )
                         }
 
+                        SettingsItems.SETTINGS_GENERAL_AUTOPLAY -> {
+                            AutoPlayNextOnEmpty(
+                                saved = settings.autoPlayNextEpisodeOnEmpty.flow.collectAsState().value,
+                                onSave = {
+                                    analyticsTracker.track(
+                                        AnalyticsEvent.SETTINGS_GENERAL_AUTOPLAY_TOGGLED,
+                                        mapOf("enabled" to it),
+                                    )
+                                    settings.autoPlayNextEpisodeOnEmpty.set(it, updateModifiedAt = true)
+                                },
+                            )
+                        }
+
                         SettingsItems.SETTINGS_HEADER_SLEEP_TIMER -> {
                             Column {
                                 Spacer(modifier = Modifier.height(SettingsSection.verticalPadding))
@@ -378,19 +378,6 @@ class PlaybackSettingsFragment : BaseFragment() {
                                         mapOf("enabled" to it),
                                     )
                                     settings.shakeToResetSleepTimer.set(it, updateModifiedAt = true)
-                                },
-                            )
-                        }
-
-                        SettingsItems.SETTINGS_GENERAL_AUTOPLAY -> {
-                            AutoPlayNextOnEmpty(
-                                saved = settings.autoPlayNextEpisodeOnEmpty.flow.collectAsState().value,
-                                onSave = {
-                                    analyticsTracker.track(
-                                        AnalyticsEvent.SETTINGS_GENERAL_AUTOPLAY_TOGGLED,
-                                        mapOf("enabled" to it),
-                                    )
-                                    settings.autoPlayNextEpisodeOnEmpty.set(it, updateModifiedAt = true)
                                 },
                             )
                         }
@@ -517,144 +504,77 @@ class PlaybackSettingsFragment : BaseFragment() {
             indent = false,
         ) {
             if (showDialog) {
-                val focusRequester = remember { FocusRequester() }
-                LaunchedEffect(Unit) {
-                    // delay apparently needed to ensure the soft keyboard opens
-                    delay(100)
-                    focusRequester.requestFocus()
-                }
-
-                var value by remember {
-                    mutableStateOf(
-                        TextFieldValue(
-                            text = saved.toString(),
-                            selection = TextRange(0, saved.toString().length),
-                        ),
-                    )
-                }
-
-                val onFinish = {
-                    val saveableValue = value.text.toPositiveNumberOrNull()
-                    if (saveableValue != null) {
-                        onSave(saveableValue)
-                        showDialog = false
-                    }
-                }
-
-                DialogFrame(
+                FormFieldDialog(
                     title = primaryText,
-                    buttons = listOf(
-                        DialogButtonState(
-                            text = stringResource(au.com.shiftyjelly.pocketcasts.localization.R.string.cancel).uppercase(
-                                Locale.getDefault(),
-                            ),
-                            onClick = { showDialog = false },
-                        ),
-                        DialogButtonState(
-                            text = stringResource(au.com.shiftyjelly.pocketcasts.localization.R.string.ok),
-                            onClick = onFinish,
-                            enabled = value.text.toPositiveNumberOrNull() != null,
-                        ),
-                    ),
+                    placeholder = stringResource(LR.string.seconds_label),
+                    initialValue = saved.toString(),
+                    keyboardType = KeyboardType.Number,
+                    onConfirm = { value ->
+                        val intValue = value.toIntOrNull()?.takeIf { it >= 0 }
+                        if (intValue != null) {
+                            onSave(intValue)
+                        }
+                    },
                     onDismissRequest = { showDialog = false },
-                ) {
-                    OutlinedTextField(
-                        value = value,
-                        onValueChange = {
-                            if (it.text.isEmpty()) {
-                                value = it
-                            } else {
-                                val positiveNumber = it.text.toPositiveNumberOrNull()
-                                if (positiveNumber != null) {
-                                    value = it.copy(text = positiveNumber.toString())
-                                }
-                            }
-                        },
-                        colors = TextFieldDefaults.textFieldColors(
-                            textColor = MaterialTheme.theme.colors.primaryText01,
-                            placeholderColor = MaterialTheme.theme.colors.primaryText02,
-                            backgroundColor = MaterialTheme.theme.colors.primaryUi01,
-                        ),
-                        label = {
-                            Text(stringResource(LR.string.seconds_label))
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        keyboardActions = KeyboardActions { onFinish() },
-                        modifier = Modifier
-                            .padding(horizontal = 24.dp)
-                            .focusRequester(focusRequester),
-                    )
-                }
+                    isSaveEnabled = { value -> value.toIntOrNull()?.takeIf { it >= 0 } != null },
+                )
             }
         }
     }
 
-    private fun String?.toPositiveNumberOrNull(): Int? {
-        return this?.toIntOrNull().let { int ->
-            if (int.isPositive()) int else null
-        }
-    }
+    @Composable
+    private fun KeepScreenAwake(saved: Boolean, onSave: (Boolean) -> Unit) = SettingRow(
+        primaryText = stringResource(LR.string.settings_keep_screen_awake),
+        secondaryText = stringResource(LR.string.settings_keep_screen_awake_summary),
+        toggle = SettingRowToggle.Switch(checked = saved),
+        modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
+        indent = false,
+    )
 
     @Composable
-    private fun KeepScreenAwake(saved: Boolean, onSave: (Boolean) -> Unit) =
-        SettingRow(
-            primaryText = stringResource(LR.string.settings_keep_screen_awake),
-            secondaryText = stringResource(LR.string.settings_keep_screen_awake_summary),
-            toggle = SettingRowToggle.Switch(checked = saved),
-            modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
-            indent = false,
-        )
+    private fun OpenPlayerAutomatically(saved: Boolean, onSave: (Boolean) -> Unit) = SettingRow(
+        primaryText = stringResource(id = LR.string.settings_open_player_automatically),
+        secondaryText = stringResource(id = LR.string.settings_open_player_automatically_summary),
+        toggle = SettingRowToggle.Switch(checked = saved),
+        modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
+        indent = false,
+    )
 
     @Composable
-    private fun OpenPlayerAutomatically(saved: Boolean, onSave: (Boolean) -> Unit) =
-        SettingRow(
-            primaryText = stringResource(id = LR.string.settings_open_player_automatically),
-            secondaryText = stringResource(id = LR.string.settings_open_player_automatically_summary),
-            toggle = SettingRowToggle.Switch(checked = saved),
-            modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
-            indent = false,
-        )
+    private fun IntelligentPlaybackResumption(saved: Boolean, onSave: (Boolean) -> Unit) = SettingRow(
+        primaryText = stringResource(LR.string.settings_playback_resumption),
+        secondaryText = stringResource(LR.string.settings_playback_resumption_summary),
+        toggle = SettingRowToggle.Switch(checked = saved),
+        modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
+        indent = false,
+    )
 
     @Composable
-    private fun IntelligentPlaybackResumption(saved: Boolean, onSave: (Boolean) -> Unit) =
-        SettingRow(
-            primaryText = stringResource(LR.string.settings_playback_resumption),
-            secondaryText = stringResource(LR.string.settings_playback_resumption_summary),
-            toggle = SettingRowToggle.Switch(checked = saved),
-            modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
-            indent = false,
-        )
+    private fun PlayUpNextOnTap(saved: Boolean, onSave: (Boolean) -> Unit) = SettingRow(
+        primaryText = stringResource(LR.string.settings_up_next_tap),
+        secondaryText = stringResource(LR.string.settings_up_next_tap_summary),
+        toggle = SettingRowToggle.Switch(checked = saved),
+        modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
+        indent = false,
+    )
 
     @Composable
-    private fun PlayUpNextOnTap(saved: Boolean, onSave: (Boolean) -> Unit) =
-        SettingRow(
-            primaryText = stringResource(LR.string.settings_up_next_tap),
-            secondaryText = stringResource(LR.string.settings_up_next_tap_summary),
-            toggle = SettingRowToggle.Switch(checked = saved),
-            modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
-            indent = false,
-        )
+    private fun ShakeToResetSleepTimer(saved: Boolean, onSave: (Boolean) -> Unit) = SettingRow(
+        primaryText = stringResource(LR.string.settings_sleep_timer_shake_to_reset),
+        secondaryText = stringResource(LR.string.settings_sleep_timer_shake_to_reset_summary),
+        toggle = SettingRowToggle.Switch(checked = saved),
+        modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
+        indent = false,
+    )
 
     @Composable
-    private fun ShakeToResetSleepTimer(saved: Boolean, onSave: (Boolean) -> Unit) =
-        SettingRow(
-            primaryText = stringResource(LR.string.settings_sleep_timer_shake_to_reset),
-            secondaryText = stringResource(LR.string.settings_sleep_timer_shake_to_reset_summary),
-            toggle = SettingRowToggle.Switch(checked = saved),
-            modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
-            indent = false,
-        )
-
-    @Composable
-    private fun AutoSleepTimerRestart(saved: Boolean, onSave: (Boolean) -> Unit) =
-        SettingRow(
-            primaryText = stringResource(LR.string.settings_sleep_timer_auto_restart),
-            secondaryText = stringResource(LR.string.settings_sleep_timer_auto_restart_summary),
-            toggle = SettingRowToggle.Switch(checked = saved),
-            modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
-            indent = false,
-        )
+    private fun AutoSleepTimerRestart(saved: Boolean, onSave: (Boolean) -> Unit) = SettingRow(
+        primaryText = stringResource(LR.string.settings_sleep_timer_auto_restart),
+        secondaryText = stringResource(LR.string.settings_sleep_timer_auto_restart_summary),
+        toggle = SettingRowToggle.Switch(checked = saved),
+        modifier = Modifier.toggleable(value = saved, role = Role.Switch) { onSave(!saved) },
+        indent = false,
+    )
 
     @Composable
     private fun AutoPlayNextOnEmpty(
@@ -692,7 +612,11 @@ class PlaybackSettingsFragment : BaseFragment() {
                 ),
             )
             .setIconId(R.drawable.ic_podcasts)
+            .setOnSecondary {
+                analyticsTracker.track(AnalyticsEvent.SETTINGS_GENERAL_EPISODE_GROUPING_DO_NOT_APPLY_TO_EXISTING)
+            }
             .setOnConfirm {
+                analyticsTracker.track(AnalyticsEvent.SETTINGS_GENERAL_EPISODE_GROUPING_APPLY_TO_EXISTING)
                 applicationScope.launch {
                     podcastManager.updateGroupingForAllBlocking(grouping)
                 }
@@ -707,7 +631,11 @@ class PlaybackSettingsFragment : BaseFragment() {
             .setTitle(getString(LR.string.settings_apply_to_existing_podcasts))
             .setSummary(getString(if (shouldShow) LR.string.settings_apply_archived_show else LR.string.settings_apply_archived_hide))
             .setIconId(R.drawable.ic_podcasts)
+            .setOnSecondary {
+                analyticsTracker.track(AnalyticsEvent.SETTINGS_GENERAL_ARCHIVED_EPISODES_DO_NOT_APPLY_TO_EXISTING)
+            }
             .setOnConfirm {
+                analyticsTracker.track(AnalyticsEvent.SETTINGS_GENERAL_ARCHIVED_EPISODES_APPLY_TO_EXISTING)
                 applicationScope.launch {
                     podcastManager.updateAllShowArchived(shouldShow)
                 }
@@ -731,12 +659,8 @@ private enum class SettingsItems {
     SETTINGS_INTELLIGENT_PLAYBACK,
     SETTINGS_PLAY_UP_NEXT_EPISODE,
     SETTINGS_ADJUST_REMAINING_TIME,
+    SETTINGS_GENERAL_AUTOPLAY,
     SETTINGS_HEADER_SLEEP_TIMER,
     SETTINGS_SLEEP_TIMER_RESTART,
     SETTINGS_SLEEP_TIMER_SHAKE,
-
-    // The [scrollToAutoPlay] fragment argument handling depends on this item being last
-    // in the list. If it's position is changed, make sure you update the handling when
-    // we scroll to this item as well.
-    SETTINGS_GENERAL_AUTOPLAY,
 }

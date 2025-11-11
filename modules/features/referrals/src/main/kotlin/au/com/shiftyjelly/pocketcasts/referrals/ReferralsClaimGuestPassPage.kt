@@ -1,6 +1,5 @@
 package au.com.shiftyjelly.pocketcasts.referrals
 
-import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -9,8 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
@@ -21,10 +22,7 @@ import androidx.compose.material.Snackbar
 import androidx.compose.material.SnackbarHost
 import androidx.compose.material.SnackbarHostState
 import androidx.compose.material.TextButton
-import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -41,11 +39,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.window.core.layout.WindowSizeClass
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
 import au.com.shiftyjelly.pocketcasts.compose.Devices
+import au.com.shiftyjelly.pocketcasts.compose.adaptive.isAtLeastMediumHeight
 import au.com.shiftyjelly.pocketcasts.compose.buttons.GradientRowButton
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH10
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH50
@@ -54,10 +54,14 @@ import au.com.shiftyjelly.pocketcasts.compose.components.TextP60
 import au.com.shiftyjelly.pocketcasts.compose.extensions.plusBackgroundBrush
 import au.com.shiftyjelly.pocketcasts.compose.images.SubscriptionBadge
 import au.com.shiftyjelly.pocketcasts.compose.loading.LoadingView
-import au.com.shiftyjelly.pocketcasts.models.type.ReferralsOfferInfo
-import au.com.shiftyjelly.pocketcasts.models.type.ReferralsOfferInfoMock
+import au.com.shiftyjelly.pocketcasts.payment.BillingCycle
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionOffer
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionPlans
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.flatMap
+import au.com.shiftyjelly.pocketcasts.payment.getOrNull
+import au.com.shiftyjelly.pocketcasts.referrals.ReferralPageDefaults.PAGE_WIDTH_PERCENT
 import au.com.shiftyjelly.pocketcasts.referrals.ReferralPageDefaults.pageCornerRadius
-import au.com.shiftyjelly.pocketcasts.referrals.ReferralPageDefaults.pageWidthPercent
 import au.com.shiftyjelly.pocketcasts.referrals.ReferralPageDefaults.shouldShowFullScreen
 import au.com.shiftyjelly.pocketcasts.referrals.ReferralsClaimGuestPassViewModel.NavigationEvent
 import au.com.shiftyjelly.pocketcasts.referrals.ReferralsClaimGuestPassViewModel.ReferralsClaimGuestPassError
@@ -72,7 +76,6 @@ import au.com.shiftyjelly.pocketcasts.utils.extensions.getActivity
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
-@OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun ReferralsClaimGuestPassPage(
     onDismiss: () -> Unit,
@@ -80,7 +83,6 @@ fun ReferralsClaimGuestPassPage(
 ) {
     AppTheme(Theme.ThemeType.DARK) {
         val context = LocalContext.current
-        val windowSize = calculateWindowSizeClass(context.getActivity() as Activity)
         val state by viewModel.state.collectAsStateWithLifecycle()
         val activity = LocalContext.current.getActivity()
         val snackbarHostState = remember { SnackbarHostState() }
@@ -90,8 +92,6 @@ fun ReferralsClaimGuestPassPage(
         }
 
         ReferralsClaimGuestPassContent(
-            windowWidthSizeClass = windowSize.widthSizeClass,
-            windowHeightSizeClass = windowSize.heightSizeClass,
             state = state,
             onDismiss = onDismiss,
             onActivatePassClick = viewModel::onActivatePassClick,
@@ -99,7 +99,7 @@ fun ReferralsClaimGuestPassPage(
             snackbarHostState = snackbarHostState,
         )
 
-        LaunchedEffect(Unit) {
+        LaunchedEffect(onDismiss) {
             viewModel.navigationEvent.collect { navigationEvent ->
                 when (navigationEvent) {
                     NavigationEvent.InValidOffer -> {
@@ -108,22 +108,22 @@ fun ReferralsClaimGuestPassPage(
                     }
 
                     NavigationEvent.LoginOrSignup -> openOnboardingFlow(
-                        activity = activity,
+                        activity = requireNotNull(activity),
                         onboardingFlow = OnboardingFlow.ReferralLoginOrSignUp,
                     )
 
                     is NavigationEvent.LaunchBillingFlow -> {
-                        activity?.let {
-                            viewModel.launchBillingFlow(
-                                activity = activity,
-                                subscriptionWithOffer = navigationEvent.subscriptionWithOffer,
-                            )
-                        }
+                        viewModel.launchBillingFlow(
+                            activity = requireNotNull(activity),
+                            referralPlan = navigationEvent.plan,
+                        )
                     }
 
-                    NavigationEvent.Close -> { onDismiss() }
+                    NavigationEvent.Close -> {
+                        onDismiss()
+                    }
                     NavigationEvent.Welcome -> openOnboardingFlow(
-                        activity = activity,
+                        activity = requireNotNull(activity),
                         onboardingFlow = OnboardingFlow.Welcome,
                     )
                 }
@@ -153,14 +153,13 @@ fun ReferralsClaimGuestPassPage(
 
 @Composable
 private fun ReferralsClaimGuestPassContent(
-    windowWidthSizeClass: WindowWidthSizeClass,
-    windowHeightSizeClass: WindowHeightSizeClass,
     state: UiState,
     onDismiss: () -> Unit,
     onActivatePassClick: () -> Unit,
     onRetry: () -> Unit,
     snackbarHostState: SnackbarHostState,
 ) {
+    val windowSizeClass = currentWindowAdaptiveInfo().windowSizeClass
     BoxWithConstraints(
         contentAlignment = Alignment.Center,
         modifier = Modifier
@@ -172,8 +171,8 @@ private fun ReferralsClaimGuestPassContent(
             )
             .fillMaxSize(),
     ) {
-        val showFullScreen = shouldShowFullScreen(windowWidthSizeClass, windowHeightSizeClass)
-        val pageWidth = if (showFullScreen) maxWidth else (maxWidth.value * pageWidthPercent).dp
+        val showFullScreen = shouldShowFullScreen(windowSizeClass)
+        val pageWidth = if (showFullScreen) maxWidth else (maxWidth.value * PAGE_WIDTH_PERCENT).dp
         val pageModifier = if (showFullScreen) {
             Modifier
                 .fillMaxSize()
@@ -200,10 +199,10 @@ private fun ReferralsClaimGuestPassContent(
 
                 is UiState.Loaded -> {
                     ClaimGuestPassContent(
-                        pageWidth = pageWidth,
-                        windowHeightSizeClass = windowHeightSizeClass,
+                        referralPlan = state.referralPlan,
                         showFullScreen = showFullScreen,
-                        referralsOfferInfo = state.referralsOfferInfo,
+                        pageWidth = pageWidth,
+                        windowSizeClass = windowSizeClass,
                         onDismiss = onDismiss,
                         onActivatePassClick = onActivatePassClick,
                     )
@@ -239,10 +238,10 @@ private fun ReferralsClaimGuestPassContent(
 
 @Composable
 private fun ClaimGuestPassContent(
-    pageWidth: Dp,
-    windowHeightSizeClass: WindowHeightSizeClass,
+    referralPlan: ReferralSubscriptionPlan,
     showFullScreen: Boolean,
-    referralsOfferInfo: ReferralsOfferInfo,
+    pageWidth: Dp,
+    windowSizeClass: WindowSizeClass,
     onDismiss: () -> Unit,
     onActivatePassClick: () -> Unit,
 ) {
@@ -250,7 +249,9 @@ private fun ClaimGuestPassContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
     ) {
         val language = Locale.current.language
         val titleTextResId = if (language == "en") {
@@ -258,7 +259,7 @@ private fun ClaimGuestPassContent(
         } else {
             LR.string.referrals_claim_guest_pass_title
         }
-        val price = referralsOfferInfo.localizedPriceAfterOffer
+        val price = referralPlan.priceAfterOffer.formattedPrice
 
         TextButton(
             modifier = Modifier
@@ -283,20 +284,19 @@ private fun ClaimGuestPassContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         TextH10(
-            text = stringResource(titleTextResId, referralsOfferInfo.localizedOfferDurationAdjective),
+            text = stringResource(titleTextResId, referralPlan.offerName),
             textAlign = TextAlign.Center,
         )
 
         val guestPassCardWidth = pageWidth * 0.8f
-        if (windowHeightSizeClass != WindowHeightSizeClass.Compact) {
+        if (windowSizeClass.isAtLeastMediumHeight()) {
             Spacer(modifier = Modifier.height(24.dp))
 
             val guestPassCardHeight = (guestPassCardWidth.value * ReferralGuestPassCardDefaults.cardAspectRatio).dp
             ReferralGuestPassCardView(
-                modifier = Modifier
-                    .size(guestPassCardWidth, guestPassCardHeight),
+                referralPlan = referralPlan,
                 source = ReferralGuestPassCardViewSource.Claim,
-                referralsOfferInfo = referralsOfferInfo,
+                modifier = Modifier.size(guestPassCardWidth, guestPassCardHeight),
             )
         }
 
@@ -324,52 +324,40 @@ private fun ClaimGuestPassContent(
     }
 }
 
-@Preview(device = Devices.PortraitRegular)
+@Preview(device = Devices.PORTRAIT_REGULAR)
 @Composable
-fun ReferralsClaimGuestPassPortraitPhonePreview() {
-    ReferralsClaimGuestPassContentPreview(
-        windowWidthSizeClass = WindowWidthSizeClass.Compact,
-        windowHeightSizeClass = WindowHeightSizeClass.Medium,
-    )
+private fun ReferralsClaimGuestPassPortraitPhonePreview() {
+    ReferralsClaimGuestPassContentPreview()
 }
 
-@Preview(device = Devices.LandscapeRegular)
+@Preview(device = Devices.LANDSCAPE_REGULAR)
 @Composable
-fun ReferralsClaimGuestPassLandscapePhonePreview() {
-    ReferralsClaimGuestPassContentPreview(
-        windowWidthSizeClass = WindowWidthSizeClass.Compact,
-        windowHeightSizeClass = WindowHeightSizeClass.Compact,
-    )
+private fun ReferralsClaimGuestPassLandscapePhonePreview() {
+    ReferralsClaimGuestPassContentPreview()
 }
 
-@Preview(device = Devices.PortraitTablet)
+@Preview(device = Devices.PORTRAIT_TABLET)
 @Composable
-fun ReferralsClaimGuestPassPortraitTabletPreview() {
-    ReferralsClaimGuestPassContentPreview(
-        windowWidthSizeClass = WindowWidthSizeClass.Medium,
-        windowHeightSizeClass = WindowHeightSizeClass.Medium,
-    )
+private fun ReferralsClaimGuestPassPortraitTabletPreview() {
+    ReferralsClaimGuestPassContentPreview()
 }
 
-@Preview(device = Devices.LandscapeTablet)
+@Preview(device = Devices.LANDSCAPE_TABLET)
 @Composable
-fun ReferralsClaimGuestPassLandscapeTabletPreview() {
-    ReferralsClaimGuestPassContentPreview(
-        windowWidthSizeClass = WindowWidthSizeClass.Medium,
-        windowHeightSizeClass = WindowHeightSizeClass.Expanded,
-    )
+private fun ReferralsClaimGuestPassLandscapeTabletPreview() {
+    ReferralsClaimGuestPassContentPreview()
 }
 
 @Composable
-fun ReferralsClaimGuestPassContentPreview(
-    windowWidthSizeClass: WindowWidthSizeClass,
-    windowHeightSizeClass: WindowHeightSizeClass,
-) {
+fun ReferralsClaimGuestPassContentPreview() {
     AppTheme(Theme.ThemeType.DARK) {
         ReferralsClaimGuestPassContent(
-            windowWidthSizeClass = windowWidthSizeClass,
-            windowHeightSizeClass = windowHeightSizeClass,
-            state = UiState.Loaded(ReferralsOfferInfoMock),
+            state = UiState.Loaded(
+                referralPlan = SubscriptionPlans.Preview
+                    .findOfferPlan(SubscriptionTier.Plus, BillingCycle.Yearly, SubscriptionOffer.Referral)
+                    .flatMap(ReferralSubscriptionPlan::create)
+                    .getOrNull()!!,
+            ),
             onDismiss = {},
             onActivatePassClick = {},
             onRetry = {},

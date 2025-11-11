@@ -3,7 +3,6 @@ package au.com.shiftyjelly.pocketcasts.search.component
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,7 +30,6 @@ import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 private val FolderImageSize = 156.dp
-private val PodcastImageSize = 68.dp
 private val SubscribeIconSize = 32.dp
 
 @Composable
@@ -48,15 +46,14 @@ fun SearchFolderItem(
             .then(if (onClick == null) Modifier else Modifier.clickable { onClick() })
             .padding(8.dp),
     ) {
-        BoxWithConstraints(
-            modifier = modifier.aspectRatio(1f),
+        Box(
             contentAlignment = Alignment.Center,
+            modifier = Modifier.aspectRatio(1f),
         ) {
             FolderImageSmall(
                 color = color,
                 podcastUuids = podcasts.map { it.uuid },
-                folderImageSize = FolderImageSize,
-                podcastImageSize = PodcastImageSize,
+                size = FolderImageSize,
             )
 
             val buttonBackgroundColor = Color.Black.copy(alpha = 0.4f)
@@ -82,7 +79,7 @@ fun SearchFolderItem(
         }
 
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .padding(top = 10.dp),
         ) {
             TextH40(

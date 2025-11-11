@@ -7,24 +7,24 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import au.com.shiftyjelly.pocketcasts.filters.databinding.FiltersRowFiltersBinding
 import au.com.shiftyjelly.pocketcasts.localization.extensions.getStringPluralEpisodes
-import au.com.shiftyjelly.pocketcasts.models.entity.Playlist
+import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.views.helper.PlaylistHelper
 import io.reactivex.Flowable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 
-private val differ: DiffUtil.ItemCallback<Playlist> = object : DiffUtil.ItemCallback<Playlist>() {
-    override fun areItemsTheSame(oldItem: Playlist, newItem: Playlist): Boolean {
+private val differ: DiffUtil.ItemCallback<PlaylistEntity> = object : DiffUtil.ItemCallback<PlaylistEntity>() {
+    override fun areItemsTheSame(oldItem: PlaylistEntity, newItem: PlaylistEntity): Boolean {
         return oldItem.uuid == newItem.uuid
     }
 
-    override fun areContentsTheSame(oldItem: Playlist, newItem: Playlist): Boolean {
+    override fun areContentsTheSame(oldItem: PlaylistEntity, newItem: PlaylistEntity): Boolean {
         return oldItem == newItem
     }
 }
 
-class FiltersAdapter(val generateCountFlowable: (Playlist) -> (Flowable<Int>), val onRowClick: (Playlist) -> Unit) : ListAdapter<Playlist, FiltersAdapter.FilterViewHolder>(differ) {
+class FiltersAdapter(val generateCountFlowable: (PlaylistEntity) -> (Flowable<Int>), val onRowClick: (PlaylistEntity) -> Unit) : ListAdapter<PlaylistEntity, FiltersAdapter.FilterViewHolder>(differ) {
 
     class FilterViewHolder(val binding: FiltersRowFiltersBinding) : RecyclerView.ViewHolder(binding.root) {
         var playlistDisposable: Disposable? = null

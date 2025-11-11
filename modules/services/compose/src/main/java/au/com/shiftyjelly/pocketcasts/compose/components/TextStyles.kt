@@ -2,6 +2,7 @@ package au.com.shiftyjelly.pocketcasts.compose.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.material.LocalTextStyle
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
@@ -22,7 +23,6 @@ import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.extensions.nonScaledSp
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 import java.util.Locale
 
 @Composable
@@ -60,10 +60,40 @@ fun TextH20(
     color: Color = MaterialTheme.theme.colors.primaryText01,
     maxLines: Int = Int.MAX_VALUE,
     textAlign: TextAlign? = null,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
+    disableAutoScale: Boolean = false,
+    fontSize: TextUnit = 22.sp,
+    lineHeight: TextUnit = 30.sp,
+    letterSpacing: TextUnit = 0.sp,
+    fontScale: Float = 1f,
+) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = fontSize.scaled(disableAutoScale, fontScale),
+        lineHeight = lineHeight.scaled(disableAutoScale, fontScale),
+        letterSpacing = letterSpacing.scaled(disableAutoScale, fontScale),
+        fontWeight = FontWeight.W700,
+        maxLines = maxLines,
+        overflow = overflow,
+        textAlign = textAlign,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun TextH20(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.theme.colors.primaryText01,
+    maxLines: Int = Int.MAX_VALUE,
+    textAlign: TextAlign? = null,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
     disableAutoScale: Boolean = false,
     fontSize: TextUnit = 22.sp,
     lineHeight: TextUnit = 30.sp,
     fontScale: Float = 1f,
+    inlineContent: Map<String, InlineTextContent> = mapOf(),
 ) {
     Text(
         text = text,
@@ -72,8 +102,9 @@ fun TextH20(
         lineHeight = lineHeight.scaled(disableAutoScale, fontScale),
         fontWeight = FontWeight.W700,
         maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
+        overflow = overflow,
         textAlign = textAlign,
+        inlineContent = inlineContent,
         modifier = modifier,
     )
 }
@@ -90,6 +121,7 @@ fun TextH30(
     disableAutoScale: Boolean = false,
     fontSize: TextUnit? = null,
     lineHeight: TextUnit = 21.sp,
+    letterSpacing: TextUnit = 0.sp,
     style: TextStyle = TextStyle(),
     fontScale: Float = 1f,
 ) {
@@ -100,6 +132,7 @@ fun TextH30(
         fontFamily = fontFamily,
         fontSize = fontSizeUpdated.scaled(disableAutoScale, fontScale),
         lineHeight = lineHeight.scaled(disableAutoScale, fontScale),
+        letterSpacing = letterSpacing.scaled(disableAutoScale, fontScale),
         textAlign = textAlign,
         fontWeight = fontWeight ?: FontWeight.W600,
         maxLines = maxLines,
@@ -143,12 +176,38 @@ fun TextH40(
     fontWeight: FontWeight = FontWeight.W500,
     disableAutoScale: Boolean = false,
     fontScale: Float = 1f,
+    lineHeight: TextUnit = 21.sp,
 ) {
     Text(
         text = text,
         color = color,
         fontSize = 15.sp.scaled(disableAutoScale, fontScale),
-        lineHeight = 21.sp.scaled(disableAutoScale, fontScale),
+        lineHeight = lineHeight.scaled(disableAutoScale, fontScale),
+        fontWeight = fontWeight,
+        textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun TextH40(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign? = null,
+    color: Color = MaterialTheme.theme.colors.primaryText01,
+    maxLines: Int = Int.MAX_VALUE,
+    fontWeight: FontWeight = FontWeight.W500,
+    disableAutoScale: Boolean = false,
+    fontScale: Float = 1f,
+    lineHeight: TextUnit = 21.sp,
+) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 15.sp.scaled(disableAutoScale, fontScale),
+        lineHeight = lineHeight.scaled(disableAutoScale, fontScale),
         fontWeight = fontWeight,
         textAlign = textAlign,
         maxLines = maxLines,
@@ -160,6 +219,37 @@ fun TextH40(
 @Composable
 fun TextP40(
     text: String,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign? = null,
+    color: Color = MaterialTheme.theme.colors.primaryText01,
+    maxLines: Int = Int.MAX_VALUE,
+    disableAutoScale: Boolean = false,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
+    fontFamily: FontFamily? = null,
+    fontWeight: FontWeight? = null,
+    fontSize: TextUnit = 16.sp,
+    lineHeight: TextUnit = 22.sp,
+    fontScale: Float = 1f,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = fontSize.scaled(disableAutoScale, fontScale),
+        lineHeight = lineHeight.scaled(disableAutoScale, fontScale),
+        textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = overflow,
+        fontFamily = fontFamily,
+        fontWeight = fontWeight,
+        letterSpacing = letterSpacing,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun TextP40(
+    text: AnnotatedString,
     modifier: Modifier = Modifier,
     textAlign: TextAlign? = null,
     color: Color = MaterialTheme.theme.colors.primaryText01,
@@ -315,6 +405,37 @@ fun TextP60(
     disableAutoScale: Boolean = false,
     fontScale: Float = 1f,
     letterSpacing: TextUnit = 0.sp,
+    lineHeight: TextUnit = 15.sp,
+) {
+    val fontSizeUpdated = fontSize ?: 13.sp
+    Text(
+        text = text,
+        color = color,
+        fontSize = fontSizeUpdated.scaled(disableAutoScale, fontScale),
+        lineHeight = lineHeight.scaled(disableAutoScale, fontScale),
+        letterSpacing = letterSpacing,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = textAlign,
+        fontWeight = fontWeight,
+        style = style,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun TextP60(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.theme.colors.primaryText01,
+    textAlign: TextAlign? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    fontWeight: FontWeight? = null,
+    fontSize: TextUnit? = null,
+    style: TextStyle = TextStyle(),
+    disableAutoScale: Boolean = false,
+    fontScale: Float = 1f,
+    letterSpacing: TextUnit = 0.sp,
 ) {
     val fontSizeUpdated = fontSize ?: 13.sp
     Text(
@@ -365,18 +486,20 @@ fun TextH70(
 fun TextC50(
     text: String,
     modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.theme.colors.primaryText02,
     maxLines: Int = Int.MAX_VALUE,
     disableAutoScale: Boolean = false,
     fontScale: Float = 1f,
+    fontWeight: FontWeight = FontWeight.W700,
 ) {
     Text(
         text = text.uppercase(Locale.getDefault()),
-        color = MaterialTheme.theme.colors.primaryText02,
+        color = color,
         fontFamily = FontFamily.SansSerif,
         fontSize = 13.sp.scaled(disableAutoScale, fontScale),
         lineHeight = 19.sp.scaled(disableAutoScale, fontScale),
         letterSpacing = 0.6.sp.scaled(disableAutoScale, fontScale),
-        fontWeight = FontWeight.W700,
+        fontWeight = fontWeight,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier,
@@ -391,15 +514,41 @@ fun TextC70(
     isUpperCase: Boolean = true,
     disableAutoScale: Boolean = false,
     fontScale: Float = 1f,
+    fontSize: TextUnit = 12.sp,
+    fontWeight: FontWeight = FontWeight.W500,
 ) {
     Text(
         text = if (isUpperCase) text.uppercase(Locale.getDefault()) else text,
         color = MaterialTheme.theme.colors.primaryText02,
         fontFamily = FontFamily.SansSerif,
-        fontSize = 12.sp.scaled(disableAutoScale, fontScale),
+        fontSize = fontSize.scaled(disableAutoScale, fontScale),
         lineHeight = 14.sp.scaled(disableAutoScale, fontScale),
         letterSpacing = 0.6.sp.scaled(disableAutoScale, fontScale),
-        fontWeight = FontWeight.W500,
+        fontWeight = fontWeight,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun TextC70(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE,
+    disableAutoScale: Boolean = false,
+    fontScale: Float = 1f,
+    fontSize: TextUnit = 12.sp,
+    fontWeight: FontWeight = FontWeight.W500,
+) {
+    Text(
+        text = text,
+        color = MaterialTheme.theme.colors.primaryText02,
+        fontFamily = FontFamily.SansSerif,
+        fontSize = fontSize.scaled(disableAutoScale, fontScale),
+        lineHeight = 14.sp.scaled(disableAutoScale, fontScale),
+        letterSpacing = 0.6.sp.scaled(disableAutoScale, fontScale),
+        fontWeight = fontWeight,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier,
@@ -409,19 +558,17 @@ fun TextC70(
 @Composable
 private fun TextUnit.scaled(disabled: Boolean, fontScale: Float) = (if (disabled) value.nonScaledSp else this) * fontScale
 
-@ShowkaseComposable(name = "Text", group = "Text", styleName = "Light", defaultStyle = true)
 @Preview(name = "Light")
 @Composable
-fun TextStylesLightPreview() {
+private fun TextStylesLightPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         TextStylesPreview()
     }
 }
 
-@ShowkaseComposable(name = "Text", group = "Text", styleName = "Dark")
 @Preview(name = "Dark")
 @Composable
-fun TextStylesDarkPreview() {
+private fun TextStylesDarkPreview() {
     AppThemeWithBackground(Theme.ThemeType.DARK) {
         TextStylesPreview()
     }

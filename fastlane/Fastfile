@@ -39,6 +39,7 @@ SUPPORTED_LOCALES = [
   { glotpress: 'ar', android: 'ar', promo_config: {} },
   { glotpress: 'ca', android: 'ca', promo_config: {} },
   { glotpress: 'de', android: 'de', promo_config: {} },
+  { glotpress: 'el', android: 'el', promo_config: {} },
   { glotpress: 'es', android: 'es', promo_config: {} },
   { glotpress: 'es', android: 'es-rMX', promo_config: {} },
   { glotpress: 'en-gb', android: 'en-rGB', promo_config: {} },
@@ -62,7 +63,7 @@ SUPPORTED_LOCALES = [
 Dotenv.load(USER_ENV_FILE_PATH)
 DEFAULT_BRANCH = 'main'
 ENV['SUPPLY_UPLOAD_MAX_RETRIES'] = '5'
-GH_REPOSITORY = 'automattic/pocket-casts-android'
+GITHUB_REPO = 'automattic/pocket-casts-android'
 APPS_APP = 'app'
 APPS_AUTOMOTIVE = 'automotive'
 APPS_WEAR = 'wear'
@@ -79,6 +80,12 @@ UPLOAD_TO_PLAY_STORE_COMMON_OPTIONS = {
   json_key: UPLOAD_TO_PLAY_STORE_JSON_KEY
 }.freeze
 
+########################################################################
+# Firebase App Distribution (FAD)
+########################################################################
+FIREBASE_APP_ID = '1:124902176124:android:ad0ff1c7193b55ee1620f9'
+FIREBASE_TESTERS_GROUP = 'pocketcasts-android---prototype-builds'
+
 before_all do |_lane|
   # Ensure we use the latest version of the toolkit
   check_for_toolkit_updates unless is_ci || ENV['FASTLANE_SKIP_TOOLKIT_UPDATE_CHECK']
@@ -91,19 +98,29 @@ before_all do |_lane|
 end
 
 platform :android do
-  # @param skip_confirm [Boolean] If true, avoids any interactive prompt
+  # Executes the code freeze steps, creating a new release branch and triggering the first beta build
   #
-  lane :code_freeze do |skip_confirm: false|
+  # @param [String] version (optional) The version to use for the new release version to code freeze for.
+  #                 Typically auto-provided by ReleasesV2. If nil, computes the new version based on current one.
+  # @param [Boolean] skip_confirm If true, avoids any interactive prompt
+  #
+  lane :code_freeze do |version: nil, skip_confirm: false|
     ensure_git_status_clean
     Fastlane::Helper::GitHelper.checkout_and_pull(DEFAULT_BRANCH)
-    ensure_git_branch(branch: DEFAULT_BRANCH)
+
+    # If a new version is passed, use it as source of truth from now on
+    new_version = version || release_version_next
+    release_branch_name = "release/#{new_version}"
+    new_beta_version = beta_version_next(version_name: new_version)
+    new_build_code = build_code_next
 
     confirmation_message = <<-MESSAGE
 
       Code Freeze:
-      • New release branch from #{DEFAULT_BRANCH}: release/#{release_version_next}
+      • New release branch from #{DEFAULT_BRANCH}: #{release_branch_name}
+
       • Current release version and build code: #{release_version_current} (#{build_code_current}).
-      • New release version and build code: #{beta_version_code_freeze} (#{build_code_next}).
+      • New release version and build code: #{new_beta_version} (#{new_build_code}).
 
     MESSAGE
 
@@ -111,21 +128,20 @@ platform :android do
     UI.user_error!("Terminating as requested. Don't forget to run the remainder of this automation manually.") unless skip_confirm || UI.confirm('Do you want to continue?')
 
     # Create the release branch
+    ensure_branch_does_not_exist!(release_branch_name)
+
     UI.message('Creating release branch...')
-    Fastlane::Helper::GitHelper.create_branch("release/#{release_version_next}", from: DEFAULT_BRANCH)
-    ensure_git_branch(branch: '^release/') # Match branch names that begin with `release/`
+    Fastlane::Helper::GitHelper.create_branch(release_branch_name, from: DEFAULT_BRANCH)
     UI.success("Done! New release branch is: #{git_branch}")
 
     # Bump the version and build code
     UI.message('Bumping beta version and build code...')
     VERSION_FILE.write_version(
-      version_name: beta_version_code_freeze,
-      version_code: build_code_next
+      version_name: new_beta_version,
+      version_code: new_build_code
     )
     commit_version_bump
     UI.success("Done! New Beta Version: #{beta_version_current}. New Build Code: #{build_code_current}")
-
-    new_version = release_version_current
 
     extract_release_notes_for_version(
       version: new_version,
@@ -136,20 +152,20 @@ platform :android do
       new_version: new_version,
       release_notes_file_path: RELEASE_NOTES_SOURCE_PATH
     )
-    push_to_git_remote(tags: false)
+    push_to_git_remote(set_upstream: true, tags: false)
 
-    trigger_release_build(branch_to_build: "release/#{new_version}")
+    trigger_release_build(branch_to_build: release_branch_name)
     create_backmerge_pr
 
-    # We cannot use the `copy_branch_protection` action here as it would create a branch protection rule with the same
-    # restrictions we have in `main`, and the release managers wouldn't be able to push due to permissions.
-    # This should be changed only when we have PC Android releases done on CI, when the CI bot is the one running `git push`.
-    set_branch_protection(repository: GH_REPOSITORY, branch: "release/#{new_version}")
+    # Copy the branch protection settings from the default branch to the new release branch
+    copy_branch_protection(repository: GITHUB_REPO, from_branch: DEFAULT_BRANCH, to_branch: release_branch_name)
+    # But allow admins to bypass restrictions, so that wpmobilebot can push to the release branch directly for beta version bumps
+    set_branch_protection(repository: GITHUB_REPO, branch: release_branch_name, enforce_admins: false)
 
     begin
       # Move PRs to next milestone
       moved_prs = update_assigned_milestone(
-        repository: GH_REPOSITORY,
+        repository: GITHUB_REPO,
         from_milestone: new_version,
         to_milestone: release_version_next,
         comment: "Version `#{new_version}` has now entered code-freeze, so the milestone of this PR has been updated to `#{release_version_next}`."
@@ -158,7 +174,7 @@ platform :android do
 
       # Add ❄️ marker to milestone title to indicate we entered code-freeze
       set_milestone_frozen_marker(
-        repository: GH_REPOSITORY,
+        repository: GITHUB_REPO,
         milestone: new_version
       )
     rescue StandardError => e
@@ -241,15 +257,16 @@ platform :android do
     parsed_version = VERSION_FORMATTER.parse(new_version)
     previous_version = VERSION_FORMATTER.release_version(VERSION_CALCULATOR.previous_patch_version(version: parsed_version))
 
+    release_branch_name = "release/#{new_version}"
+
     # Check versions
     message = <<-MESSAGE
+      New hotfix branch from tag #{previous_version}: #{release_branch_name}
 
       New hotfix version: #{new_version}
 
       Current build code: #{build_code_current}
       New build code: #{new_version_code}
-
-      Branching from tag: #{previous_version}
 
     MESSAGE
 
@@ -262,7 +279,7 @@ platform :android do
 
     # Create the hotfix branch
     UI.message('Creating hotfix branch...')
-    Fastlane::Helper::GitHelper.create_branch("release/#{new_version}", from: previous_version)
+    Fastlane::Helper::GitHelper.create_branch(release_branch_name, from: previous_version)
     UI.success("Done! New hotfix branch is: #{git_branch}")
 
     # Bump the hotfix version and build code and write it to the `version.properties` file
@@ -272,6 +289,7 @@ platform :android do
       version_code: new_version_code
     )
     commit_version_bump
+    push_to_git_remote(set_upstream: true, tags: false)
     UI.success("Done! New Release Version: #{release_version_current}. New Build Code: #{build_code_current}")
   end
 
@@ -287,18 +305,199 @@ platform :android do
     UI.user_error!("Terminating as requested. Don't forget to run the remainder of this automation manually.") unless skip_confirm || UI.confirm('Do you want to continue?')
 
     trigger_release_build(branch_to_build: "release/#{version}")
+
     create_backmerge_pr
+    begin
+      close_milestone(repository: GITHUB_REPO, milestone: release_version_current)
+    rescue StandardError => e
+      UI.important("Could not find a GitHub milestone for hotfix #{release_version_current} to close: #{e}")
+    end
+  end
+
+  # Update the rollout of all 3 variants/form-factors (app, automotive, wear) of the latest builds of the given Google Play track to the given % value
+  #
+  # @param percent [Float] The rollout percentage, between 0 and 1
+  # @param track [String] The Google Play track for which to update the rollout of. Must be either `beta` or `production`.
+  #
+  lane :update_rollouts do |percent:, track:|
+    UI.user_error!('percent parameter must be between 0.0 and 1.0') if percent.to_f.negative? || percent.to_f > 1
+    UI.user_error!('track parameter must be either `beta` or `production`') unless %w[beta production].include?(track)
+
+    is_beta = track == 'beta'
+    # Use Google Play API to find the latest versionCode for the requested track
+    prod_version_codes = google_play_track_version_codes(
+      package_name: APP_PACKAGE_NAME,
+      track: track,
+      json_key: UPLOAD_TO_PLAY_STORE_JSON_KEY
+    )
+    base_version_code = prod_version_codes.max # Use the latest (as there's likely to be 2: the previous one already at 100%, and the latest one with partial rollout)
+
+    not_found_variants = []
+    APPS.each do |app|
+      variant_track = play_store_track(app: app, is_beta: is_beta)
+      variant_version_code = version_code_for_app(app: app, version_code: base_version_code)
+      upload_to_play_store(
+        **UPLOAD_TO_PLAY_STORE_COMMON_OPTIONS,
+        skip_upload_aab: true,
+        track: variant_track,
+        version_code: variant_version_code,
+        release_status: percent.to_f < 1.0 ? 'inProgress' : 'completed',
+        rollout: percent.to_s
+      )
+    rescue FastlaneCore::Interface::FastlaneError => e
+      raise unless e.message =~ /Unable to find the requested release on track/
+
+      not_found_variants << "'#{app}' variant with version code `#{variant_version_code}` was not found in `#{variant_track}` track in Google Play Console"
+    end
+
+    not_found_variants.each do |message|
+      UI.important(message)
+    end
+    UI.user_error!('None of the 3 app variants were found in Google Play Console. We expected at least one') if not_found_variants.count == APPS.count
+  end
+
+  # Downloads the latest translations from GlotPress and creates a PR to integrate them into the current `release/*` branch
+  #
+  lane :download_translations do
+    version = release_version_current
+    base_branch = "release/#{version}"
+    pr_branch = "translations/release-#{version}"
+
+    Fastlane::Helper::GitHelper.create_branch(pr_branch, from: base_branch)
+
+    commit_created = android_download_translations(
+      res_dir: File.join('modules', 'services', 'localization', 'src', 'main', 'res'),
+      glotpress_url: GLOTPRESS_APP_STRINGS_PROJECT_URL,
+      locales: SUPPORTED_LOCALES
+      # Important: don't pass a `lint_task` here, because this lane runs on a dedicated trusted agent on CI which is not intended to run gradle tasks
+    )
+
+    if commit_created
+      push_to_git_remote(tags: false, set_upstream: true)
+      pr_url = create_pull_request(
+        repo: GITHUB_REPO,
+        base: base_branch,
+        head: pr_branch,
+        title: "Download latest translations for `#{version}`",
+        body: "This PR integrates the latest translations from GlotPress into the `#{base_branch}` branch.",
+        labels: ['releases', '[Area] Translations i18n'],
+        api_token: ENV.fetch('GITHUB_TOKEN')
+      )
+
+      buildkite_annotate(context: 'translations-pr-url', message: "Translations PR: #{pr_url || 'Error creating PR'}") if is_ci?
+    else
+      UI.important('No translations were downloaded, so no PR was created')
+      buildkite_annotate(context: 'translations-pr-url', message: 'No translations were downloaded, so no PR was created') if is_ci?
+      Fastlane::Helper::GitHelper.checkout_and_pull(base_branch)
+      Fastlane::Helper::GitHelper.delete_local_branch_if_exists!(pr_branch)
+    end
+  end
+
+  # @param skip_confirm [Boolean] If true, avoids any interactive prompt
+  # @param skip_translations_download [Boolean] If true, skips downloading the latest translations from GlotPress
+  #        Typically set it to `true` if the `download_translations` lane was already run earlier
+  #
+  lane :finalize_release do |skip_confirm: false, skip_translations_download: false|
+    UI.user_error!('Please use `finalize_hotfix_release` lane for hotfixes') if release_is_hotfix?
+    ensure_git_branch(branch: '^release/') # Match branch names that begin with `release/`
+    ensure_git_status_clean
+
+    UI.important("Finalizing release: #{release_version_current}")
+    UI.user_error!("Terminating as requested. Don't forget to run the remainder of this automation manually.") unless skip_confirm || UI.confirm('Do you want to continue?')
+
+    configure_apply(force: is_ci)
+
+    # Bump the release version and build code
+    UI.message('Bumping final release version and build code...')
+    VERSION_FILE.write_version(
+      version_name: release_version_current,
+      version_code: build_code_next
+    )
+    commit_version_bump
+    UI.success("Done! New Release Version: #{release_version_current}. New Build Code: #{build_code_current}")
+
+    # Download Localizations, unless we asked to skip it (e.g. `download_translations` lane was already run earlier)
+    unless skip_translations_download
+      android_download_translations(
+        res_dir: File.join('modules', 'services', 'localization', 'src', 'main', 'res'),
+        glotpress_url: GLOTPRESS_APP_STRINGS_PROJECT_URL,
+        locales: SUPPORTED_LOCALES
+        # Important: don't pass a `lint_task` here, because this lane runs on a dedicated trusted agent on CI, which is not intended to run gradle tasks
+      )
+    end
+
+    version = release_version_current
+
+    # Wrap up
+    set_milestone_frozen_marker(repository: GITHUB_REPO, milestone: version, freeze: false)
+    close_milestone(repository: GITHUB_REPO, milestone: version)
+
+    push_to_git_remote(tags: false)
+    trigger_release_build(branch_to_build: "release/#{version}")
+    create_backmerge_pr
+  end
+
+  # This lane publishes a release on GitHub. If `track` is `production`, it will also delete the release branch.
+  #
+  # @param [Boolean] skip_confirm (default: false) If set, will skip the confirmation prompt before running the rest of the lane
+  # @param [String] track (default: 'production') The Google Play track the release was published to in Google Play Console. Must be either `beta` or `production`.
+  #        If 'production': The GitHub Release will be expected to have a title like `X.Y`, and this lane will also delete the release branch after publishing the GitHub Release.
+  #        If 'beta': The draft GitHub Release will be expected to have a title like `X.Y-rc-N`. The release branch will NOT be deleted for those.
+  #
+  lane :publish_gh_release do |skip_confirm: false, track: 'production'|
+    ensure_git_status_clean
+    ensure_git_branch(branch: '^release/')
+
+    is_final_release = track.to_s.downcase == 'production'
+    version_number = is_final_release ? release_version_current : version_name_current
+
+    current_branch = "release/#{version_number}"
+
+    prompt = <<~PROMPT
+      Publish the #{version_number} GitHub release. This will:
+       - Publish the existing draft `#{version_number}` release on GitHub
+       - Which will also have GitHub create the associated git tag, pointing to the tip of the branch
+    PROMPT
+    prompt += " - Delete the `#{current_branch}` branch" if is_final_release
+    UI.important(prompt)
+    UI.user_error!("Terminating as requested. Don't forget to run the remainder of this automation manually.") unless skip_confirm || UI.confirm('Do you want to continue?')
+
+    UI.important "Publishing release #{version_number} on GitHub"
+
+    publish_github_release(
+      repository: GITHUB_REPO,
+      name: version_number
+    )
+
+    next unless is_final_release
+
+    # At this point, an intermediate branch has been created by creating a backmerge PR to a hotfix or the next version release branch.
+    # This allows us to safely delete the `release/*` remote branch.
+    remove_branch_protection(repository: GITHUB_REPO, branch: current_branch)
+    Fastlane::Helper::GitHelper.delete_remote_branch_if_exists!(current_branch)
+    Fastlane::Helper::GitHelper.checkout_and_pull(DEFAULT_BRANCH)
+    Fastlane::Helper::GitHelper.delete_local_branch_if_exists!(current_branch)
   end
 
   # @param branch_to_build [String] The branch to build. Defaults to the current git branch.
   #
   lane :trigger_release_build do |branch_to_build: git_branch|
-    buildkite_trigger_build(
-      buildkite_organization: 'automattic',
-      buildkite_pipeline: 'pocket-casts-android',
-      branch: branch_to_build,
-      pipeline_file: 'release-builds.yml'
-    )
+    pipeline_args = {
+      pipeline_file: 'release-builds.yml',
+      environment: {
+        RELEASE_VERSION: release_version_current
+      }
+    }
+    if is_ci?
+      buildkite_pipeline_upload(**pipeline_args)
+    else
+      buildkite_trigger_build(
+        buildkite_organization: 'automattic',
+        buildkite_pipeline: 'pocket-casts-android',
+        branch: branch_to_build,
+        **pipeline_args
+      )
+    end
   end
 
   # Builds and uploads a new build to Google Play (without releasing it)
@@ -316,8 +515,10 @@ platform :android do
     version = version_name_current
     build_code = build_code_current
     is_beta = beta_version?(version)
+
     unless skip_prechecks
       # Match branch names that begin with `release/`
+      # Skip this check on CI because that action relies on CI env vars, but when this lane is called as part of `code_freeze` the branch changed since the CI build started, so that wouldn't work
       ensure_git_branch(branch: '^release/') unless is_ci
 
       UI.important("Building version #{version_name_current} (#{build_code_current}) for upload to Google Play Console")
@@ -359,87 +560,12 @@ platform :android do
     create_gh_release(version: version, prerelease: is_beta, release_assets: release_assets.compact) if create_gh_release
   end
 
-  # Update the rollout of all 3 variants (app, automotive, wear) of the current version to the given value
-  #
-  # @param percent [Float] The rollout percentage, between 0 and 1
-  #
-  lane :update_rollouts do |percent:|
-    version = version_name_current
-    build_code = build_code_current
-    is_beta = beta_version?(version)
-
-    not_found_variants = []
-    APPS.each do |app|
-      track = play_store_track(app: app, is_beta: is_beta)
-      version_code = version_code_for_app(app: app, version_code: build_code)
-      upload_to_play_store(
-        **UPLOAD_TO_PLAY_STORE_COMMON_OPTIONS,
-        skip_upload_aab: true,
-        track: track,
-        version_code: version_code,
-        release_status: percent.to_f < 1.0 ? 'inProgress' : 'completed',
-        rollout: percent.to_s
-      )
-    rescue FastlaneCore::Interface::FastlaneError => e
-      raise unless e.message =~ /Unable to find the requested release on track/
-
-      not_found_variants << app
-    end
-
-    not_found_variants.each do |app|
-      UI.important("'#{app}' variant for `#{version}` was not found in Google Play Console")
-    end
-    UI.user_error!('None of the 3 app variants were found in Google Play Console. We expected at least one') if not_found_variants.count == APPS.count
-  end
-
-  # @param skip_confirm [Boolean] If true, avoids any interactive prompt
-  #
-  lane :finalize_release do |skip_confirm: false|
-    UI.user_error!('Please use `finalize_hotfix_release` lane for hotfixes') if release_is_hotfix?
-    ensure_git_branch(branch: '^release/') # Match branch names that begin with `release/`
-    ensure_git_status_clean
-
-    UI.important("Finalizing release: #{release_version_current}")
-    UI.user_error!("Terminating as requested. Don't forget to run the remainder of this automation manually.") unless skip_confirm || UI.confirm('Do you want to continue?')
-
-    configure_apply(force: is_ci)
-
-    # Bump the release version and build code
-    UI.message('Bumping final release version and build code...')
-    VERSION_FILE.write_version(
-      version_name: release_version_current,
-      version_code: build_code_next
-    )
-    commit_version_bump
-    UI.success("Done! New Release Version: #{release_version_current}. New Build Code: #{build_code_current}")
-
-    # Download Localizations
-    android_download_translations(
-      res_dir: File.join('modules', 'services', 'localization', 'src', 'main', 'res'),
-      glotpress_url: GLOTPRESS_APP_STRINGS_PROJECT_URL,
-      locales: SUPPORTED_LOCALES,
-      lint_task: 'aggregatedLintRelease'
-    )
-
-    version = release_version_current
-
-    # Wrap up
-    remove_branch_protection(repository: GH_REPOSITORY, branch: "release/#{version}")
-    set_milestone_frozen_marker(repository: GH_REPOSITORY, milestone: version, freeze: false)
-    create_new_milestone(repository: GH_REPOSITORY, need_appstore_submission: true)
-    close_milestone(repository: GH_REPOSITORY, milestone: version)
-
-    push_to_git_remote(tags: false)
-    trigger_release_build(branch_to_build: "release/#{version}")
-    create_backmerge_pr
-  end
-
   # Builds and bundles the given app
   #
   # @param version [String] The version to create
   # @param build_code [String] The build code to create
   # @param app [String] The Android app to build (i.e 'app', 'automotive', or 'wear')
-  lane :build_bundle do |version:, build_code:, app:|
+  lane :build_bundle do |app:, version: version_name_current, build_code: build_code_current|
     aab_artifact_path = aab_artifact_path(app, version)
     build_dir = 'artifacts/'
 
@@ -456,8 +582,12 @@ platform :android do
       }
     )
 
+    aab_file = File.join(PROJECT_ROOT_FOLDER, bundle_output_path(app))
+    annotate_sentry_mapping_uuid(app: app, aab_file: aab_file)
+
     Dir.chdir('..') do
-      sh("mkdir -p #{build_dir} && cp -v #{bundle_output_path(app)} #{aab_artifact_path}")
+      FileUtils.mkdir_p(build_dir)
+      FileUtils.cp_r(aab_file, aab_artifact_path)
       UI.message("Bundle ready: #{aab_artifact_path}")
     end
   end
@@ -497,7 +627,7 @@ platform :android do
       body: '🚧 Prototype builds will be available soon'
     )
 
-    prototype_build_type = 'debugProd'
+    prototype_build_type = 'DebugProd'
 
     gradle(
       task: 'assemble',
@@ -535,6 +665,43 @@ platform :android do
     )
   end
 
+  # Builds a prototype build and uploads it to Firebase App Distribution (FAD)
+  #
+  lane :build_and_upload_prototype_build_fad do
+    UI.user_error!("'FIREBASE_APP_DISTRIBUTION_ACCOUNT_KEY' must be defined as an environment variable.") unless ENV['FIREBASE_APP_DISTRIBUTION_ACCOUNT_KEY']
+
+    # 'Pull Request' and 'Branch' is always going to point to 'N/A' and 'main' respectively.
+    # No matter, it's better to have this setup ready for when and if we ever run this lane for PR builds as well.
+    release_notes = <<~NOTES
+      Pull Request: ##{pull_request_number || 'N/A'}
+      Branch: `#{ENV.fetch('BUILDKITE_BRANCH', 'N/A')}`
+      Commit: #{ENV.fetch('BUILDKITE_COMMIT', 'N/A')[0...7]}
+    NOTES
+
+    prototype_build_type = 'Prototype'
+
+    gradle(
+      task: 'app:assemble',
+      build_type: prototype_build_type,
+      properties: {
+        'skipSentryProguardMappingUpload' => true
+      }
+    )
+
+    firebase_app_distribution(
+      app: FIREBASE_APP_ID,
+      service_credentials_json_data: ENV.fetch('FIREBASE_APP_DISTRIBUTION_ACCOUNT_KEY', nil),
+      release_notes: release_notes,
+      groups: FIREBASE_TESTERS_GROUP
+    )
+  end
+
+  def pull_request_number
+    # Buildkite sets this env var to the PR number if on a PR, but to 'false' (and not nil) if not on a PR
+    pr_num = ENV.fetch('BUILDKITE_PULL_REQUEST', 'false')
+    pr_num == 'false' ? nil : Integer(pr_num)
+  end
+
   def get_app_key(apk_path:)
     File.basename(apk_path).split('-').first
   end
@@ -569,21 +736,22 @@ platform :android do
   #
   # @param version [Hash<String>] The version to create. Expects keys "name" and "code"
   # @param prerelease [Bool] If true, the GitHub Release will have the prerelease flag
+  # @param release_assets [Array<String>] The assets to attach to the GitHub Release
   #
   private_lane :create_gh_release do |version:, prerelease: false, release_assets: []|
     create_github_release(
-      repository: GH_REPOSITORY,
+      repository: GITHUB_REPO,
       version: version,
       release_notes_file_path: EXTRACTED_RELEASE_NOTES_PATH,
       prerelease: prerelease,
-      is_draft: !prerelease,
+      is_draft: true,
       release_assets: release_assets.join(',')
     )
   end
 
   lane :create_backmerge_pr do |version: release_version_current|
     create_release_backmerge_pull_request(
-      repository: GH_REPOSITORY,
+      repository: GITHUB_REPO,
       source_branch: "release/#{version}",
       default_branch: DEFAULT_BRANCH,
       labels: ['Releases'],
@@ -603,7 +771,26 @@ platform :android do
   end
 
   def bundle_output_path(app)
-    "#{app}/build/outputs/bundle/release/#{app}-release.aab"
+    File.join(app.to_s, 'build', 'outputs', 'bundle', 'release', "#{app}-release.aab")
+  end
+
+  def annotate_sentry_mapping_uuid(app:, aab_file:)
+    sentry_props = sh('unzip', '-p', aab_file, 'base/assets/sentry-debug-meta.properties', step_name: 'Extract sentry-debug-meta.properties') do |status, result, _|
+      status.success? ? result : nil
+    end
+    if sentry_props.nil?
+      UI.important("Unable to extract Sentry properties file from #{aab_file}. Skipping annotating the build with the mapping UUID.")
+      return
+    end
+
+    line = sentry_props.split("\n").find { |l| l.start_with?('io.sentry.ProguardUuids=') }
+    if line.nil?
+      UI.error("`io.sentry.ProguardUuids` line not found in #{aab_file}'s `sentry-debug-meta.properties` file")
+      return
+    end
+
+    uuid = line.split('=', 2).last.strip
+    buildkite_annotate(style: 'info', context: "sentry-mapping-uuid-#{app}", message: "Sentry mapping UUID for #{app}: #{uuid}")
   end
 
   def firebase_secret(name:)
@@ -669,25 +856,12 @@ platform :android do
     VERSION_FORMATTER.beta_version(current_version)
   end
 
-  # Returns the beta version that is used by the code freeze
-  # It first increments the minor number, which also resets the build number to 0
-  # It then bumps the build number so the -rc-1 can be appended to the code freeze version
-  def beta_version_code_freeze
-    # Read the current release version from the version.properties file and parse it into an AppVersion object
-    current_version = VERSION_FORMATTER.parse(version_name_current)
-    # Calculate the next major version number
-    next_version = VERSION_CALCULATOR.next_release_version(version: current_version)
-    # Calculate the next build number
-    beta_version_code_freeze = VERSION_CALCULATOR.next_build_number(version: next_version)
-    # Return the formatted release version
-    VERSION_FORMATTER.beta_version(beta_version_code_freeze)
-  end
-
   # Returns the beta version of the app in the format `1.2-rc-1`
   #
-  def beta_version_next
+  def beta_version_next(version_name: nil)
+    version_name ||= version_name_current
     # Read the current release version from `version.properties` and parse it into an AppVersion object
-    current_version = VERSION_FORMATTER.parse(version_name_current)
+    current_version = VERSION_FORMATTER.parse(version_name)
     # Calculate the next beta version
     beta_version_next = VERSION_CALCULATOR.next_build_number(version: current_version)
     # Return the formatted release version
@@ -744,5 +918,16 @@ platform :android do
     else
       is_beta ? PLAY_STORE_TRACK_BETA : PLAY_STORE_TRACK_PRODUCTION
     end
+  end
+
+  def ensure_branch_does_not_exist!(branch_name)
+    return unless Fastlane::Helper::GitHelper.branch_exists_on_remote?(branch_name: branch_name)
+
+    error_message = "The branch `#{branch_name}` already exists. Please check first if there is an existing Pull Request that needs to be merged or closed first, " \
+                    'or delete the branch to then run again the release task.'
+
+    buildkite_annotate(style: 'error', context: 'error-checking-branch', message: error_message) if is_ci
+
+    UI.user_error!(error_message)
   end
 end

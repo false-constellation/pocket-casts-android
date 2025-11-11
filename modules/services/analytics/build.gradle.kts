@@ -25,10 +25,10 @@ dependencies {
 
     implementation(platform(libs.firebase.bom))
 
+    implementation(libs.automattic.explat)
     implementation(libs.automattic.tracks)
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.config)
-    implementation(libs.automattic.explat)
 
     debugImplementation(libs.compose.ui.tooling)
 

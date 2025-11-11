@@ -19,7 +19,6 @@ android {
 dependencies {
     ksp(libs.dagger.hilt.compiler)
     ksp(libs.hilt.compiler)
-    ksp(libs.showkase.processor)
 
     api(libs.androidx.appcompat)
     api(libs.androidx.cardview)
@@ -34,9 +33,9 @@ dependencies {
     api(libs.media3.ui)
     api(libs.okhttp)
     api(libs.rx2.java)
-    api(libs.showkase)
 
     api(projects.modules.features.settings)
+    api(projects.modules.features.transcripts)
     api(projects.modules.services.analytics)
     api(projects.modules.services.compose)
     api(projects.modules.services.localization)
@@ -53,11 +52,11 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.preference.ktx)
     implementation(libs.androidx.webkit)
+    implementation(libs.coil.compose)
     implementation(libs.compose.animation)
     implementation(libs.compose.livedata)
     implementation(libs.compose.material)
     implementation(libs.compose.material.icons.core)
-    implementation(libs.compose.material3.window.size)
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.webview)
@@ -79,6 +78,7 @@ dependencies {
     implementation(libs.rx2.relay)
     implementation(libs.timber)
 
+    implementation(projects.modules.features.ads)
     implementation(projects.modules.features.reimagine)
     implementation(projects.modules.services.images)
 

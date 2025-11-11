@@ -26,7 +26,6 @@ import au.com.shiftyjelly.pocketcasts.compose.components.TextH70
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.extensions.dpToPx
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 
 @Composable
 fun CountBadge(
@@ -144,37 +143,33 @@ sealed class CountBadgeStyle {
     }
 }
 
-@ShowkaseComposable(name = "CountBadge", group = "Images", styleName = "Small")
 @Preview(name = "Small")
 @Composable
-fun CountBadgeSmallPreview() {
+private fun CountBadgeSmallPreview() {
     CountBadgePreview(
         style = CountBadgeStyle.Small,
     )
 }
 
-@ShowkaseComposable(name = "CountBadge", group = "Images", styleName = "Medium")
 @Preview(name = "Medium")
 @Composable
-fun CountBadgeMediumPreview() {
+private fun CountBadgeMediumPreview() {
     CountBadgePreview(
         style = CountBadgeStyle.Medium,
     )
 }
 
-@ShowkaseComposable(name = "CountBadge", group = "Images", styleName = "Big")
 @Preview(name = "Big")
 @Composable
-fun CountBadgeBigPreview() {
+private fun CountBadgeBigPreview() {
     CountBadgePreview(
         style = CountBadgeStyle.Big,
     )
 }
 
-@ShowkaseComposable(name = "CountBadge", group = "Images", styleName = "Custom")
 @Preview(name = "Custom")
 @Composable
-fun CountBadgeCustomPreview() {
+private fun CountBadgeCustomPreview() {
     CountBadgePreview(
         style = CountBadgeStyle.Custom(
             backgroundColor = MaterialTheme.theme.colors.primaryIcon01,

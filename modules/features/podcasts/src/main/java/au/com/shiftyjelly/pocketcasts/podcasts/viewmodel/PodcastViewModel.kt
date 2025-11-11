@@ -1,8 +1,7 @@
 package au.com.shiftyjelly.pocketcasts.podcasts.viewmodel
 
-import android.content.Context
+import android.app.Activity
 import android.content.res.Resources
-import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -13,6 +12,7 @@ import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.EpisodeAnalytics
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.compose.PodcastColors
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.models.entity.Folder
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
@@ -23,19 +23,22 @@ import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarkArguments
 import au.com.shiftyjelly.pocketcasts.podcasts.helper.search.BookmarkSearchHandler
 import au.com.shiftyjelly.pocketcasts.podcasts.helper.search.EpisodeSearchHandler
 import au.com.shiftyjelly.pocketcasts.podcasts.helper.search.SearchHandler
+import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.podcast.RecommendationsHandler
+import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.podcast.RecommendationsResult
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortType
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeForPodcast
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
 import au.com.shiftyjelly.pocketcasts.repositories.chromecast.CastManager
 import au.com.shiftyjelly.pocketcasts.repositories.di.ApplicationScope
-import au.com.shiftyjelly.pocketcasts.repositories.di.IoDispatcher
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
+import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationHelper
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.FolderManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
+import au.com.shiftyjelly.pocketcasts.settings.util.TextResource
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectBookmarksHelper
@@ -44,21 +47,20 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.reactivex.BackpressureStrategy
 import io.reactivex.Flowable
 import io.reactivex.Maybe
-import io.reactivex.Observable
 import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.rxkotlin.Observables
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.min
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx2.asFlowable
@@ -66,8 +68,7 @@ import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @HiltViewModel
-class PodcastViewModel
-@Inject constructor(
+class PodcastViewModel @Inject constructor(
     private val playbackManager: PlaybackManager,
     private val podcastManager: PodcastManager,
     private val folderManager: FolderManager,
@@ -81,13 +82,15 @@ class PodcastViewModel
     private val bookmarkManager: BookmarkManager,
     private val episodeSearchHandler: EpisodeSearchHandler,
     private val bookmarkSearchHandler: BookmarkSearchHandler,
+    private val recommendationsHandler: RecommendationsHandler,
     val multiSelectEpisodesHelper: MultiSelectEpisodesHelper,
     val multiSelectBookmarksHelper: MultiSelectBookmarksHelper,
     private val settings: Settings,
     private val podcastAndEpisodeDetailsCoordinator: PodcastAndEpisodeDetailsCoordinator,
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val notificationHelper: NotificationHelper,
     @ApplicationScope private val applicationScope: CoroutineScope,
-) : ViewModel(), CoroutineScope {
+) : ViewModel(),
+    CoroutineScope {
 
     private val disposables = CompositeDisposable()
     val podcast = MutableLiveData<Podcast>()
@@ -97,11 +100,15 @@ class PodcastViewModel
     val uiState: LiveData<UiState>
         get() = _uiState
 
+    private val _refreshState = MutableSharedFlow<RefreshState>()
+    val refreshState = _refreshState.asSharedFlow()
+
     val groupedEpisodes: MutableLiveData<List<List<PodcastEpisode>>> = MutableLiveData()
     val signInState = userManager.getSignInState().toLiveData()
+    private val _showNotificationSnack = MutableSharedFlow<SnackBarMessage>()
+    val showNotificationSnack = _showNotificationSnack.asSharedFlow()
 
     val tintColor = MutableLiveData<Int>()
-    val observableHeaderExpanded = MutableLiveData<Boolean>()
 
     val castConnected = castManager.isConnectedObservable
         .toFlowable(BackpressureStrategy.LATEST)
@@ -122,7 +129,8 @@ class PodcastViewModel
         val bookmarkSearchResults = bookmarkSearchHandler.getSearchResultsObservable(uuid)
 
         disposables.clear()
-        podcastManager.findPodcastByUuidRxMaybe(uuid)
+
+        val podcastFlowable = podcastManager.findPodcastByUuidRxMaybe(uuid)
             .subscribeOn(Schedulers.io())
             .flatMap {
                 LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Loaded podcast $uuid from database")
@@ -153,24 +161,26 @@ class PodcastViewModel
             .doOnNext { newPodcast: Podcast ->
                 LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Observing podcast $uuid changes")
                 tintColor.value = theme.getPodcastTintColor(newPodcast)
-                observableHeaderExpanded.value = !newPodcast.isSubscribed
                 podcast.postValue(newPodcast)
             }
-            .switchMap {
-                Observables.combineLatest(
-                    Observable.just(it),
-                    episodeSearchResults,
-                    bookmarkSearchResults,
-                ) { podcast, episodeSearchResults, bookmarkSearchResults ->
-                    CombinedEpisodeAndBookmarkData(
-                        podcast = podcast,
-                        showingArchived = podcast.showArchived,
-                        episodeSearchResult = episodeSearchResults,
-                        bookmarkSearchResult = bookmarkSearchResults,
-                    )
-                }.toFlowable(BackpressureStrategy.LATEST)
-            }
-            .loadEpisodesAndBookmarks(episodeManager, bookmarkManager, settings)
+
+        val recommendationsFlowable = recommendationsHandler.getRecommendationsFlowable(uuid)
+
+        Flowable.combineLatest(
+            podcastFlowable,
+            episodeSearchResults.toFlowable(BackpressureStrategy.LATEST),
+            bookmarkSearchResults.toFlowable(BackpressureStrategy.LATEST),
+            recommendationsFlowable,
+        ) { podcast, episodeSearch, bookmarkSearch, recommendations ->
+            CombinedData(
+                podcast = podcast,
+                showingArchived = podcast.showArchived,
+                episodeSearchResult = episodeSearch,
+                bookmarkSearchResult = bookmarkSearch,
+                recommendationsResult = recommendations,
+            )
+        }
+            .buildUiState(episodeManager, bookmarkManager, recommendationsHandler, settings)
             .doOnNext {
                 if (it is UiState.Loaded) {
                     val groups = it.podcast.grouping.formGroups(it.episodes, it.podcast, resources)
@@ -197,10 +207,7 @@ class PodcastViewModel
     }
 
     fun onTabClicked(tab: PodcastTab) {
-        when (tab) {
-            PodcastTab.EPISODES -> multiSelectBookmarksHelper.closeMultiSelect()
-            PodcastTab.BOOKMARKS -> multiSelectEpisodesHelper.closeMultiSelect()
-        }
+        multiSelectBookmarksHelper.closeMultiSelect()
         analyticsTracker.track(AnalyticsEvent.PODCASTS_SCREEN_TAB_TAPPED, mapOf("value" to tab.analyticsValue))
         _uiState.value = (uiState.value as? UiState.Loaded)?.copy(showTab = tab)
     }
@@ -215,6 +222,12 @@ class PodcastViewModel
         // Refresh the podcast application coroutine scope so the podcast continues to update if the view model is closed
         applicationScope.launch {
             podcastManager.refreshPodcast(existingPodcast, playbackManager)
+        }
+    }
+
+    fun updateIsHeaderExpanded(uuid: String, isExpanded: Boolean) {
+        viewModelScope.launch {
+            podcastManager.updateIsHeaderExpanded(uuid, isExpanded)
         }
     }
 
@@ -278,6 +291,7 @@ class PodcastViewModel
         when (getCurrentTab()) {
             PodcastTab.EPISODES -> episodeSearchHandler.searchQueryUpdated(newValue)
             PodcastTab.BOOKMARKS -> bookmarkSearchHandler.searchQueryUpdated(newValue)
+            PodcastTab.RECOMMENDATIONS -> Unit // No search for the recommendations tab
         }
     }
 
@@ -322,13 +336,26 @@ class PodcastViewModel
         }
     }
 
-    fun toggleNotifications(context: Context) {
-        val podcast = podcast.value ?: return
-        val showNotifications = !podcast.isShowNotifications
-        analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_NOTIFICATIONS_TAPPED, AnalyticsProp.notificationEnabled(showNotifications))
-        Toast.makeText(context, if (showNotifications) LR.string.podcast_notifications_on else LR.string.podcast_notifications_off, Toast.LENGTH_SHORT).show()
-        launch {
-            podcastManager.updateShowNotificationsBlocking(podcast, showNotifications)
+    fun showNotifications(podcastUuid: String, show: Boolean) {
+        analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_NOTIFICATIONS_TAPPED, AnalyticsProp.notificationEnabled(show))
+        viewModelScope.launch {
+            if (!notificationHelper.hasNotificationsPermission()) {
+                _showNotificationSnack.emit(
+                    SnackBarMessage.ShowNotificationsDisabledMessage(
+                        message = TextResource.fromStringId(LR.string.notification_snack_message),
+                        cta = TextResource.fromStringId(LR.string.notification_snack_cta),
+                    ),
+                )
+            } else {
+                podcastManager.updateShowNotifications(podcastUuid, show)
+                if (show) {
+                    _showNotificationSnack.emit(
+                        SnackBarMessage.ShowNotifyOnNewEpisodesMessage(
+                            message = TextResource.fromStringId(LR.string.notifications_enabled_message, podcastManager.findPodcastByUuid(podcastUuid)?.title.orEmpty()),
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -431,25 +458,15 @@ class PodcastViewModel
         }
     }
 
-    fun buildBookmarkArguments(onSuccess: (BookmarkArguments) -> Unit) {
-        multiSelectBookmarksHelper.selectedListLive.value?.firstOrNull()?.let { bookmark ->
-            val episodeUuid = bookmark.episodeUuid
-            viewModelScope.launch(ioDispatcher) {
-                val podcast = podcastManager.findPodcastByUuid(bookmark.podcastUuid)
-                val backgroundColor =
-                    if (podcast == null) 0xFF000000.toInt() else theme.playerBackgroundColor(podcast)
-                val tintColor =
-                    if (podcast == null) 0xFFFFFFFF.toInt() else theme.playerHighlightColor(podcast)
-                val arguments = BookmarkArguments(
-                    bookmarkUuid = bookmark.uuid,
-                    episodeUuid = episodeUuid,
-                    timeSecs = bookmark.timeSecs,
-                    backgroundColor = backgroundColor,
-                    tintColor = tintColor,
-                )
-                onSuccess(arguments)
-            }
-        }
+    suspend fun createBookmarkArguments(): BookmarkArguments? {
+        val bookmark = multiSelectBookmarksHelper.selectedListLive.value?.firstOrNull() ?: return null
+        val podcast = podcastManager.findPodcastByUuid(bookmark.podcastUuid)
+        return BookmarkArguments(
+            bookmarkUuid = bookmark.uuid,
+            episodeUuid = bookmark.episodeUuid,
+            timeSecs = bookmark.timeSecs,
+            podcastColors = podcast?.let(::PodcastColors) ?: PodcastColors.ForUserEpisode,
+        )
     }
 
     fun multiSelectSelectNone() {
@@ -457,6 +474,7 @@ class PodcastViewModel
         when (uiState.showTab) {
             PodcastTab.EPISODES -> multiSelectEpisodesHelper.deselectAllInList(uiState.episodes)
             PodcastTab.BOOKMARKS -> multiSelectBookmarksHelper.deselectAllInList(uiState.bookmarks)
+            PodcastTab.RECOMMENDATIONS -> Unit // No multi select for the recommendations tab
         }
     }
 
@@ -473,6 +491,7 @@ class PodcastViewModel
                     }
                 }
             }
+
             is Bookmark -> {
                 val startIndex = uiState.bookmarks.indexOf(multiSelectable)
                 if (startIndex > -1) {
@@ -497,6 +516,7 @@ class PodcastViewModel
                     }
                 }
             }
+
             is Bookmark -> {
                 val startIndex = uiState.bookmarks.indexOf(multiSelectable)
                 if (startIndex > -1) {
@@ -513,6 +533,7 @@ class PodcastViewModel
         when (uiState.showTab) {
             PodcastTab.EPISODES -> multiSelectEpisodesHelper.selectAllInList(uiState.episodes)
             PodcastTab.BOOKMARKS -> multiSelectBookmarksHelper.selectAllInList(uiState.bookmarks)
+            PodcastTab.RECOMMENDATIONS -> Unit // No multi select for recommendations tab
         }
     }
 
@@ -566,6 +587,27 @@ class PodcastViewModel
         }
     }
 
+    fun onBookmarkShare(podcastUuid: String, episodeUuid: String, source: SourceView) {
+        analyticsTracker.track(AnalyticsEvent.BOOKMARK_SHARE_TAPPED, mapOf("podcast_uuid" to podcastUuid, "episode_uuid" to episodeUuid, "source" to source.analyticsValue))
+    }
+
+    suspend fun onRefreshPodcast(refreshType: RefreshType) {
+        val podcast = podcast.value ?: return
+
+        analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_REFRESH_EPISODE_LIST, mapOf("podcast_uuid" to podcast.uuid, "action" to refreshType.analyticsValue))
+
+        _refreshState.emit(RefreshState.Refreshing(refreshType))
+        val newEpisodeFound = podcastManager.refreshPodcastFeed(podcast = podcast)
+
+        if (newEpisodeFound) {
+            analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_REFRESH_NEW_EPISODE_FOUND, mapOf("podcast_uuid" to podcast.uuid, "action" to refreshType.analyticsValue))
+            _refreshState.emit(RefreshState.NewEpisodeFound)
+        } else {
+            analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_REFRESH_NO_EPISODES_FOUND, mapOf("podcast_uuid" to podcast.uuid, "action" to refreshType.analyticsValue))
+            _refreshState.emit(RefreshState.NoEpisodesFound)
+        }
+    }
+
     private fun trackEpisodeBulkEvent(event: AnalyticsEvent, count: Int) {
         episodeAnalytics.trackBulkEvent(
             event,
@@ -574,19 +616,95 @@ class PodcastViewModel
         )
     }
 
-    private fun getCurrentTab() =
-        (uiState.value as? UiState.Loaded)?.showTab ?: PodcastTab.EPISODES
+    private fun getCurrentTab() = (uiState.value as? UiState.Loaded)?.showTab ?: PodcastTab.EPISODES
+
+    fun onHeadsetSettingsClicked() {
+        analyticsTracker.track(
+            AnalyticsEvent.BOOKMARKS_EMPTY_GO_TO_HEADPHONE_SETTINGS,
+            mapOf("source" to SourceView.PODCAST_SCREEN.analyticsValue),
+        )
+    }
+
+    fun onGetBookmarksClicked() {
+        analyticsTracker.track(
+            AnalyticsEvent.BOOKMARKS_GET_BOOKMARKS_BUTTON_TAPPED,
+            mapOf("source" to SourceView.PODCAST_SCREEN.analyticsValue),
+        )
+    }
+
+    fun onDonateClicked() {
+        analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_FUNDING_TAPPED, mapOf("podcast_uuid" to podcastUuid))
+    }
+
+    fun onRecommendedPodcastSubscribeClicked(podcastUuid: String, listDate: String) {
+        podcastManager.subscribeToPodcast(podcastUuid = podcastUuid, sync = true)
+        analyticsTracker.track(
+            event = AnalyticsEvent.PODCAST_SCREEN_YOU_MIGHT_LIKE_SUBSCRIBED,
+            properties = mapOf(
+                "podcast_uuid" to podcastUuid,
+                "list_datetime" to listDate,
+            ),
+        )
+    }
+
+    fun onRecommendedPodcastClicked(podcastUuid: String, listDate: String) {
+        analyticsTracker.track(
+            event = AnalyticsEvent.PODCAST_SCREEN_YOU_MIGHT_LIKE_TAPPED,
+            properties = mapOf(
+                "podcast_uuid" to podcastUuid,
+                "list_datetime" to listDate,
+            ),
+        )
+    }
+
+    fun onRecommendedRetryClicked() {
+        recommendationsHandler.retry()
+    }
+
+    fun onPodrollInformationModalShown() {
+        analyticsTracker.track(AnalyticsEvent.PODCAST_SCREEN_PODROLL_INFORMATION_MODEL_SHOWN)
+    }
+
+    fun onPodrollPodcastClicked(podcastUuid: String) {
+        analyticsTracker.track(
+            event = AnalyticsEvent.PODCAST_SCREEN_PODROLL_PODCAST_TAPPED,
+            properties = mapOf("podcast_uuid" to podcastUuid),
+        )
+    }
+
+    fun onPodrollPodcastSubscribeClicked(podcastUuid: String) {
+        podcastManager.subscribeToPodcast(podcastUuid = podcastUuid, sync = true)
+        analyticsTracker.track(
+            event = AnalyticsEvent.PODCAST_SCREEN_PODROLL_PODCAST_SUBSCRIBED,
+            properties = mapOf("podcast_uuid" to podcastUuid),
+        )
+    }
+
+    fun onOpenNotificationSettingsClicked(activity: Activity) {
+        notificationHelper.openNotificationSettings(activity)
+    }
 
     enum class PodcastTab(@StringRes val labelResId: Int, val analyticsValue: String) {
-        EPISODES(LR.string.episodes, "episodes"),
-        BOOKMARKS(LR.string.bookmarks, "bookmarks"),
+        EPISODES(
+            labelResId = LR.string.episodes,
+            analyticsValue = "episodes",
+        ),
+        BOOKMARKS(
+            labelResId = LR.string.bookmarks,
+            analyticsValue = "bookmarks",
+        ),
+        RECOMMENDATIONS(
+            labelResId = LR.string.you_might_like,
+            analyticsValue = "you_might_like",
+        ),
     }
 
     sealed class UiState {
-        data class Loaded constructor(
+        data class Loaded(
             val podcast: Podcast,
             val episodes: List<PodcastEpisode>,
             val bookmarks: List<Bookmark>,
+            val recommendations: RecommendationsResult,
             val showingArchived: Boolean,
             val episodeCount: Int,
             val archivedCount: Int,
@@ -596,10 +714,37 @@ class PodcastViewModel
             val episodeLimitIndex: Int?,
             val showTab: PodcastTab = PodcastTab.EPISODES,
         ) : UiState()
+
         data class Error(
             val errorMessage: String,
         ) : UiState()
-        object Loading : UiState()
+
+        data object Loading : UiState()
+    }
+
+    sealed class RefreshState {
+        data object NotStarted : RefreshState()
+        data class Refreshing(val type: RefreshType) : RefreshState()
+        data object NewEpisodeFound : RefreshState()
+        data object NoEpisodesFound : RefreshState()
+    }
+
+    enum class RefreshType(val analyticsValue: String) {
+        PULL_TO_REFRESH("pull_to_refresh"),
+        REFRESH_BUTTON("refresh_button"),
+    }
+
+    sealed interface SnackBarMessage {
+        val message: TextResource
+
+        data class ShowNotificationsDisabledMessage(
+            override val message: TextResource,
+            val cta: TextResource,
+        ) : SnackBarMessage
+
+        data class ShowNotifyOnNewEpisodesMessage(
+            override val message: TextResource,
+        ) : SnackBarMessage
     }
 
     private object AnalyticsProp {
@@ -607,12 +752,11 @@ class PodcastViewModel
         private const val SHOW_ARCHIVED = "show_archived"
         private const val SOURCE_KEY = "source"
         private const val UUID_KEY = "uuid"
-        fun archiveToggled(archived: Boolean) =
-            mapOf(SHOW_ARCHIVED to archived)
-        fun notificationEnabled(show: Boolean) =
-            mapOf(ENABLED_KEY to show)
-        fun podcastSubscribeToggled(source: SourceView, uuid: String) =
-            mapOf(SOURCE_KEY to source.analyticsValue, UUID_KEY to uuid)
+        fun archiveToggled(archived: Boolean) = mapOf(SHOW_ARCHIVED to archived)
+
+        fun notificationEnabled(show: Boolean) = mapOf(ENABLED_KEY to show)
+
+        fun podcastSubscribeToggled(source: SourceView, uuid: String) = mapOf(SOURCE_KEY to source.analyticsValue, UUID_KEY to uuid)
     }
 }
 
@@ -622,26 +766,32 @@ private fun Maybe<Podcast>.filterKeepSubscribed(): Maybe<Podcast> {
 
 private class EpisodeLimitPlaceholder
 
-private data class CombinedEpisodeAndBookmarkData(
+private data class CombinedData(
     val podcast: Podcast,
     val showingArchived: Boolean,
     val episodeSearchResult: SearchHandler.SearchResult,
     val bookmarkSearchResult: SearchHandler.SearchResult,
+    val recommendationsResult: RecommendationsResult,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
-private fun Flowable<CombinedEpisodeAndBookmarkData>.loadEpisodesAndBookmarks(
+private fun Flowable<CombinedData>.buildUiState(
     episodeManager: EpisodeManager,
     bookmarkManager: BookmarkManager,
+    recommendationsHandler: RecommendationsHandler,
     settings: Settings,
 ): Flowable<PodcastViewModel.UiState> {
-    return this.switchMap { (podcast, showArchived, episodeSearchResults, bookmarkSearchResults) ->
+    return this.switchMap { (podcast, showArchived, episodeSearchResults, bookmarkSearchResults, recommendationsResult) ->
         LogBuffer.i(
             LogBuffer.TAG_BACKGROUND_TASKS,
             "Observing podcast ${podcast.uuid} episode changes",
         )
         Flowable.combineLatest(
             episodeManager.findEpisodesByPodcastOrderedRxFlowable(podcast)
+                .doOnNext {
+                    // load the recommendations after the episodes have been loaded
+                    recommendationsHandler.setEnabled(true)
+                }
                 .map {
                     val sortFunction = podcast.grouping.sortFunction
                     if (sortFunction != null) {
@@ -695,6 +845,7 @@ private fun Flowable<CombinedEpisodeAndBookmarkData>.loadEpisodesAndBookmarks(
                 podcast = podcast,
                 episodes = filteredList,
                 bookmarks = bookmarks,
+                recommendations = recommendationsResult,
                 showingArchived = showArchivedWithSearch,
                 episodeCount = episodeCount,
                 archivedCount = archivedCount,
@@ -714,20 +865,19 @@ private fun Flowable<CombinedEpisodeAndBookmarkData>.loadEpisodesAndBookmarks(
 private fun <T> Flowable<List<T>>.withSearchResult(
     filterCondition: (T) -> Boolean,
     searchResults: SearchHandler.SearchResult,
-) =
-    this.flatMap { list ->
-        if (searchResults.searchUuids == null) {
-            Flowable.just(Pair(list, list))
-        } else {
-            Flowable.just(Pair(list.filter { filterCondition(it) }, list))
-        }
+) = this.flatMap { list ->
+    if (searchResults.searchUuids == null) {
+        Flowable.just(Pair(list, list))
+    } else {
+        Flowable.just(Pair(list.filter { filterCondition(it) }, list))
     }
+}
 
 private fun Maybe<Podcast>.downloadMissingPodcast(uuid: String, podcastManager: PodcastManager): Single<Podcast> {
     return this.switchIfEmpty(
         Single.defer {
             LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Podcast $uuid not found in database")
-            podcastManager.findOrDownloadPodcastRxSingle(uuid)
+            podcastManager.findOrDownloadPodcastRxSingle(podcastUuid = uuid, waitForSubscribe = true)
         },
     )
 }

@@ -22,8 +22,6 @@ import au.com.shiftyjelly.pocketcasts.servers.cdn.StaticServiceManager
 import au.com.shiftyjelly.pocketcasts.servers.podcast.PodcastCacheServiceManager
 import au.com.shiftyjelly.pocketcasts.servers.sync.PodcastEpisodesResponse
 import au.com.shiftyjelly.pocketcasts.utils.Optional
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import coil.executeBlocking
 import coil.imageLoader
@@ -33,7 +31,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.reactivex.Completable
 import io.reactivex.Single
 import io.reactivex.functions.BiFunction
-import io.reactivex.functions.Function3
+import io.reactivex.functions.Function4
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import java.util.Date
@@ -114,7 +112,7 @@ class SubscribeManager @Inject constructor(
                 if (canDownloadEpisodesAfterFollowPodcast(subscribed, shouldAutoDownload)) {
                     podcastDao.findByUuidBlocking(podcastUuid)?.let { podcast ->
                         val episodes = episodeManager.findEpisodesByPodcastOrderedByPublishDateBlocking(podcast)
-                        val numberOfEpisodes = AutoDownloadLimitSetting.getNumberOfEpisodes(settings.autoDownloadLimit.value)
+                        val numberOfEpisodes = settings.autoDownloadLimit.value.episodeCount
 
                         episodes.take(numberOfEpisodes).forEach { episode ->
                             if (episode.isQueued || episode.isDownloaded || episode.isDownloading || episode.isExemptFromAutoDownload) {
@@ -187,12 +185,10 @@ class SubscribeManager @Inject constructor(
                 podcast.isSubscribed = subscribed
                 podcast.grouping = settings.podcastGroupingDefault.value
                 podcast.showArchived = settings.showArchivedDefault.value
-                if (FeatureFlag.isEnabled(Feature.CUSTOM_PLAYBACK_SETTINGS)) {
-                    podcastDao.findByUuidBlocking(podcastUuid)?.let { localPodcast ->
-                        podcast.copyPlaybackEffects(
-                            sourcePodcast = localPodcast,
-                        )
-                    }
+                podcastDao.findByUuidBlocking(podcastUuid)?.let { localPodcast ->
+                    podcast.copyPlaybackEffects(
+                        sourcePodcast = localPodcast,
+                    )
                 }
                 if (canDownloadEpisodesAfterFollowPodcast(subscribed, shouldAutoDownload)) {
                     LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Update auto download status for $podcastUuid")
@@ -212,8 +208,7 @@ class SubscribeManager @Inject constructor(
         shouldAutoDownload: Boolean,
     ): Boolean = subscribed &&
         settings.autoDownloadOnFollowPodcast.value &&
-        shouldAutoDownload &&
-        FeatureFlag.isEnabled(Feature.AUTO_DOWNLOAD)
+        shouldAutoDownload
 
     private fun downloadPodcastRxSingle(podcastUuid: String): Single<Podcast> {
         // download the podcast
@@ -225,15 +220,21 @@ class SubscribeManager @Inject constructor(
             .subscribeOn(Schedulers.io())
             .doOnSuccess { Timber.i("Downloaded colors success podcast $podcastUuid") }
             .onErrorReturn { Optional.empty() }
+        // keep expanded or collapsed header state
+        val isHeaderExpandedObservable = podcastDao.findByUuidRxMaybe(podcastUuid)
+            .subscribeOn(Schedulers.io())
+            .map { it.isHeaderExpanded }
+            .toSingle(true)
         // find all podcasts from the database
         val allPodcastsObservable = podcastDao.findSubscribedRxSingle().subscribeOn(Schedulers.io())
         // group the server podcast and all the existing podcasts to calculate the new podcast properties
         val cleanPodcastObservable = Single.zip(
             serverPodcastObservable,
             colorObservable,
+            isHeaderExpandedObservable,
             allPodcastsObservable,
-            Function3<Podcast, Optional<ArtworkColors>, List<Podcast>, Podcast> { podcast, colors, allPodcasts ->
-                cleanPodcast(podcast, colors, allPodcasts)
+            Function4<Podcast, Optional<ArtworkColors>, Boolean, List<Podcast>, Podcast> { podcast, colors, isHeaderExpanded, allPodcasts ->
+                cleanPodcast(podcast, colors, isHeaderExpanded, allPodcasts)
             },
         )
         // add sync information
@@ -257,7 +258,12 @@ class SubscribeManager @Inject constructor(
             .andThen(updateLatestEpisodeUuidRxCompletable(podcast.uuid))
     }
 
-    private fun cleanPodcast(podcast: Podcast, colors: Optional<ArtworkColors>, allPodcasts: List<Podcast>): Podcast {
+    private fun cleanPodcast(
+        podcast: Podcast,
+        colors: Optional<ArtworkColors>,
+        isHeaderExpanded: Boolean,
+        allPodcasts: List<Podcast>,
+    ): Podcast {
         // mark as subscribed
         podcast.isSubscribed = true
         // if all the podcasts have auto download selected then also auto download this podcast
@@ -296,6 +302,8 @@ class SubscribeManager @Inject constructor(
         for (episode in podcast.episodes) {
             cleanEpisode(episode, podcast)
         }
+
+        podcast.isHeaderExpanded = isHeaderExpanded
 
         return podcast
     }

@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.sentry)
     alias(libs.plugins.aboutlibraries)
+    alias(libs.plugins.aboutlibraries.android)
     alias(libs.plugins.compose.compiler)
 }
 
@@ -13,6 +14,7 @@ android {
 
     defaultConfig {
         minSdk = project.property("minSdkVersionAutomotive") as Int
+        targetSdk = project.property("targetSdkVersionAutomotive") as Int
         applicationId = project.property("applicationId").toString()
     }
 
@@ -34,6 +36,16 @@ android {
         named("release") {
             manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
         }
+    }
+
+    lint {
+        checkDependencies = false
+    }
+}
+
+androidComponents {
+    beforeVariants { builder ->
+        builder.enable = builder.buildType != "prototype"
     }
 }
 
@@ -77,6 +89,7 @@ dependencies {
     implementation(libs.rx2.java)
     implementation(libs.timber)
     implementation(libs.work.runtime)
+    implementation(libs.zxing)
 
     implementation(projects.modules.features.account)
     implementation(projects.modules.features.discover)

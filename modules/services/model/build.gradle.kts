@@ -2,14 +2,14 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.parcelize)
+    alias(libs.plugins.room)
 }
 
 android {
     namespace = "au.com.shiftyjelly.pocketcasts.model"
-    defaultConfig {
-        ksp {
-            arg("room.schemaLocation", "$projectDir/schemas")
-        }
+    room {
+        schemaDirectory("$projectDir/schemas")
     }
     buildFeatures {
         buildConfig = true

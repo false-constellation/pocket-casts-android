@@ -9,7 +9,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
@@ -21,12 +21,11 @@ import com.google.android.horologist.compose.layout.rememberColumnState
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 object HelpScreen {
-    const val route = "help_screen"
+    const val ROUTE = "help_screen"
 }
 
 @Composable
-fun HelpScreen() {
-    val viewModel = hiltViewModel<HelpScreenViewModel>()
+fun HelpScreen(viewModel: HelpScreenViewModel = hiltViewModel()) {
     val state = viewModel.state.collectAsState().value
     val context = LocalContext.current
     val columnState = rememberColumnState()

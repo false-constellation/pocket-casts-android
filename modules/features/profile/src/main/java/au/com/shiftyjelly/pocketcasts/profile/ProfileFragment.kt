@@ -4,13 +4,16 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
-import androidx.fragment.compose.content
+import androidx.lifecycle.lifecycleScope
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.endofyear.StoriesActivity.StoriesSource
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarksContainerFragment
 import au.com.shiftyjelly.pocketcasts.podcasts.view.ProfileEpisodeListFragment
@@ -26,28 +29,35 @@ import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSourc
 import au.com.shiftyjelly.pocketcasts.settings.stats.StatsFragment
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
 import au.com.shiftyjelly.pocketcasts.utils.extensions.pxToDp
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
+import au.com.shiftyjelly.pocketcasts.views.fragments.TopScrollable
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class ProfileFragment : BaseFragment() {
+class ProfileFragment :
+    BaseFragment(),
+    TopScrollable {
     private val profileViewModel by viewModels<ProfileViewModel>()
     private val referralsViewModel by viewModels<ReferralsViewModel>()
+
+    private val scrollToTopSignal = MutableSharedFlow<Unit>()
+
+    private var getCanScrollBackward: () -> Boolean = { false }
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ) = content {
+    ) = contentWithoutConsumedInsets {
         CallOnce {
             profileViewModel.onScreenShown()
         }
         val state = ProfilePageState(
-            isSendReferralsEnabled = FeatureFlag.isEnabled(Feature.REFERRALS_SEND),
             isPlaybackEnabled = profileViewModel.isPlaybackAvailable.collectAsState().value,
-            isClaimReferralsEnabled = FeatureFlag.isEnabled(Feature.REFERRALS_CLAIM),
+            isFreeAccountBannerVisible = profileViewModel.isFreeAccountBannerVisible.collectAsState().value,
             isUpgradeBannerVisible = profileViewModel.showUpgradeBanner.collectAsState(false).value,
             miniPlayerPadding = profileViewModel.miniPlayerInset.collectAsState().value.pxToDp(requireContext()).dp,
             headerState = profileViewModel.profileHeaderState.collectAsState().value,
@@ -56,9 +66,20 @@ class ProfileFragment : BaseFragment() {
             refreshState = profileViewModel.refreshState.collectAsState().value,
         )
 
+        val listState = rememberLazyListState()
+
+        getCanScrollBackward = { listState.canScrollBackward }
+
+        LaunchedEffect(listState) {
+            scrollToTopSignal.collectLatest {
+                listState.animateScrollToItem(0)
+            }
+        }
+
         ProfilePage(
             state = state,
             themeType = theme.activeTheme,
+            listState = listState,
             onSendReferralsClick = {
                 referralsViewModel.onIconClick()
                 fragmentHostListener.showBottomSheet(ReferralsGuestPassFragment.newInstance(ReferralsPageType.Send))
@@ -66,7 +87,7 @@ class ProfileFragment : BaseFragment() {
             onReferralsTooltipClick = {
                 referralsViewModel.onTooltipClick()
             },
-            onReferralsTooltipShown = {
+            onReferralsTooltipShow = {
                 referralsViewModel.onTooltipShown()
             },
             onSettingsClick = {
@@ -81,6 +102,16 @@ class ProfileFragment : BaseFragment() {
                     OnboardingLauncher.openOnboardingFlow(requireActivity(), OnboardingFlow.LoggedOut)
                 }
             },
+            onCreateFreeAccountBannerClick = {
+                profileViewModel.onCreateFreeAccountClick()
+                OnboardingLauncher.openOnboardingFlow(
+                    activity = requireActivity(),
+                    onboardingFlow = OnboardingFlow.LoggedOut,
+                )
+            },
+            onDismissCreateFreeAccountBannerClick = {
+                profileViewModel.dismissFreeAccountBanner()
+            },
             onPlaybackClick = {
                 profileViewModel.onPlaybackClick()
                 (activity as? FragmentHostListener)?.showStoriesOrAccount(StoriesSource.PROFILE.value)
@@ -91,10 +122,10 @@ class ProfileFragment : BaseFragment() {
             onHideReferralsCardClick = {
                 referralsViewModel.onHideBannerClick()
             },
-            onReferralsCardShown = {
+            onReferralsCardShow = {
                 referralsViewModel.onBannerShown()
             },
-            onShowReferralsSheet = {
+            onReferralsSheetShow = {
                 requireActivity().supportFragmentManager
                     .findFragmentByTag(ReferralsGuestPassFragment::class.java.name)
                     ?.let { fragmentHostListener.showBottomSheet(it) }
@@ -112,10 +143,15 @@ class ProfileFragment : BaseFragment() {
                 )
             },
             onCloseUpgradeProfileClick = {
-                profileViewModel.closeUpgradeProfile()
+                profileViewModel.closeUpgradeProfile(SourceView.PROFILE)
             },
             modifier = Modifier.fillMaxSize(),
         )
+    }
+
+    override fun onDestroyView() {
+        getCanScrollBackward = { false }
+        super.onDestroyView()
     }
 
     override fun onResume() {
@@ -142,5 +178,16 @@ class ProfileFragment : BaseFragment() {
     override fun onBackPressed(): Boolean {
         profileViewModel.refreshStats()
         return super.onBackPressed()
+    }
+
+    override fun scrollToTop(): Boolean {
+        val canScroll = getCanScrollBackward()
+        if (canScroll) {
+            lifecycleScope.launch {
+                scrollToTopSignal.emit(Unit)
+            }
+        }
+
+        return canScroll
     }
 }

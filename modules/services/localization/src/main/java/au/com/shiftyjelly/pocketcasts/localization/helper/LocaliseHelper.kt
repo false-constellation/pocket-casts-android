@@ -81,6 +81,8 @@ object LocaliseHelper {
         "popular" to R.string.discover_popular,
         "popular in [regionname]" to R.string.discover_popular_in,
         "most popular in [category]" to R.string.discover_most_popular_in,
+        "loved by listeners of" to R.string.recommendations_loved_by_listeners,
+        "because you like" to R.string.recommendations_because_you_like,
     )
 
     private val serverMessageIdToStringId = mapOf(
@@ -116,12 +118,11 @@ object LocaliseHelper {
         "user_delete_account_with_sub_failed" to R.string.server_user_delete_account_with_sub_failed,
     )
 
-    fun serverMessageIdToMessage(serverMessageId: String?, getResourceString: (Int) -> String?) =
-        serverMessageId?.let { serverMessageIdString ->
-            serverMessageIdToStringId[serverMessageIdString]?.let { androidId ->
-                getResourceString(androidId)
-            }
+    fun serverMessageIdToMessage(serverMessageId: String?, getResourceString: (Int) -> String?) = serverMessageId?.let { serverMessageIdString ->
+        serverMessageIdToStringId[serverMessageIdString]?.let { androidId ->
+            getResourceString(androidId)
         }
+    }
 
     fun tryToLocalise(text: String, resources: Resources, args: List<String>? = null): String {
         val stringLower = text.lowercase()

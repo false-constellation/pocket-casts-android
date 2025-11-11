@@ -23,6 +23,7 @@ import androidx.core.view.updatePadding
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.compose.components.SegmentedTabBar
 import au.com.shiftyjelly.pocketcasts.compose.components.SegmentedTabBarDefaults
@@ -36,20 +37,14 @@ import au.com.shiftyjelly.pocketcasts.player.databinding.FragmentEffectsBinding
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel.PlaybackEffectsSettingsTab
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
-import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
-import au.com.shiftyjelly.pocketcasts.repositories.images.loadInto
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.StatsManager
-import au.com.shiftyjelly.pocketcasts.ui.extensions.themed
 import au.com.shiftyjelly.pocketcasts.ui.helper.ColorUtils
-import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarColor
+import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarIconColor
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
 import au.com.shiftyjelly.pocketcasts.utils.Debouncer
 import au.com.shiftyjelly.pocketcasts.utils.extensions.dpToPx
 import au.com.shiftyjelly.pocketcasts.utils.extensions.roundedSpeed
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
-import au.com.shiftyjelly.pocketcasts.views.extensions.applyColor
 import au.com.shiftyjelly.pocketcasts.views.extensions.updateTint
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseDialogFragment
 import com.google.android.material.button.MaterialButtonToggleGroup
@@ -62,7 +57,11 @@ import kotlinx.coroutines.launch
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @AndroidEntryPoint
-class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeListener, MaterialButtonToggleGroup.OnButtonCheckedListener, View.OnClickListener {
+class EffectsFragment :
+    BaseDialogFragment(),
+    CompoundButton.OnCheckedChangeListener,
+    MaterialButtonToggleGroup.OnButtonCheckedListener,
+    View.OnClickListener {
 
     @Inject lateinit var stats: StatsManager
 
@@ -70,36 +69,29 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
 
     @Inject lateinit var playbackManager: PlaybackManager
 
-    override val statusBarColor: StatusBarColor? = null
+    override val statusBarIconColor = StatusBarIconColor.Light
 
     private val viewModel: PlayerViewModel by activityViewModels()
-    private lateinit var imageRequestFactory: PocketCastsImageRequestFactory
     private var binding: FragmentEffectsBinding? = null
     private val trimToggleGroupButtonIds = arrayOf(R.id.trimLow, R.id.trimMedium, R.id.trimHigh)
     private var playbackSpeedTrackingDebouncer: Debouncer = Debouncer()
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
-
-        imageRequestFactory = PocketCastsImageRequestFactory(context, cornerRadius = 4).themed()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         if (savedInstanceState == null) {
-            if (FeatureFlag.isEnabled(Feature.CUSTOM_PLAYBACK_SETTINGS)) {
-                viewModel.trackPlaybackEffectsEvent(AnalyticsEvent.PLAYBACK_EFFECT_SETTINGS_VIEW_APPEARED)
-            }
+            viewModel.trackPlaybackEffectsEvent(AnalyticsEvent.PLAYBACK_EFFECT_SETTINGS_VIEW_APPEARED)
         }
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         binding = FragmentEffectsBinding.inflate(inflater, container, false)
 
-        if (FeatureFlag.isEnabled(Feature.CUSTOM_PLAYBACK_SETTINGS)) {
-            binding?.setupEffectsSettingsSegmentedTabBar()
-        }
+        binding?.setupEffectsSettingsSegmentedTabBar()
 
         viewModel.effectsLive.value?.let { update(it) } // Make sure the window is the correct size before opening or else it won't expand properly
         viewModel.effectsLive.observe(viewLifecycleOwner) { podcastEffectsPair ->
@@ -112,25 +104,15 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
         return binding?.root
     }
 
-    override fun onPause() {
-        super.onPause()
-    }
-
     override fun onDestroyView() {
         super.onDestroyView()
         binding = null
     }
 
     private fun update(podcastEffectsData: PlayerViewModel.PodcastEffectsData) {
-        val podcast = podcastEffectsData.podcast
         val effects = podcastEffectsData.effects
 
         val binding = binding ?: return
-
-        binding.globalEffectsCard.isVisible = !FeatureFlag.isEnabled(Feature.CUSTOM_PLAYBACK_SETTINGS) &&
-            podcast.overrideGlobalEffects
-
-        imageRequestFactory.create(podcast).loadInto(binding.podcastEffectsImage)
 
         binding.lblSpeed.text = String.format("%.1fx", effects.playbackSpeed)
 
@@ -157,14 +139,12 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
         binding.switchVolume.setOnCheckedChangeListener(null)
         binding.switchVolume.isChecked = effects.isVolumeBoosted
         binding.switchVolume.setOnCheckedChangeListener(this)
-
-        binding.btnClear.setOnClickListener(this)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         viewModel.playingEpisodeLive.observe(viewLifecycleOwner) { (_, backgroundColor) ->
-            applyColor(theme, backgroundColor)
+            setDialogTint(backgroundColor)
 
             val tintColor = theme.playerHighlightColor(viewModel.podcast)
             val playerContrast01 = ThemeColor.playerContrast01(theme.activeTheme)
@@ -196,8 +176,7 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
         binding.lblSpeed.text = String.format("%.1fx", effects.playbackSpeed)
         viewModel.saveEffects(effects, podcast)
 
-        binding.btnSpeedUp.announceForAccessibility("Playback speed ${binding.lblSpeed.text}")
-        launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             playbackSpeedTrackingDebouncer.debounce {
                 viewModel.effectsLive.value?.effects?.playbackSpeed?.roundedSpeed()?.let { currentSpeed ->
                     trackPlaybackEffectsEvent(
@@ -275,7 +254,6 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
         when (view.id) {
             binding.btnSpeedUp.id -> changePlaybackSpeed(effects, podcast, effects.playbackSpeed + 0.1)
             binding.btnSpeedDown.id -> changePlaybackSpeed(effects, podcast, effects.playbackSpeed - 0.1)
-            binding.btnClear.id -> viewModel.clearPodcastEffects(podcast)
             binding.lblSpeed.id -> {
                 when (effects.playbackSpeed) {
                     1.0 -> changePlaybackSpeed(effects, podcast, 1.5)
@@ -320,7 +298,7 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
                         PlaybackEffectsSettingsTab.AllPodcasts
                     },
                     selectedTabTextColor = selectedTabTextColor,
-                    onItemSelected = {
+                    onItemSelect = {
                         viewModel.onEffectsSettingsSegmentedTabSelected(podcast, PlaybackEffectsSettingsTab.entries[it])
                     },
                     modifier = Modifier
@@ -332,10 +310,10 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
 
     @Composable
     private fun EffectsSettingsSegmentedTabBar(
-        modifier: Modifier = Modifier,
         selectedTabTextColor: Color,
         selectedItem: PlaybackEffectsSettingsTab,
-        onItemSelected: (selectedItemIndex: Int) -> Unit,
+        onItemSelect: (Int) -> Unit,
+        modifier: Modifier = Modifier,
     ) {
         SegmentedTabBar(
             items = PlaybackEffectsSettingsTab.entries.map { stringResource(it.labelResId) },
@@ -347,7 +325,7 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
             ),
             cornerRadius = 120.dp,
             modifier = modifier.fillMaxWidth(),
-            onItemSelected = onItemSelected,
+            onSelectItem = onItemSelect,
         )
     }
 
@@ -357,7 +335,7 @@ class EffectsFragment : BaseDialogFragment(), CompoundButton.OnCheckedChangeList
         EffectsSettingsSegmentedTabBar(
             selectedItem = PlaybackEffectsSettingsTab.AllPodcasts,
             selectedTabTextColor = Color.Black,
-            onItemSelected = {},
+            onItemSelect = {},
         )
     }
 }

@@ -2,25 +2,45 @@ package au.com.shiftyjelly.pocketcasts.preferences
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import au.com.shiftyjelly.pocketcasts.utils.extensions.mapState
 import java.time.Clock
 import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+interface ReadSetting<T> {
+    val value: T
+    val flow: StateFlow<T>
+}
+
+interface ReadWriteSetting<T> : ReadSetting<T> {
+    fun set(value: T, updateModifiedAt: Boolean, commit: Boolean = false, clock: Clock = Clock.systemUTC())
+}
+
+class DelegatedReadSetting<T, R>(
+    private val delegate: ReadSetting<T>,
+    private val mapper: (T) -> R,
+) : ReadSetting<R> {
+    override val value: R
+        get() = mapper(delegate.value)
+
+    override val flow: StateFlow<R>
+        get() = delegate.flow.mapState(mapper)
+}
+
 abstract class UserSetting<T>(
     val sharedPrefKey: String,
     protected val sharedPrefs: SharedPreferences,
-) {
+) : ReadWriteSetting<T> {
 
     private val modifiedAtKey = "${sharedPrefKey}ModifiedAt"
 
     private fun getModifiedAtServerString(): String? = sharedPrefs.getString(modifiedAtKey, null)
 
-    val modifiedAt get(): Instant? = runCatching {
-        Instant.parse(getModifiedAtServerString())
-    }.getOrNull()
+    val modifiedAt
+        get(): Instant? = runCatching {
+            Instant.parse(getModifiedAtServerString())
+        }.getOrNull()
 
     // Returns the value to sync if sync is needed. Returns null if sync is not needed.
     fun getSyncValue(lastSyncTime: Instant): T? {
@@ -31,22 +51,22 @@ abstract class UserSetting<T>(
     // (2) we don't want to get the current value from SharedPreferences for every
     // setting immediately on app startup.
     protected val _flow by lazy { MutableStateFlow(get()) }
-    val flow: StateFlow<T> by lazy { _flow }
+    override val flow: StateFlow<T> by lazy { _flow }
 
     // External callers should use [value] to get the current value if they can't
     // listen to the flow for changes.
     protected abstract fun get(): T
 
-    val value: T
+    override val value: T
         get() = flow.value
 
     protected abstract fun persist(value: T, commit: Boolean)
 
-    open fun set(
+    override fun set(
         value: T,
         updateModifiedAt: Boolean,
-        commit: Boolean = false,
-        clock: Clock = Clock.systemUTC(),
+        commit: Boolean,
+        clock: Clock,
     ) {
         persist(value, commit)
         _flow.value = get()
@@ -97,6 +117,18 @@ abstract class UserSetting<T>(
         sharedPrefs = sharedPrefs,
         fromInt = { it },
         toInt = { it },
+    )
+
+    class LongPref(
+        sharedPrefKey: String,
+        defaultValue: Long,
+        sharedPrefs: SharedPreferences,
+    ) : PrefFromLong<Long>(
+        sharedPrefKey = sharedPrefKey,
+        defaultValue = defaultValue,
+        sharedPrefs = sharedPrefs,
+        fromLong = { it },
+        toLong = { it },
     )
 
     class StringPref(
@@ -162,6 +194,36 @@ abstract class UserSetting<T>(
             val floatValue = toFloat(value)
             sharedPrefs.edit().run {
                 putFloat(sharedPrefKey, floatValue)
+                if (commit) {
+                    commit()
+                } else {
+                    apply()
+                }
+            }
+        }
+    }
+
+    // This persists the parameterized object as a Long in shared preferences.
+    open class PrefFromLong<T>(
+        sharedPrefKey: String,
+        private val defaultValue: T,
+        sharedPrefs: SharedPreferences,
+        private val fromLong: (Long) -> T,
+        private val toLong: (T) -> Long,
+    ) : UserSetting<T>(
+        sharedPrefKey = sharedPrefKey,
+        sharedPrefs = sharedPrefs,
+    ) {
+        override fun get(): T {
+            val persistedLong = sharedPrefs.getLong(sharedPrefKey, toLong(defaultValue))
+            return fromLong(persistedLong)
+        }
+
+        @SuppressLint("ApplySharedPref")
+        override fun persist(value: T, commit: Boolean) {
+            val longValue = toLong(value)
+            sharedPrefs.edit().run {
+                putLong(sharedPrefKey, longValue)
                 if (commit) {
                     commit()
                 } else {
@@ -263,20 +325,6 @@ abstract class UserSetting<T>(
             intValue.toString()
         },
     )
-
-    // This returns shared pref value only if CACHE_ENTIRE_PLAYING_EPISODE feature flag is enabled, otherwise returns always false
-    class CacheEntirePlayingEpisodePref(
-        sharedPrefKey: String,
-        private val defaultValue: Boolean,
-        sharedPrefs: SharedPreferences,
-    ) : BoolPref(sharedPrefKey, defaultValue, sharedPrefs) {
-
-        override fun get() = if (FeatureFlag.isEnabled(Feature.CACHE_ENTIRE_PLAYING_EPISODE)) {
-            sharedPrefs.getBoolean(sharedPrefKey, defaultValue)
-        } else {
-            false
-        }
-    }
 
     // This manual mock is needed to avoid problems when accessing a lazily initialized UserSetting::flow
     // from a mocked Settings class

@@ -19,6 +19,7 @@ import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.preferences.model.BadgeType
 import au.com.shiftyjelly.pocketcasts.preferences.model.PodcastGridLayoutType
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
+import au.com.shiftyjelly.pocketcasts.views.adapter.LockableListAdapter
 import kotlin.math.min
 
 class FolderViewHolder(
@@ -27,7 +28,8 @@ class FolderViewHolder(
     val podcastsLayout: PodcastGridLayoutType,
     val onFolderClick: (Folder) -> Unit,
     val podcastGridLayout: PodcastGridLayoutType,
-) : RecyclerView.ViewHolder(composeView) {
+) : RecyclerView.ViewHolder(composeView),
+    LockableListAdapter.DraggableHolder {
 
     init {
         /* Setting non-default view composition strategy to temporarily fix flickering in folders:
@@ -82,31 +84,53 @@ class FolderViewHolder(
             BadgeType.LATEST_EPISODE -> min(1, episodeCount)
         }
     }
+
+    override fun onStartDragging() = Unit
+
+    override fun onFinishDragging() = Unit
 }
 
 @Composable
-private fun FolderGridAdapter(color: Color, name: String, podcastUuids: List<String>, badgeCount: Int, badgeType: BadgeType, podcastGridLayout: PodcastGridLayoutType, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun FolderGridAdapter(
+    color: Color,
+    name: String,
+    podcastUuids: List<String>,
+    badgeCount: Int,
+    badgeType: BadgeType,
+    podcastGridLayout: PodcastGridLayoutType,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     FolderImage(
         name = name,
         color = color,
         podcastUuids = podcastUuids,
         badgeCount = badgeCount,
         badgeType = badgeType,
-        textSpacing = podcastGridLayout == PodcastGridLayoutType.LARGE_ARTWORK,
+        textSpacing = podcastGridLayout != PodcastGridLayoutType.LIST_VIEW,
         modifier = modifier.clickable { onClick() },
     )
 }
 
 @Composable
-private fun FolderListAdapter(color: Color, name: String, podcastUuids: List<String>, badgeCount: Int, badgeType: BadgeType, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column {
+private fun FolderListAdapter(
+    color: Color,
+    name: String,
+    podcastUuids: List<String>,
+    badgeCount: Int,
+    badgeType: BadgeType,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+    ) {
         FolderListRow(
             color = color,
             name = name,
             podcastUuids = podcastUuids,
             badgeCount = badgeCount,
             badgeType = badgeType,
-            modifier = modifier,
             onClick = onClick,
         )
         HorizontalDivider()

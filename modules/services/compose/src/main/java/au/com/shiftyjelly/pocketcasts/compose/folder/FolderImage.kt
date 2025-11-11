@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,20 +35,19 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.compose.extensions.nonScaledSp
 import au.com.shiftyjelly.pocketcasts.compose.images.CountBadge
 import au.com.shiftyjelly.pocketcasts.compose.images.CountBadgeStyle
 import au.com.shiftyjelly.pocketcasts.preferences.model.BadgeType
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 
 private val gradientTop = Color(0x00000000)
 private val gradientBottom = Color(0x33000000)
 private val topPodcastImageGradient = listOf(Color(0x00000000), Color(0x16000000))
 private val bottomPodcastImageGradient = listOf(Color(0x16000000), Color(0x33000000))
-private const val paddingImageRatio = 4f / 120f
-private const val imageSizeRatio = 44f / 120f
+private const val PADDING_IMAGE_RATIO = 4f / 120f
+private const val IMAGE_SIZE_RATIO = 38f / 120f
 
 @Composable
 fun FolderImage(
@@ -85,12 +85,13 @@ fun FolderImage(
                     )
                     .fillMaxSize(),
             ) {}
-            val podcastSize = (constraints.maxWidth.value * imageSizeRatio).dp
+            val podcastSize = (constraints.maxWidth.value * IMAGE_SIZE_RATIO).dp
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                val imagePadding = (constraints.maxWidth.value * paddingImageRatio).dp
+                val imagePadding = (constraints.maxWidth.value * PADDING_IMAGE_RATIO).dp
                 Spacer(modifier = Modifier.height(imagePadding))
                 Row(horizontalArrangement = Arrangement.Center) {
                     Column(horizontalAlignment = Alignment.End) {
@@ -127,13 +128,13 @@ fun FolderImage(
                 }
                 if (name.isNotBlank()) {
                     if (textSpacing) {
-                        Spacer(modifier = Modifier.height(imagePadding))
+                        Spacer(modifier = Modifier.height(imagePadding * 2))
                     }
                     Text(
                         text = name,
                         color = Color.White,
                         fontSize = fontSize,
-                        fontWeight = FontWeight(500),
+                        fontWeight = FontWeight.W700,
                         letterSpacing = 0.25.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -151,6 +152,7 @@ fun FolderImage(
                                 trim = LineHeightStyle.Trim.Both,
                             ),
                         ),
+                        modifier = Modifier.padding(horizontal = 2.dp),
                     )
                 }
             }
@@ -188,7 +190,6 @@ private fun FolderPodcastImage(
                 elevation = elevation,
                 shape = RoundedCornerShape(corners),
                 backgroundColor = color,
-                modifier = modifier,
             ) {
                 Box(
                     modifier = Modifier
@@ -203,26 +204,25 @@ private fun FolderPodcastImage(
             }
         }
     } else {
-        PodcastImage(
+        @Suppress("DEPRECATION")
+        PodcastImageDeprecated(
             uuid = uuid,
             modifier = modifier,
         )
     }
 }
 
-@ShowkaseComposable(name = "FolderImage", group = "Folder", styleName = "Light", defaultStyle = true)
 @Preview(name = "Light")
 @Composable
-fun FolderImageLightPreview() {
+private fun FolderImageLightPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         FolderImagePreview()
     }
 }
 
-@ShowkaseComposable(name = "FolderImage", group = "Folder", styleName = "Dark")
 @Preview(name = "Dark")
 @Composable
-fun FolderImageDarkPreview() {
+private fun FolderImageDarkPreview() {
     AppThemeWithBackground(Theme.ThemeType.DARK) {
         FolderImagePreview()
     }

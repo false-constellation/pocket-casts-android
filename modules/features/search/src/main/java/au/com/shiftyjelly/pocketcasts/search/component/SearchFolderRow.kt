@@ -12,6 +12,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -26,25 +27,52 @@ import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @Composable
-fun SearchFolderRow(folder: Folder, podcasts: List<Podcast>, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+fun SearchFolderRow(
+    folder: Folder,
+    podcasts: List<Podcast>,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    showFollowed: Boolean = true,
+) {
     val color = MaterialTheme.theme.colors.getFolderColor(folder.color)
     val podcastUuids = podcasts.map { it.uuid }
-    Column {
+    SearchFolderRow(
+        title = folder.name,
+        folderColor = color,
+        podcastUuids = podcastUuids,
+        modifier = modifier,
+        onClick = onClick,
+        showFollowed = showFollowed,
+    )
+}
+
+@Composable
+fun SearchFolderRow(
+    title: String,
+    folderColor: Color,
+    podcastUuids: List<String>,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    showFollowed: Boolean = true,
+) {
+    Column(
+        modifier = modifier,
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.theme.colors.primaryUi01)
                 .then(if (onClick == null) Modifier else Modifier.clickable { onClick() }),
         ) {
             Box(modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 12.dp, bottom = 8.dp)) {
-                FolderImageSmall(color = color, podcastUuids = podcastUuids)
+                FolderImageSmall(color = folderColor, podcastUuids = podcastUuids)
             }
             Column(
                 modifier = Modifier.weight(1f),
             ) {
                 TextH40(
-                    text = folder.name,
+                    text = title,
                     maxLines = 2,
                     modifier = Modifier.padding(bottom = 2.dp),
                 )
@@ -60,12 +88,14 @@ fun SearchFolderRow(folder: Folder, podcasts: List<Podcast>, onClick: (() -> Uni
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            Icon(
-                painter = painterResource(id = IR.drawable.ic_tick),
-                contentDescription = stringResource(LR.string.podcast_subscribed),
-                tint = MaterialTheme.theme.colors.support02,
-                modifier = Modifier.padding(end = 16.dp),
-            )
+            if (showFollowed) {
+                Icon(
+                    painter = painterResource(id = IR.drawable.ic_tick),
+                    contentDescription = stringResource(LR.string.podcast_subscribed),
+                    tint = MaterialTheme.theme.colors.support02,
+                    modifier = Modifier.padding(end = 16.dp),
+                )
+            }
         }
         HorizontalDivider(startIndent = 16.dp)
     }

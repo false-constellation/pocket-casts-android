@@ -29,13 +29,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingForgotPasswordViewModel
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
 import au.com.shiftyjelly.pocketcasts.compose.bars.SystemBarsStyles
 import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
-import au.com.shiftyjelly.pocketcasts.compose.bars.singleAuto
+import au.com.shiftyjelly.pocketcasts.compose.bars.custom
 import au.com.shiftyjelly.pocketcasts.compose.bars.transparent
 import au.com.shiftyjelly.pocketcasts.compose.buttons.RowButton
 import au.com.shiftyjelly.pocketcasts.compose.components.EmailField
@@ -49,11 +49,12 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 @Composable
 fun OnboardingForgotPasswordPage(
     theme: Theme.ThemeType,
-    onBackPressed: () -> Unit,
-    onCompleted: () -> Unit,
+    onBackPress: () -> Unit,
+    onComplete: () -> Unit,
     onUpdateSystemBars: (SystemBarsStyles) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: OnboardingForgotPasswordViewModel = hiltViewModel(),
 ) {
-    val viewModel = hiltViewModel<OnboardingForgotPasswordViewModel>()
     val state by viewModel.stateFlow.collectAsState()
 
     val emailFocusRequester = remember { FocusRequester() }
@@ -66,7 +67,7 @@ fun OnboardingForgotPasswordPage(
             context,
             context.getString(LR.string.profile_reset_password_sent),
             context.getString(LR.string.profile_reset_password_check_email),
-            onComplete = onCompleted,
+            onComplete = onComplete,
         )
     }
 
@@ -76,20 +77,20 @@ fun OnboardingForgotPasswordPage(
         viewModel.onShown()
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(onUpdateSystemBars) {
         emailFocusRequester.requestFocus()
         // Use secondaryUI01 so the status bar matches the ThemedTopAppBar
-        val statusBar = SystemBarStyle.singleAuto(pocketCastsTheme.colors.secondaryUi01) { theme.darkTheme }
+        val statusBar = SystemBarStyle.custom(pocketCastsTheme.colors.secondaryUi01, theme.toolbarLightIcons)
         val navigationBar = SystemBarStyle.transparent { theme.darkTheme }
         onUpdateSystemBars(SystemBarsStyles(statusBar, navigationBar))
     }
     BackHandler {
         viewModel.onBackPressed()
-        onBackPressed()
+        onBackPress()
     }
 
     Column(
-        Modifier
+        modifier
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars)
             .windowInsetsPadding(WindowInsets.ime),
@@ -98,7 +99,7 @@ fun OnboardingForgotPasswordPage(
             title = stringResource(LR.string.profile_reset_password),
             onNavigationClick = {
                 viewModel.onBackPressed()
-                onBackPressed()
+                onBackPress()
             },
         )
 
@@ -149,8 +150,8 @@ private fun OnboardingForgotPasswordPreview(
     AppThemeWithBackground(themeType) {
         OnboardingForgotPasswordPage(
             theme = themeType,
-            onBackPressed = {},
-            onCompleted = {},
+            onBackPress = {},
+            onComplete = {},
             onUpdateSystemBars = {},
         )
     }

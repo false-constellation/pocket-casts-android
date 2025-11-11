@@ -6,12 +6,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -44,12 +46,13 @@ fun OnboardingImportFrom(
     theme: Theme.ThemeType,
     @DrawableRes drawableRes: Int,
     title: String,
-    text: String? = null,
     steps: List<String>,
+    onBackPress: () -> Unit,
+    onUpdateSystemBars: (SystemBarsStyles) -> Unit,
+    modifier: Modifier = Modifier,
+    text: String? = null,
     buttonText: String? = null,
     buttonClick: (() -> Unit)? = null,
-    onBackPressed: () -> Unit,
-    onUpdateSystemBars: (SystemBarsStyles) -> Unit,
 ) {
     val pocketCastsTheme = MaterialTheme.theme
     // Use secondaryUI01 so the status bar matches the ThemedTopAppBar
@@ -58,12 +61,12 @@ fun OnboardingImportFrom(
     onUpdateSystemBars(SystemBarsStyles(statusBar, navigationBar))
 
     Column(
-        Modifier
-            .fillMaxHeight(),
+        modifier = modifier
+            .fillMaxHeight()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
     ) {
         ThemedTopAppBar(
-            onNavigationClick = onBackPressed,
-            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+            onNavigationClick = onBackPress,
         )
 
         Column(
@@ -95,7 +98,10 @@ fun OnboardingImportFrom(
                 onClick = buttonClick,
             )
         }
-        Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars))
+
+        Spacer(
+            modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
+        )
     }
 }
 
@@ -151,7 +157,7 @@ private fun OnboardingImportFromPreview(
     AppThemeWithBackground(themeType = themeType) {
         OnboardingImportFrom(
             theme = themeType,
-            drawableRes = IR.drawable.castbox,
+            drawableRes = IR.drawable.ic_heart,
             title = "Import from something",
             text = "Some text to go with the title.",
             steps = listOf(
@@ -161,7 +167,7 @@ private fun OnboardingImportFromPreview(
             ),
             buttonText = "A button",
             buttonClick = {},
-            onBackPressed = {},
+            onBackPress = {},
             onUpdateSystemBars = {},
         )
     }

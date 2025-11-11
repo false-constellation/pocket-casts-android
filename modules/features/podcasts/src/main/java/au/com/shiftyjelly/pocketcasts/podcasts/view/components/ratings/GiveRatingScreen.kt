@@ -36,10 +36,12 @@ import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.starsToRating
 
 @Composable
 fun GiveRatingScreen(
-    viewModel: GiveRatingViewModel,
     state: GiveRatingViewModel.State.Loaded,
+    onRatingUpdate: (Double) -> Unit,
     submitRating: () -> Unit,
+    onShow: () -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -51,11 +53,11 @@ fun GiveRatingScreen(
     )
 
     CallOnce {
-        viewModel.trackOnGiveRatingScreenShown(state.podcastUuid)
+        onShow()
     }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -89,7 +91,7 @@ fun GiveRatingScreen(
 
                 SwipeableStars(
                     initialRate = state.previousRate?.let { starsToRating(it) },
-                    onStarsChanged = viewModel::setRating,
+                    onStarsChange = onRatingUpdate,
                     modifier = Modifier
                         .height(48.dp)
                         .padding(horizontal = 16.dp),
@@ -111,9 +113,9 @@ fun GiveRatingScreen(
         }
 
         NavigationIconButton(
-            iconColor = MaterialTheme.theme.colors.primaryText01,
+            tint = MaterialTheme.theme.colors.primaryText01,
             navigationButton = NavigationButton.Close,
-            onNavigationClick = onDismiss,
+            onClick = onDismiss,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(16.dp),

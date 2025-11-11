@@ -3,10 +3,12 @@ package au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade
 import androidx.activity.SystemBarStyle
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,11 +21,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
@@ -36,35 +40,40 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Snackbar
+import androidx.compose.material.SnackbarHost
+import androidx.compose.material.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import au.com.shiftyjelly.pocketcasts.account.components.SubscriptionPriceLabel
 import au.com.shiftyjelly.pocketcasts.account.onboarding.components.UpgradeFeatureItem
 import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.OnboardingUpgradeHelper.UpgradeRowButton
-import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.paywallfeatures.UpgradeLayoutFeatures
-import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.paywallreviews.UpgradeLayoutReviews
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeFeaturesState
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeFeaturesViewModel
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
@@ -72,16 +81,21 @@ import au.com.shiftyjelly.pocketcasts.compose.bars.NavigationIconButton
 import au.com.shiftyjelly.pocketcasts.compose.bars.SystemBarsStyles
 import au.com.shiftyjelly.pocketcasts.compose.components.AutoResizeText
 import au.com.shiftyjelly.pocketcasts.compose.components.HorizontalPagerWrapper
+import au.com.shiftyjelly.pocketcasts.compose.components.NoContentBanner
 import au.com.shiftyjelly.pocketcasts.compose.components.SegmentedTabBar
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH30
+import au.com.shiftyjelly.pocketcasts.compose.components.TextH60
 import au.com.shiftyjelly.pocketcasts.compose.images.OfferBadge
 import au.com.shiftyjelly.pocketcasts.compose.images.SubscriptionBadge
 import au.com.shiftyjelly.pocketcasts.compose.theme
-import au.com.shiftyjelly.pocketcasts.models.type.Subscription
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionFrequency
+import au.com.shiftyjelly.pocketcasts.payment.BillingCycle
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
 import au.com.shiftyjelly.pocketcasts.utils.extensions.pxToDp
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 private const val MAX_OFFER_BADGE_TEXT_LENGTH = 23
@@ -89,27 +103,25 @@ private const val MIN_SCREEN_WIDTH_FOR_HORIZONTAL_DISPLAY = 400
 
 @Composable
 internal fun OnboardingUpgradeFeaturesPage(
+    viewModel: OnboardingUpgradeFeaturesViewModel,
+    state: OnboardingUpgradeFeaturesState,
     flow: OnboardingFlow,
     source: OnboardingUpgradeSource,
-    onBackPressed: () -> Unit,
+    onBackPress: () -> Unit,
     onClickSubscribe: (showUpgradeBottomSheet: Boolean) -> Unit,
-    onNotNowPressed: () -> Unit,
-    canUpgrade: Boolean,
+    onNotNowPress: () -> Unit,
     onUpdateSystemBars: (SystemBarsStyles) -> Unit,
 ) {
-    val viewModel = hiltViewModel<OnboardingUpgradeFeaturesViewModel>()
-    val state by viewModel.state.collectAsState()
-
     @Suppress("NAME_SHADOWING")
-    val onNotNowPressed = {
+    val onNotNowPress = {
         viewModel.onNotNow(flow, source)
-        onNotNowPressed()
+        onNotNowPress()
     }
 
     @Suppress("NAME_SHADOWING")
-    val onBackPressed = {
+    val onBackPress = {
         viewModel.onDismiss(flow, source)
-        onBackPressed()
+        onBackPress()
     }
 
     CallOnce {
@@ -122,68 +134,70 @@ internal fun OnboardingUpgradeFeaturesPage(
     when (state) {
         is OnboardingUpgradeFeaturesState.Loading -> Unit // Do Nothing
         is OnboardingUpgradeFeaturesState.Loaded -> {
-            val loadedState = state as OnboardingUpgradeFeaturesState.Loaded
-            when (loadedState.upgradeLayout) {
-                UpgradeLayout.Features -> {
-                    UpgradeLayoutFeatures(
-                        state = loadedState,
-                        source = source,
-                        scrollState = scrollState,
-                        onNotNowPressed = onNotNowPressed,
-                        onClickSubscribe = { onClickSubscribe(true) },
-                        canUpgrade = canUpgrade,
-                    )
-                }
-                UpgradeLayout.Reviews -> {
-                    UpgradeLayoutReviews(
-                        state = loadedState,
-                        onNotNowPressed = onNotNowPressed,
-                        onClickSubscribe = { onClickSubscribe(true) },
-                        canUpgrade = canUpgrade,
-                    )
-                }
-                UpgradeLayout.Original -> {
-                    UpgradeLayoutOriginal(
-                        state = loadedState,
-                        source = source,
-                        scrollState = scrollState,
-                        onBackPressed = onBackPressed,
-                        onNotNowPressed = onNotNowPressed,
-                        onSubscriptionFrequencyChanged = { viewModel.onSubscriptionFrequencyChanged(it) },
-                        onFeatureCardChanged = { viewModel.onFeatureCardChanged(loadedState.featureCardsState.featureCards[it]) },
-                        onClickSubscribe = { onClickSubscribe(false) },
-                        canUpgrade = canUpgrade,
-                    )
-                }
+            if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)) {
+                OnboardingUpgradeScreen(
+                    onClosePress = {
+                        if (source == OnboardingUpgradeSource.RECOMMENDATIONS) {
+                            onNotNowPress()
+                        } else {
+                            onBackPress()
+                        }
+                    },
+                    state = state,
+                    source = source,
+                    onChangeSelectedPlan = { viewModel.changeBillingCycle(it.billingCycle) },
+                    onSubscribePress = { onClickSubscribe(false) },
+                    onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed() },
+                    onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed() },
+                )
+            } else {
+                UpgradeLayout(
+                    state = state,
+                    source = source,
+                    scrollState = scrollState,
+                    onBackPress = onBackPress,
+                    onNotNowPress = onNotNowPress,
+                    onChangeBillingCycle = { viewModel.changeBillingCycle(it) },
+                    onChangeSubscriptionTier = { viewModel.changeSubscriptionTier(it) },
+                    onClickSubscribe = { onClickSubscribe(false) },
+                    onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed() },
+                    onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed() },
+                )
             }
         }
+
         is OnboardingUpgradeFeaturesState.NoSubscriptions -> {
             NoSubscriptionsLayout(
-                showNotNow = (state as OnboardingUpgradeFeaturesState.NoSubscriptions).showNotNow,
-                onBackPressed = onBackPressed,
-                onNotNowPressed = onNotNowPressed,
+                showNotNow = source == OnboardingUpgradeSource.RECOMMENDATIONS,
+                onTryAgainClick = { viewModel.loadSubscriptionPlans() },
+                onNotNowClick = onNotNowPress,
+                onBackPress = onBackPress,
             )
         }
     }
 }
 
 @Composable
-private fun UpgradeLayoutOriginal(
+private fun UpgradeLayout(
     state: OnboardingUpgradeFeaturesState.Loaded,
     source: OnboardingUpgradeSource,
     scrollState: ScrollState,
-    onBackPressed: () -> Unit,
-    onNotNowPressed: () -> Unit,
-    onSubscriptionFrequencyChanged: (SubscriptionFrequency) -> Unit,
-    onFeatureCardChanged: (Int) -> Unit,
+    onBackPress: () -> Unit,
+    onNotNowPress: () -> Unit,
+    onChangeBillingCycle: (BillingCycle) -> Unit,
+    onChangeSubscriptionTier: (SubscriptionTier) -> Unit,
     onClickSubscribe: () -> Unit,
-    canUpgrade: Boolean,
+    onClickPrivacyPolicy: () -> Unit,
+    onClickTermsAndConditions: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier.fillMaxHeight(),
         contentAlignment = Alignment.BottomCenter,
     ) {
+        val focusPager = remember { FocusRequester() }
+        val snackbarHostState = remember { SnackbarHostState() }
+
         // Need this BoxWithConstraints so we can force the inner column to fill the screen with vertical scroll enabled
         BoxWithConstraints(
             Modifier
@@ -192,8 +206,8 @@ private fun UpgradeLayoutOriginal(
         ) {
             OnboardingUpgradeHelper.UpgradeBackground(
                 modifier = Modifier.verticalScroll(scrollState),
-                tier = state.currentFeatureCard.subscriptionTier,
-                backgroundGlowsRes = state.currentFeatureCard.backgroundGlowsRes,
+                tier = state.selectedPlan.key.tier,
+                backgroundGlowsRes = state.selectedPlan.backgroundGlowsRes,
             ) {
                 Column(
                     Modifier
@@ -210,19 +224,19 @@ private fun UpgradeLayoutOriginal(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         NavigationIconButton(
-                            onNavigationClick = onBackPressed,
-                            iconColor = Color.White,
+                            onClick = onBackPress,
+                            tint = Color.White,
                             modifier = Modifier
                                 .height(48.dp)
                                 .width(48.dp),
                         )
-                        if (state.showNotNow) {
+                        if (source == OnboardingUpgradeSource.RECOMMENDATIONS) {
                             TextH30(
                                 text = stringResource(LR.string.not_now),
                                 color = Color.White,
                                 modifier = Modifier
                                     .padding(horizontal = 24.dp)
-                                    .clickable { onNotNowPressed() },
+                                    .clickable { onNotNowPress() },
                             )
                         }
                     }
@@ -235,13 +249,14 @@ private fun UpgradeLayoutOriginal(
                             contentAlignment = Alignment.Center,
                         ) {
                             AutoResizeText(
-                                text = stringResource(state.currentFeatureCard.titleRes(source)),
+                                text = stringResource(state.selectedPlan.customFeatureTitle(source)),
                                 color = Color.White,
                                 maxFontSize = 22.sp,
                                 lineHeight = 30.sp,
                                 fontWeight = FontWeight.W700,
                                 maxLines = 2,
                                 textAlign = TextAlign.Center,
+                                isFocusable = true,
                                 modifier = Modifier
                                     .padding(horizontal = 24.dp)
                                     .fillMaxWidth(),
@@ -256,24 +271,25 @@ private fun UpgradeLayoutOriginal(
                                 .padding(bottom = 24.dp),
                             contentAlignment = Alignment.Center,
                         ) {
+                            val billingCycles = remember(state.availablePlans) {
+                                state.availablePlans
+                                    .map { it.key.billingCycle }
+                                    .distinct()
+                            }
                             SegmentedTabBar(
-                                items = state.subscriptionFrequencies
-                                    .map { stringResource(id = it.localisedLabelRes) },
-                                selectedIndex = state.subscriptionFrequencies.indexOf(
-                                    state.currentSubscriptionFrequency,
-                                ),
-                                onItemSelected = {
-                                    val selectedFrequency = state.subscriptionFrequencies[it]
-                                    onSubscriptionFrequencyChanged(selectedFrequency)
-                                },
+                                items = billingCycles.map { stringResource(it.labelRes) },
+                                selectedIndex = billingCycles.indexOf(state.selectedPlan.key.billingCycle),
+                                onSelectItem = { index -> onChangeBillingCycle(billingCycles[index]) },
                                 modifier = Modifier.width(IntrinsicSize.Max),
                             )
                         }
 
                         FeatureCards(
+                            modifier = Modifier.focusRequester(focusPager),
                             state = state,
-                            upgradeButton = state.currentUpgradeButton,
-                            onFeatureCardChanged = onFeatureCardChanged,
+                            onChangeSubscriptionTier = onChangeSubscriptionTier,
+                            onPrivacyPolicyClick = onClickPrivacyPolicy,
+                            onTermsAndConditionsClick = onClickTermsAndConditions,
                         )
                     }
 
@@ -282,53 +298,89 @@ private fun UpgradeLayoutOriginal(
             }
         }
 
-        if (canUpgrade) {
-            UpgradeButton(
-                button = state.currentUpgradeButton,
-                onClickSubscribe = onClickSubscribe,
-            )
+        UpgradeButton(
+            selectedPlan = state.selectedPlan,
+            upFocusRequester = focusPager,
+            onClickSubscribe = onClickSubscribe,
+        )
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 20.dp, vertical = 42.dp),
+        ) { snackbarData ->
+            Snackbar(
+                backgroundColor = Color.White,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Image(
+                        painter = painterResource(IR.drawable.ic_warning),
+                        colorFilter = ColorFilter.tint(MaterialTheme.theme.colors.support05),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    TextH60(
+                        text = snackbarData.message,
+                        color = Color.Black,
+                    )
+                }
+            }
+        }
+
+        if (state.purchaseFailed) {
+            val message = stringResource(LR.string.onboarding_upgrade_purchase_failure_message)
+            LaunchedEffect(state.purchaseFailed) {
+                snackbarHostState.showSnackbar(message)
+            }
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FeatureCards(
     state: OnboardingUpgradeFeaturesState.Loaded,
-    upgradeButton: UpgradeButton,
-    onFeatureCardChanged: (Int) -> Unit,
+    onChangeSubscriptionTier: (SubscriptionTier) -> Unit,
+    modifier: Modifier = Modifier,
+    onPrivacyPolicyClick: () -> Unit = {},
+    onTermsAndConditionsClick: () -> Unit = {},
 ) {
-    val featureCardsState = state.featureCardsState
-    val currentSubscriptionFrequency = state.currentSubscriptionFrequency
+    val subscriptionPlans = state.availablePlans.filter { it.key.billingCycle == state.selectedPlan.key.billingCycle }
     HorizontalPagerWrapper(
-        pageCount = featureCardsState.featureCards.size,
-        initialPage = featureCardsState.featureCards.indexOf(state.currentFeatureCard),
-        onPageChanged = onFeatureCardChanged,
-        showPageIndicator = featureCardsState.showPageIndicator,
+        modifier = modifier,
+        pageCount = subscriptionPlans.size,
+        initialPage = subscriptionPlans.indexOf(state.selectedPlan).takeIf { it != -1 } ?: 0,
+        onPageChange = { index -> onChangeSubscriptionTier(subscriptionPlans[index].key.tier) },
+        showPageIndicator = subscriptionPlans.size > 1,
         pageSize = PageSize.Fixed(LocalConfiguration.current.screenWidthDp.dp - 64.dp),
         contentPadding = PaddingValues(horizontal = 32.dp),
-    ) { index, pagerHeight ->
+    ) { index, pagerHeight, focusRequester ->
         FeatureCard(
-            subscription = state.currentSubscription,
-            card = featureCardsState.featureCards[index],
-            subscriptionFrequency = currentSubscriptionFrequency,
-            upgradeButton = upgradeButton,
+            subscriptionPlan = subscriptionPlans[index],
+            onPrivacyPolicyClick = onPrivacyPolicyClick,
+            onTermsAndConditionsClick = onTermsAndConditionsClick,
             modifier = if (pagerHeight > 0) {
                 Modifier.height(pagerHeight.pxToDp(LocalContext.current).dp)
             } else {
                 Modifier
-            },
+            }.then(
+                Modifier.focusRequester(focusRequester),
+            ),
         )
     }
 }
 
+private val secondaryTextColor = Color(0xFF6F7580)
+
 @Composable
 private fun FeatureCard(
-    card: UpgradeFeatureCard,
-    upgradeButton: UpgradeButton,
-    subscription: Subscription,
-    subscriptionFrequency: SubscriptionFrequency,
+    subscriptionPlan: OnboardingSubscriptionPlan,
     modifier: Modifier = Modifier,
+    onPrivacyPolicyClick: () -> Unit = {},
+    onTermsAndConditionsClick: () -> Unit = {},
 ) {
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -341,7 +393,7 @@ private fun FeatureCard(
         Column(
             modifier = Modifier.padding(24.dp),
         ) {
-            var offerBadgeTextLength by remember { mutableStateOf(MAX_OFFER_BADGE_TEXT_LENGTH) }
+            var offerBadgeTextLength by remember { mutableIntStateOf(MAX_OFFER_BADGE_TEXT_LENGTH) }
             val screenWidth = LocalConfiguration.current.screenWidthDp
             val displayInHorizontal = screenWidth >= MIN_SCREEN_WIDTH_FOR_HORIZONTAL_DISPLAY && offerBadgeTextLength <= MAX_OFFER_BADGE_TEXT_LENGTH
 
@@ -353,8 +405,8 @@ private fun FeatureCard(
                         .padding(bottom = 12.dp),
                 ) {
                     SubscriptionBadge(
-                        iconRes = card.iconRes,
-                        shortNameRes = card.shortNameRes,
+                        iconRes = subscriptionPlan.badgeIconRes,
+                        shortNameRes = subscriptionPlan.shortNameRes,
                         backgroundColor = Color.Black,
                         textColor = Color.White,
                         modifier = Modifier
@@ -362,13 +414,13 @@ private fun FeatureCard(
                             .wrapContentHeight(),
                     )
 
-                    if (subscription is Subscription.WithOffer) {
-                        val offerText = subscription.badgeOfferText(LocalContext.current.resources)
-                        offerBadgeTextLength = offerText.length
+                    val offerBadgeText = subscriptionPlan.offerBadgeText
+                    if (offerBadgeText != null) {
+                        offerBadgeTextLength = offerBadgeText.length
                         OfferBadge(
-                            text = offerText,
-                            backgroundColor = upgradeButton.backgroundColorRes,
-                            textColor = upgradeButton.textColorRes,
+                            text = offerBadgeText,
+                            backgroundColor = subscriptionPlan.offerBadgeColorRes,
+                            textColor = subscriptionPlan.offerBadgeTextColorRes,
                             modifier = Modifier.padding(start = 4.dp),
                         )
                     }
@@ -380,8 +432,8 @@ private fun FeatureCard(
                         .padding(bottom = 8.dp),
                 ) {
                     SubscriptionBadge(
-                        iconRes = card.iconRes,
-                        shortNameRes = card.shortNameRes,
+                        iconRes = subscriptionPlan.badgeIconRes,
+                        shortNameRes = subscriptionPlan.shortNameRes,
                         backgroundColor = Color.Black,
                         textColor = Color.White,
                         modifier = Modifier
@@ -389,56 +441,77 @@ private fun FeatureCard(
                             .wrapContentHeight(),
                     )
 
-                    if (subscription is Subscription.WithOffer) {
-                        val offerText = subscription.badgeOfferText(LocalContext.current.resources)
-                        offerBadgeTextLength = offerText.length
+                    val offerBadgeText = subscriptionPlan.offerBadgeText
+                    if (offerBadgeText != null) {
+                        offerBadgeTextLength = offerBadgeText.length
                         OfferBadge(
-                            text = offerText,
-                            backgroundColor = upgradeButton.backgroundColorRes,
-                            textColor = upgradeButton.textColorRes,
-                            modifier = Modifier.padding(top = 4.dp),
+                            text = offerBadgeText,
+                            backgroundColor = subscriptionPlan.offerBadgeColorRes,
+                            textColor = subscriptionPlan.offerBadgeTextColorRes,
+                            modifier = Modifier.padding(start = 4.dp),
                         )
                     }
                 }
             }
 
-            Column {
-                SubscriptionProductAmountHorizontal(subscription, hasBackgroundAlwaysWhite = true)
+            Column(
+                modifier = Modifier.focusGroup(),
+            ) {
+                SubscriptionPriceLabel(
+                    subscriptionPlan = subscriptionPlan,
+                    isFocusable = true,
+                    primaryTextColor = Color.Black,
+                    secondaryTextColor = secondaryTextColor,
+                )
 
-                Spacer(modifier = Modifier.padding(vertical = 4.dp))
+                Spacer(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
 
-                card.featureItems(subscriptionFrequency).forEach {
-                    UpgradeFeatureItem(it)
+                subscriptionPlan.featureItems.forEach { item ->
+                    UpgradeFeatureItem(item = item)
                 }
-                Spacer(modifier = Modifier.weight(1f))
+
+                Spacer(
+                    modifier = Modifier.weight(1f),
+                )
+
                 OnboardingUpgradeHelper.PrivacyPolicy(
-                    color = Color.Black.copy(alpha = .5f),
+                    modifier = Modifier.focusable(),
+                    color = secondaryTextColor,
                     textAlign = TextAlign.Start,
                     lineHeight = 18.sp,
+                    onPrivacyPolicyClick = onPrivacyPolicyClick,
+                    onTermsAndConditionsClick = onTermsAndConditionsClick,
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun UpgradeButton(
-    button: UpgradeButton,
+    selectedPlan: OnboardingSubscriptionPlan,
     onClickSubscribe: () -> Unit,
+    upFocusRequester: FocusRequester,
 ) {
-    val resources = LocalContext.current.resources
-    val shortName = resources.getString(button.shortNameRes)
-    val primaryText = stringResource(LR.string.subscribe_to, shortName)
-
     Box(
         contentAlignment = Alignment.BottomCenter,
-        modifier = Modifier.fadeBackground(),
+        modifier = Modifier
+            .fadeBackground()
+            .focusProperties {
+                up = upFocusRequester
+                down = FocusRequester.Cancel
+                left = FocusRequester.Cancel
+                right = FocusRequester.Cancel
+            },
     ) {
         Column {
             UpgradeRowButton(
-                primaryText = primaryText,
-                backgroundColor = colorResource(button.backgroundColorRes),
-                textColor = colorResource(button.textColorRes),
+                primaryText = selectedPlan.ctaButtonText(isRenewingSubscription = false),
+                backgroundColor = selectedPlan.ctaButtonBackgroundColor,
+                textColor = selectedPlan.ctaButtonTextColor,
                 fontWeight = FontWeight.W500,
                 onClick = onClickSubscribe,
                 modifier = Modifier
@@ -447,8 +520,7 @@ internal fun UpgradeButton(
                     .heightIn(min = 48.dp),
             )
             Spacer(
-                modifier = Modifier
-                    .windowInsetsBottomHeight(WindowInsets.navigationBars),
+                modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars),
             )
         }
     }
@@ -473,7 +545,7 @@ private fun SetStatusBarBackground(
         Color.Transparent.toArgb()
     }
 
-    LaunchedEffect(statusBarBackground) {
+    LaunchedEffect(statusBarBackground, onUpdateSystemBars) {
         val statusBar = SystemBarStyle.dark(statusBarBackground)
         val navigationBar = SystemBarStyle.dark(Color.Transparent.toArgb())
         onUpdateSystemBars(SystemBarsStyles(statusBar, navigationBar))
@@ -493,50 +565,47 @@ internal fun BoxWithConstraintsScope.calculateMinimumHeightWithInsets(): Dp {
 }
 
 @Composable
-fun NoSubscriptionsLayout(
-    onBackPressed: () -> Unit,
-    onNotNowPressed: () -> Unit,
+private fun NoSubscriptionsLayout(
     showNotNow: Boolean,
+    onTryAgainClick: () -> Unit,
+    onNotNowClick: () -> Unit,
+    onBackPress: () -> Unit,
 ) {
     Column(
-        Modifier
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .fillMaxWidth(),
+            .fillMaxSize(),
     ) {
         Spacer(Modifier.height(8.dp))
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             NavigationIconButton(
-                onNavigationClick = onBackPressed,
-                iconColor = MaterialTheme.theme.colors.primaryText01,
+                onClick = onBackPress,
+                tint = MaterialTheme.theme.colors.primaryText01,
                 modifier = Modifier
                     .height(48.dp)
                     .width(48.dp),
             )
-            if (showNotNow) {
-                TextH30(
-                    text = stringResource(LR.string.not_now),
-                    color = MaterialTheme.theme.colors.primaryText01,
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .clickable { onNotNowPressed() },
-                )
-            }
         }
         Spacer(modifier = Modifier.weight(1f))
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            TextH30(
-                text = stringResource(id = LR.string.onboarding_upgrade_no_subscriptions_found),
-            )
-        }
-        Spacer(modifier = Modifier.weight(1f))
+
+        NoContentBanner(
+            title = stringResource(LR.string.onboarding_upgrade_no_plans_found_title),
+            body = stringResource(LR.string.onboarding_upgrade_no_plans_found_body),
+            iconResourceId = IR.drawable.ic_warning,
+            primaryButtonText = stringResource(LR.string.try_again),
+            onPrimaryButtonClick = onTryAgainClick,
+            secondaryButtonText = if (showNotNow) stringResource(LR.string.skip_for_now) else null,
+            onSecondaryButtonClick = onNotNowClick,
+        )
+
+        Spacer(modifier = Modifier.weight(1.5f))
     }
 }
 
@@ -554,3 +623,8 @@ private fun Modifier.fadeBackground() = this
             drawContent()
         }
     }
+
+private val BillingCycle.labelRes get() = when (this) {
+    BillingCycle.Monthly -> LR.string.plus_monthly
+    BillingCycle.Yearly -> LR.string.plus_yearly
+}

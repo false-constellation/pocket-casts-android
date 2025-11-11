@@ -43,7 +43,9 @@ import kotlinx.coroutines.Dispatchers
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @AndroidEntryPoint
-class CreateFilterChipFragment : BaseFragment(), CoroutineScope {
+class CreateFilterChipFragment :
+    BaseFragment(),
+    CoroutineScope {
     @Inject lateinit var settings: Settings
 
     override val coroutineContext: CoroutineContext
@@ -104,7 +106,7 @@ class CreateFilterChipFragment : BaseFragment(), CoroutineScope {
 
     private fun observePlaylist() {
         viewModel.playlist?.observe(viewLifecycleOwner) { playlist ->
-            val color = playlist.getColor(context)
+            val color = playlist.icon.getColor(requireContext())
 
             val chipPodcasts = binding.chipPodcasts
             if (playlist.allPodcasts) {

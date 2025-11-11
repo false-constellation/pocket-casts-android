@@ -41,7 +41,7 @@ internal interface ShareEpisodeTimestampPageListener {
     companion object {
         val Preview = object : ShareEpisodeTimestampPageListener {
             override suspend fun onShare(podcast: Podcast, episode: PodcastEpisode, timestamp: Duration, platform: SocialPlatform, cardType: VisualCardType) = SharingResponse(
-                isSuccsessful = true,
+                isSuccessful = true,
                 feedbackMessage = null,
                 error = null,
             )
@@ -177,27 +177,27 @@ private fun HorizontalShareEpisodeTimestampPage(
     )
 }
 
-@Preview(name = "ShareEpisodeTimestampVerticalRegularPreview", device = Devices.PortraitRegular)
+@Preview(name = "ShareEpisodeTimestampVerticalRegularPreview", device = Devices.PORTRAIT_REGULAR)
 @Composable
 private fun ShareEpisodeTimestampVerticalRegularPreview() = ShareEpisodeTimestampPagePreview()
 
-@Preview(name = "ShareEpisodeTimestampVerticalSmallPreview", device = Devices.PortraitSmall)
+@Preview(name = "ShareEpisodeTimestampVerticalSmallPreview", device = Devices.PORTRAIT_SMALL)
 @Composable
 private fun ShareEpisodeTimestampVerticalSmallPreviewPreview() = ShareEpisodeTimestampPagePreview()
 
-@Preview(name = "ShareEpisodeTimestampVerticalTabletPreview", device = Devices.PortraitTablet)
+@Preview(name = "ShareEpisodeTimestampVerticalTabletPreview", device = Devices.PORTRAIT_TABLET)
 @Composable
 private fun ShareEpisodeTimestampVerticalTabletPreview() = ShareEpisodeTimestampPagePreview()
 
-@Preview(name = "ShareEpisodeTimestampHorizontalRegularPreview", device = Devices.LandscapeRegular)
+@Preview(name = "ShareEpisodeTimestampHorizontalRegularPreview", device = Devices.LANDSCAPE_REGULAR)
 @Composable
 private fun ShareEpisodeTimestampHorizontalRegularPreview() = ShareEpisodeTimestampPagePreview()
 
-@Preview(name = "ShareEpisodeTimestampHorizontalSmallPreview", device = Devices.LandscapeSmall)
+@Preview(name = "ShareEpisodeTimestampHorizontalSmallPreview", device = Devices.LANDSCAPE_SMALL)
 @Composable
 private fun ShareEpisodeTimestampHorizontalSmallPreviewPreview() = ShareEpisodeTimestampPagePreview()
 
-@Preview(name = "ShareEpisodeTimestampHorizontalTabletPreview", device = Devices.LandscapeTablet)
+@Preview(name = "ShareEpisodeTimestampHorizontalTabletPreview", device = Devices.LANDSCAPE_TABLET)
 @Composable
 private fun ShareEpisodeTimestampHorizontalTabletPreview() = ShareEpisodeTimestampPagePreview()
 

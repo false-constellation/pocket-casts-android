@@ -7,9 +7,10 @@ import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.Chapter
 import au.com.shiftyjelly.pocketcasts.models.to.Chapters
-import au.com.shiftyjelly.pocketcasts.models.to.SubscriptionStatus
+import au.com.shiftyjelly.pocketcasts.models.type.Subscription
 import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionPlatform
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.BillingCycle
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.player.view.chapters.ChaptersViewModel
 import au.com.shiftyjelly.pocketcasts.player.view.chapters.ChaptersViewModel.Mode
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -18,10 +19,8 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackState
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.ChapterManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
-import au.com.shiftyjelly.pocketcasts.sharedtest.InMemoryFeatureFlagRule
 import au.com.shiftyjelly.pocketcasts.sharedtest.MainCoroutineRule
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import java.time.Instant
 import java.util.Date
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -50,9 +49,6 @@ class ChaptersViewModelTest {
     @get:Rule
     val coroutineRule = MainCoroutineRule(testDispatcher)
 
-    @get:Rule
-    val featureFlagRule = InMemoryFeatureFlagRule()
-
     private val chapterManager = mock<ChapterManager>()
     private val playbackManager = mock<PlaybackManager>()
     private val episodeManager = mock<EpisodeManager>()
@@ -62,24 +58,24 @@ class ChaptersViewModelTest {
     private val episode = PodcastEpisode(uuid = "id", publishedDate = Date())
     private val chapters = Chapters(
         listOf(
-            Chapter("1", 0.milliseconds, 100.milliseconds, selected = true, index = 0),
-            Chapter("2", 101.milliseconds, 200.milliseconds, selected = true, index = 1),
-            Chapter("3", 201.milliseconds, 300.milliseconds, selected = true, index = 2),
+            Chapter("1", 0.milliseconds, 100.milliseconds, selected = true, index = 0, uiIndex = 1),
+            Chapter("2", 101.milliseconds, 200.milliseconds, selected = true, index = 1, uiIndex = 2),
+            Chapter("3", 201.milliseconds, 300.milliseconds, selected = true, index = 2, uiIndex = 3),
         ),
     )
 
     private val playbackStateFlow = MutableStateFlow(PlaybackState(episodeUuid = "id"))
     private val episodeFlow = MutableStateFlow<BaseEpisode>(episode)
     private val chaptersFlow = MutableStateFlow(chapters)
-    private val subscriptionStatusFlow = MutableStateFlow<SubscriptionStatus?>(
-        SubscriptionStatus.Paid(
-            expiryDate = Date(),
-            autoRenew = false,
-            index = 0,
-            platform = SubscriptionPlatform.GIFT,
-            tier = SubscriptionTier.PATRON,
-        ),
+    private val plusSubscription = Subscription(
+        tier = SubscriptionTier.Plus,
+        billingCycle = BillingCycle.Monthly,
+        platform = SubscriptionPlatform.Android,
+        expiryDate = Instant.now(),
+        isAutoRenewing = true,
+        giftDays = 0,
     )
+    private val subscriptionFlow = MutableStateFlow<Subscription?>(plusSubscription)
 
     private lateinit var chaptersViewModel: ChaptersViewModel
 
@@ -88,11 +84,9 @@ class ChaptersViewModelTest {
         whenever(playbackManager.playbackStateFlow).thenReturn(playbackStateFlow)
         whenever(episodeManager.findEpisodeByUuidFlow("id")).thenReturn(episodeFlow)
         whenever(chapterManager.observerChaptersForEpisode("id")).thenReturn(chaptersFlow)
-        val userSetting = mock<UserSetting<SubscriptionStatus?>>()
-        whenever(userSetting.flow).thenReturn(subscriptionStatusFlow)
-        whenever(settings.cachedSubscriptionStatus).thenReturn(userSetting)
-
-        FeatureFlag.setEnabled(Feature.DESELECT_CHAPTERS, true)
+        val userSetting = mock<UserSetting<Subscription?>>()
+        whenever(userSetting.flow).thenReturn(subscriptionFlow)
+        whenever(settings.cachedSubscription).thenReturn(userSetting)
 
         chaptersViewModel = ChaptersViewModel(
             Mode.Episode(episode.uuid),
@@ -113,26 +107,8 @@ class ChaptersViewModelTest {
     }
 
     @Test
-    fun `paid user cant skip chapters if feature is disabled`() = runTest {
-        FeatureFlag.setEnabled(Feature.DESELECT_CHAPTERS, false)
-
-        chaptersViewModel.uiState.test {
-            assertFalse(awaitItem().canSkipChapters)
-        }
-    }
-
-    @Test
     fun `free user cant skip chapters`() = runTest {
-        subscriptionStatusFlow.value = SubscriptionStatus.Free()
-
-        chaptersViewModel.uiState.test {
-            assertFalse(awaitItem().canSkipChapters)
-        }
-    }
-
-    @Test
-    fun `unknown user cant skip chapters`() = runTest {
-        subscriptionStatusFlow.value = null
+        subscriptionFlow.value = null
 
         chaptersViewModel.uiState.test {
             assertFalse(awaitItem().canSkipChapters)
@@ -146,9 +122,9 @@ class ChaptersViewModelTest {
         chaptersViewModel.uiState.test {
             val state = awaitItem()
 
-            assertEquals(ChaptersViewModel.ChapterState.Played(chapters.getList()[0]), state.chapters[0])
-            assertEquals(ChaptersViewModel.ChapterState.Playing(progress = 0.4949495f, chapters.getList()[1]), state.chapters[1])
-            assertEquals(ChaptersViewModel.ChapterState.NotPlayed(chapters.getList()[2]), state.chapters[2])
+            assertEquals(ChaptersViewModel.ChapterState.Played(chapters[0]), state.chapters[0])
+            assertEquals(ChaptersViewModel.ChapterState.Playing(progress = 0.4949495f, chapters[1]), state.chapters[1])
+            assertEquals(ChaptersViewModel.ChapterState.NotPlayed(chapters[2]), state.chapters[2])
         }
     }
 
@@ -156,15 +132,6 @@ class ChaptersViewModelTest {
     fun `show header for podcast episode`() = runTest {
         chaptersViewModel.uiState.test {
             assertTrue(awaitItem().showHeader)
-        }
-    }
-
-    @Test
-    fun `do not show header when feature is disabled`() = runTest {
-        FeatureFlag.setEnabled(Feature.DESELECT_CHAPTERS, false)
-
-        chaptersViewModel.uiState.test {
-            assertFalse(awaitItem().showHeader)
         }
     }
 
@@ -192,7 +159,7 @@ class ChaptersViewModelTest {
 
     @Test
     fun `free user cant toggle chapters`() = runTest {
-        subscriptionStatusFlow.value = SubscriptionStatus.Free()
+        subscriptionFlow.value = null
 
         chaptersViewModel.uiState.test {
             assertFalse(awaitItem().isTogglingChapters)
@@ -206,14 +173,14 @@ class ChaptersViewModelTest {
 
     @Test
     fun `select chapter`() = runTest {
-        chaptersViewModel.selectChapter(true, chapters.getList()[1])
+        chaptersViewModel.selectChapter(true, chapters[1])
 
         verifyBlocking(chapterManager, times(1)) { selectChapter("id", chapterIndex = 1, true) }
     }
 
     @Test
     fun `deselect chapter`() = runTest {
-        chaptersViewModel.selectChapter(false, chapters.getList()[0])
+        chaptersViewModel.selectChapter(false, chapters[0])
 
         verifyBlocking(chapterManager, times(1)) { selectChapter("id", chapterIndex = 0, false) }
     }
@@ -223,14 +190,14 @@ class ChaptersViewModelTest {
         chaptersViewModel.scrollToChapter.test {
             expectNoEvents()
 
-            chaptersViewModel.scrollToChapter(chapters.getList()[0])
-            assertEquals(chapters.getList()[0], awaitItem())
+            chaptersViewModel.scrollToChapter(chapters[0])
+            assertEquals(chapters[0], awaitItem())
 
-            chaptersViewModel.scrollToChapter(chapters.getList()[0])
-            assertEquals(chapters.getList()[0], awaitItem())
+            chaptersViewModel.scrollToChapter(chapters[0])
+            assertEquals(chapters[0], awaitItem())
 
-            chaptersViewModel.scrollToChapter(chapters.getList()[1])
-            assertEquals(chapters.getList()[1], awaitItem())
+            chaptersViewModel.scrollToChapter(chapters[1])
+            assertEquals(chapters[1], awaitItem())
         }
     }
 
@@ -238,9 +205,9 @@ class ChaptersViewModelTest {
     fun `skip to chapter from current episode while playing`() = runTest {
         playbackStateFlow.update { it.copy(state = PlaybackState.State.PLAYING) }
 
-        chaptersViewModel.playChapter(chapters.getList()[2])
+        chaptersViewModel.playChapter(chapters[2])
 
-        verify(playbackManager, times(1)).skipToChapter(chapters.getList()[2])
+        verify(playbackManager, times(1)).skipToChapter(chapters[2])
         verifyBlocking(playbackManager, never()) { playNowSuspend("id") }
     }
 
@@ -248,9 +215,9 @@ class ChaptersViewModelTest {
     fun `skip to and play chapter from current episode while not playing`() = runTest {
         playbackStateFlow.update { it.copy(state = PlaybackState.State.STOPPED) }
 
-        chaptersViewModel.playChapter(chapters.getList()[2])
+        chaptersViewModel.playChapter(chapters[2])
 
-        verify(playbackManager, times(1)).skipToChapter(chapters.getList()[2])
+        verify(playbackManager, times(1)).skipToChapter(chapters[2])
         verifyBlocking(playbackManager, times(1)) { playNowSuspend("id") }
     }
 
@@ -267,7 +234,7 @@ class ChaptersViewModelTest {
         )
 
         val episode = PodcastEpisode(uuid = "id2", publishedDate = Date())
-        val chapter = Chapter("Chapter", startTime = 2.seconds, endTime = 3.seconds)
+        val chapter = Chapter("Chapter", startTime = 2.seconds, endTime = 3.seconds, index = 0, uiIndex = 1)
         whenever(episodeManager.findEpisodeByUuid("id2")).thenReturn(episode)
 
         chaptersViewModel.playChapter(chapter)
@@ -281,10 +248,10 @@ class ChaptersViewModelTest {
         chaptersViewModel.showPlayer.test {
             expectNoEvents()
 
-            chaptersViewModel.playChapter(chapters.getList()[0])
+            chaptersViewModel.playChapter(chapters[0])
             assertEquals(Unit, awaitItem())
 
-            chaptersViewModel.playChapter(chapters.getList()[0])
+            chaptersViewModel.playChapter(chapters[0])
             assertEquals(Unit, awaitItem())
         }
     }

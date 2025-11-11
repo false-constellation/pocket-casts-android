@@ -1,8 +1,15 @@
-*   Updates
-    *   Improve log sharing
-        ([#3336](https://github.com/Automattic/pocket-casts-android/pull/3336))
-    *   Update account details header UI
-        ([#3294](https://github.com/Automattic/pocket-casts-android/pull/3294))
-    *   Improve the Up Next clear all button
-        ([#3334](https://github.com/Automattic/pocket-casts-android/pull/3334))
-
+*   New Features
+    *   Add support for Manual Playlists and rebrand Filters as Smart Playlists
+        ([#4711](https://github.com/Automattic/pocket-casts-android/pull/4711))
+*   Bug Fixes
+    *   Fix podcasts drag & drop swapping podcasts' positions
+        ([#4699](https://github.com/Automattic/pocket-casts-android/pull/4699))
+    *   Fix podcast settings icon theming with Classic theme
+        ([#4687](https://github.com/Automattic/pocket-casts-android/pull/4687))
+    *   Fix chapters sleep timer not being visible
+        ([#4691](https://github.com/Automattic/pocket-casts-android/pull/4691))
+    *   Fix 3-button navigation obstructing the podcast rating button
+        ([#4698](https://github.com/Automattic/pocket-casts-android/pull/4698))
+    *   Fix episode list play button flickering
+        ([#4709](https://github.com/Automattic/pocket-casts-android/pull/4709))
+    

@@ -56,8 +56,10 @@ import au.com.shiftyjelly.pocketcasts.compose.components.TextP60
 import au.com.shiftyjelly.pocketcasts.compose.extensions.brush
 import au.com.shiftyjelly.pocketcasts.compose.patronGradientBrush
 import au.com.shiftyjelly.pocketcasts.compose.plusGradientBrush
-import au.com.shiftyjelly.pocketcasts.models.type.SubscriptionTier
+import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 import au.com.shiftyjelly.pocketcasts.ui.R as UR
@@ -70,9 +72,9 @@ object OnboardingUpgradeHelper {
     fun UpgradeRowButton(
         primaryText: String,
         textColor: Color,
+        backgroundColor: Color,
         onClick: () -> Unit,
         modifier: Modifier = Modifier,
-        backgroundColor: Color,
         fontWeight: FontWeight = FontWeight.W600,
         secondaryText: String? = null,
     ) {
@@ -134,10 +136,10 @@ object OnboardingUpgradeHelper {
     fun OutlinedRowButton(
         text: String,
         brush: Brush,
+        subscriptionTier: SubscriptionTier,
         onClick: () -> Unit,
         modifier: Modifier = Modifier,
         topText: String? = null,
-        subscriptionTier: SubscriptionTier,
         selectedCheckMark: Boolean = false,
         interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     ) {
@@ -191,9 +193,9 @@ object OnboardingUpgradeHelper {
     fun UnselectedOutlinedRowButton(
         text: String,
         onClick: () -> Unit,
+        subscriptionTier: SubscriptionTier,
         modifier: Modifier = Modifier,
         topText: String? = null,
-        subscriptionTier: SubscriptionTier,
         interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     ) {
         ConstraintLayout(modifier) {
@@ -238,14 +240,12 @@ object OnboardingUpgradeHelper {
         selected: Boolean = true,
     ) {
         val brush = when (subscriptionTier) {
-            SubscriptionTier.PLUS -> Brush.plusGradientBrush
-            SubscriptionTier.PATRON -> Brush.patronGradientBrush
-            SubscriptionTier.NONE -> throw IllegalStateException("Unknown subscription tier")
+            SubscriptionTier.Plus -> Brush.plusGradientBrush
+            SubscriptionTier.Patron -> Brush.patronGradientBrush
         }
         val textColor = when (subscriptionTier) {
-            SubscriptionTier.PLUS -> Color.Black
-            SubscriptionTier.PATRON -> Color.White
-            SubscriptionTier.NONE -> throw IllegalStateException("Unknown subscription tier")
+            SubscriptionTier.Plus -> Color.Black
+            SubscriptionTier.Patron -> Color.White
         }
         Box(
             modifier = if (selected) {
@@ -300,17 +300,16 @@ object OnboardingUpgradeHelper {
 
     @Composable
     fun UpgradeBackground(
-        modifier: Modifier = Modifier,
         tier: SubscriptionTier,
         @DrawableRes backgroundGlowsRes: Int,
+        modifier: Modifier = Modifier,
         content: @Composable () -> Unit,
     ) {
         Box(modifier) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 when (tier) {
-                    SubscriptionTier.PLUS -> PlusBlurredCanvasBackground()
-                    SubscriptionTier.PATRON -> PatronBlurredCanvasBackground()
-                    SubscriptionTier.NONE -> throw IllegalStateException("Unknown tier")
+                    SubscriptionTier.Plus -> PlusBlurredCanvasBackground()
+                    SubscriptionTier.Patron -> PatronBlurredCanvasBackground()
                 }
             } else {
                 ImageBackground(backgroundGlowsRes)
@@ -384,9 +383,25 @@ object OnboardingUpgradeHelper {
         textAlign: TextAlign,
         modifier: Modifier = Modifier,
         lineHeight: TextUnit = 16.sp,
+        fontSize: TextUnit = 14.sp,
+        fontWeight: FontWeight = FontWeight.Normal,
+        onPrivacyPolicyClick: () -> Unit = {},
+        onTermsAndConditionsClick: () -> Unit = {},
     ) {
-        val privacyPolicyText = stringResource(LR.string.onboarding_plus_privacy_policy)
-        val termsAndConditionsText = stringResource(LR.string.onboarding_plus_terms_and_conditions)
+        val privacyPolicyText = stringResource(
+            if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)) {
+                LR.string.onboarding_upgrade_pp
+            } else {
+                LR.string.onboarding_plus_privacy_policy
+            },
+        )
+        val termsAndConditionsText = stringResource(
+            if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)) {
+                LR.string.onboarding_upgrade_tnc
+            } else {
+                LR.string.onboarding_plus_terms_and_conditions
+            },
+        )
         val text = stringResource(
             LR.string.onboarding_plus_continuing_agrees_to,
             privacyPolicyText,
@@ -398,16 +413,20 @@ object OnboardingUpgradeHelper {
             color = color,
             lineHeight = lineHeight,
             textAlign = textAlign,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
             clickables = listOf(
                 Clickable(
                     text = privacyPolicyText,
                     onClick = {
+                        onPrivacyPolicyClick()
                         uriHandler.openUri(Settings.INFO_PRIVACY_URL)
                     },
                 ),
                 Clickable(
                     text = termsAndConditionsText,
                     onClick = {
+                        onTermsAndConditionsClick()
                         uriHandler.openUri(Settings.INFO_TOS_URL)
                     },
                 ),
@@ -419,7 +438,7 @@ object OnboardingUpgradeHelper {
 
 @Preview(showBackground = true)
 @Composable
-fun UpgradeRowButtonWithGradientBackgroundPreview() {
+private fun UpgradeRowButtonWithGradientBackgroundPreview() {
     UpgradeRowButton(
         primaryText = "Upgrade Now",
         textColor = Color.Black,
@@ -430,7 +449,7 @@ fun UpgradeRowButtonWithGradientBackgroundPreview() {
 
 @Preview(showBackground = true)
 @Composable
-fun UpgradeRowButtonPreview() {
+private fun UpgradeRowButtonPreview() {
     UpgradeRowButton(
         primaryText = "Upgrade Now",
         textColor = Color.Black,

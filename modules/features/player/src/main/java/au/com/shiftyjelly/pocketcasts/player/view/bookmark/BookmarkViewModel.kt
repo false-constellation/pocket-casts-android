@@ -1,10 +1,11 @@
 package au.com.shiftyjelly.pocketcasts.player.view.bookmark
 
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
@@ -25,7 +26,9 @@ class BookmarkViewModel
     private val episodeManager: EpisodeManager,
     private val userEpisodeManager: UserEpisodeManager,
     private val bookmarkManager: BookmarkManager,
-) : ViewModel(), CoroutineScope {
+    private val analyticsTracker: AnalyticsTracker,
+) : ViewModel(),
+    CoroutineScope {
 
     private lateinit var arguments: BookmarkArguments
 
@@ -40,8 +43,6 @@ class BookmarkViewModel
     data class UiState(
         val bookmarkUuid: String? = null,
         val title: TextFieldValue = buildSelectedTextFieldValue(DEFAULT_TITLE),
-        val backgroundColor: Color = Color.Black,
-        val tintColor: Color = Color.Blue,
     ) {
         val isNewBookmark: Boolean = bookmarkUuid == null
     }
@@ -56,8 +57,6 @@ class BookmarkViewModel
         val bookmarkUuid = arguments.bookmarkUuid
         mutableUiState.value = mutableUiState.value.copy(
             bookmarkUuid = bookmarkUuid,
-            backgroundColor = Color(arguments.backgroundColor),
-            tintColor = Color(arguments.tintColor),
         )
         viewModelScope.launch {
             // load the existing bookmark
@@ -113,5 +112,17 @@ class BookmarkViewModel
                 Timber.e(e)
             }
         }
+    }
+
+    fun onShown() {
+        analyticsTracker.track(AnalyticsEvent.BOOKMARK_EDIT_FORM_SHOWN)
+    }
+
+    fun onClose() {
+        analyticsTracker.track(AnalyticsEvent.BOOKMARK_EDIT_FORM_DISMISSED)
+    }
+
+    fun onSubmitBookmark() {
+        analyticsTracker.track(AnalyticsEvent.BOOKMARK_EDIT_FORM_SUBMITTED)
     }
 }

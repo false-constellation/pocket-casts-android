@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.Observer
 import androidx.lifecycle.toLiveData
 import androidx.work.Constraints
 import androidx.work.Data
@@ -31,41 +32,48 @@ import au.com.shiftyjelly.pocketcasts.repositories.download.task.UpdateShowNotes
 import au.com.shiftyjelly.pocketcasts.repositories.file.FileStorage
 import au.com.shiftyjelly.pocketcasts.repositories.file.StorageException
 import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationHelper
+import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationOpenReceiverActivity
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.refresh.RefreshPodcastsThread
+import au.com.shiftyjelly.pocketcasts.utils.AppPlatform
 import au.com.shiftyjelly.pocketcasts.utils.Network
 import au.com.shiftyjelly.pocketcasts.utils.Power
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.combineLatest
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.reactivex.subjects.ReplaySubject
-import io.reactivex.subjects.Subject
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 
+@Singleton
 class DownloadManagerImpl @Inject constructor(
     private val fileStorage: FileStorage,
     private val settings: Settings,
     private val notificationHelper: NotificationHelper,
     @ApplicationContext private val context: Context,
     private val episodeAnalytics: EpisodeAnalytics,
-) : DownloadManager, CoroutineScope {
+) : DownloadManager,
+    CoroutineScope {
 
     companion object {
         private const val MIN_TIME_BETWEEN_UPDATE_REPORTS: Long = 500 // 500ms;
@@ -79,57 +87,86 @@ class DownloadManagerImpl @Inject constructor(
     private var notificationBuilder: NotificationCompat.Builder? = null
     private lateinit var podcastManager: PodcastManager
     private lateinit var episodeManager: EpisodeManager
-    private lateinit var playlistManager: PlaylistManager
     private lateinit var playbackManager: PlaybackManager
 
     private val pendingQueue = HashMap<String, DownloadingInfo>()
     private val downloadingQueue = ArrayList<DownloadingInfo>()
     private val downloadsCoroutineContext = Dispatchers.Default
 
-    override val progressUpdates: MutableMap<String, DownloadProgressUpdate> = mutableMapOf()
-    override val progressUpdateRelay: Subject<DownloadProgressUpdate> = ReplaySubject.createWithSize(20)
+    private val downloadProgress = MutableStateFlow(mapOf<String, DownloadProgressUpdate>())
+
+    override fun updateEpisodeDownloadProgress(episodeUuid: String, progress: DownloadProgressUpdate) {
+        downloadProgress.update { it + (episodeUuid to progress) }
+    }
+
+    override fun episodeDownloadProgressFlow(episodeUuid: String): Flow<DownloadProgressUpdate> {
+        return downloadProgress.mapNotNull { it[episodeUuid] }
+    }
+
+    fun removeEpisodeDownloadProgress(episodeUuid: String) {
+        downloadProgress.update { it - episodeUuid }
+    }
 
     private var workManagerListener: LiveData<Pair<List<WorkInfo>, Map<String?, String>>>? = null
 
     private var sourceView: SourceView = SourceView.UNKNOWN
 
-    override fun setup(episodeManager: EpisodeManager, podcastManager: PodcastManager, playlistManager: PlaylistManager, playbackManager: PlaybackManager) {
+    override fun setup(episodeManager: EpisodeManager, podcastManager: PodcastManager, playbackManager: PlaybackManager) {
         this.episodeManager = episodeManager
         this.podcastManager = podcastManager
-        this.playlistManager = playlistManager
         this.playbackManager = playbackManager
 
-        progressUpdateRelay
-            .sample(MIN_TIME_BETWEEN_UPDATE_REPORTS, TimeUnit.MILLISECONDS)
-            .doOnNext { updateNotification() }
-            .subscribe()
+        launch {
+            while (true) {
+                delay(MIN_TIME_BETWEEN_UPDATE_REPORTS)
+                updateNotification()
+            }
+        }
     }
 
     private fun updateProgress(downloadProgressUpdate: DownloadProgressUpdate) {
         launch(Dispatchers.Main) {
-            progressUpdates[downloadProgressUpdate.episodeUuid] = downloadProgressUpdate
-            progressUpdateRelay.toSerialized().onNext(downloadProgressUpdate)
+            updateEpisodeDownloadProgress(downloadProgressUpdate.episodeUuid, downloadProgressUpdate)
         }
     }
 
     override fun beginMonitoringWorkManager(context: Context) {
         val workManager = WorkManager.getInstance(context)
-        val episodeFlowable = episodeManager.findDownloadingEpisodesRxFlowable()
-            .distinctUntilChanged { t1, t2 -> // We only really need to make sure we have all the downloading episodes available, we don't care when their metadata changes
-                t1.map { it.uuid }.toSet() == t2.map { it.uuid }.toSet()
-            }
-            .map { list ->
-                list.associateBy({ it.downloadTaskId }, { it.uuid }) // Convert to map for easy lookup
-            }
 
         launch(downloadsCoroutineContext) {
-            cleanUpStaleDownloads(workManager)
+            val toBeReQueued = cleanUpStaleDownloads(workManager)
+            podcastManager.checkForEpisodesToDownloadBlocking(toBeReQueued, this@DownloadManagerImpl)
+            val episodeFlowable = episodeManager.findDownloadingEpisodesRxFlowable()
+                .distinctUntilChanged { t1, t2 ->
+                    // We only really need to make sure we have all the downloading episodes available, we don't care when their metadata changes
+                    t1.map { it.uuid }.toSet() == t2.map { it.uuid }.toSet()
+                }
+                .map { list ->
+                    list.associateBy({ it.downloadTaskId }, { it.uuid }) // Convert to map for easy lookup
+                }
+
+            val episodeLiveData = episodeFlowable.toLiveData()
+            workManagerListener = workManager.getWorkInfosByTagLiveData(DownloadManager.WORK_MANAGER_DOWNLOAD_TAG).combineLatest(episodeLiveData)
+
+            withContext(Dispatchers.Main) {
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    val myObserver = WorkInfoObserver(workManager, ::updateNotification)
+                    workManagerListener?.observeForever(myObserver)
+                    continuation.invokeOnCancellation {
+                        workManagerListener?.removeObserver(myObserver)
+                    }
+                }
+            }
         }
+    }
 
-        val episodeLiveData = episodeFlowable.toLiveData()
-        workManagerListener = workManager.getWorkInfosByTagLiveData(DownloadManager.WORK_MANAGER_DOWNLOAD_TAG).combineLatest(episodeLiveData)
-
-        workManagerListener?.observeForever { (tasks, episodeUuids) ->
+    private inner class WorkInfoObserver(
+        private val workManager: WorkManager,
+        private val updateNotifications: () -> Unit,
+    ) : Observer<Pair<List<WorkInfo>, Map<String?, String>>> {
+        override fun onChanged(value: Pair<List<WorkInfo>, Map<String?, String>>) {
+            val tasks = value.first
+            val episodeUuids = value.second
             tasks.forEach { workInfo ->
                 val taskId = workInfo.id.toString()
                 val episodeUUID = episodeUuids[taskId]
@@ -143,7 +180,7 @@ class DownloadManagerImpl @Inject constructor(
 
                                     // FIXME this is a hack to avoid an issue where this listener says downloads
                                     //  on the watch app are enqueued when they are actually still running.
-                                    val queriedState = workManager.getWorkInfoById(workInfo.id).get().state
+                                    val queriedState = workManager.getWorkInfoById(workInfo.id).get()?.state
                                     if (Util.isWearOs(context) && queriedState == WorkInfo.State.RUNNING) {
                                         getRequirementsAsync(episode)
                                     } else {
@@ -157,6 +194,7 @@ class DownloadManagerImpl @Inject constructor(
                                 }
                             }
                         }
+
                         WorkInfo.State.RUNNING -> {
                             pendingQueue.remove(episodeUUID)
                             launch(downloadsCoroutineContext) {
@@ -170,6 +208,7 @@ class DownloadManagerImpl @Inject constructor(
                                 }
                             }
                         }
+
                         WorkInfo.State.CANCELLED -> {
                             pendingQueue.remove(episodeUUID)
                             launch(downloadsCoroutineContext) {
@@ -186,6 +225,7 @@ class DownloadManagerImpl @Inject constructor(
                                 }
                             }
                         }
+
                         WorkInfo.State.FAILED -> {
                             launch(downloadsCoroutineContext) {
                                 synchronized(downloadingQueue) {
@@ -197,6 +237,7 @@ class DownloadManagerImpl @Inject constructor(
                                 episodeDidDownload(DownloadResult.failedResult(error, errorMessage))
                             }
                         }
+
                         WorkInfo.State.SUCCEEDED -> {
                             launch(downloadsCoroutineContext) {
                                 Timber.d("Worker succeeded: $episodeUUID")
@@ -221,24 +262,23 @@ class DownloadManagerImpl @Inject constructor(
                                 }
                             }
                         }
-                        else -> {
-                            Timber.d("Work manager update: $episodeUUID is ${workInfo.state}")
-                        }
                     }
                 }
             }
 
-            updateNotification()
+            updateNotifications()
         }
     }
 
-    // Due to a previous bug it is possible to have episodes with workmanager task ids that aren't in workmanager
+    // Due to a previous bug it is possible to have episodes with workmanager task ids that aren't in workmanager. This may also happen when the user migrates the database to a new phone or restores a backup.
     // this causes them to not download. We clean them up here.
-    private suspend fun cleanUpStaleDownloads(workManager: WorkManager) = withContext(downloadsCoroutineContext) {
+    // returns with a list of episode ids that should be re-added to queue
+    private suspend fun cleanUpStaleDownloads(workManager: WorkManager): List<String> {
         val staleDownloads = episodeManager.findStaleDownloads()
 
         Timber.i("Cleaning up ${staleDownloads.size} stale downloads.")
 
+        val episodesUuidsForReQueue = mutableListOf<String>()
         for (episode in staleDownloads) {
             val taskId = episode.downloadTaskId ?: continue
             val uuid = UUID.fromString(taskId)
@@ -248,6 +288,8 @@ class DownloadManagerImpl @Inject constructor(
                 val missingOrCancelled = state == null || state.outputData.getBoolean(DownloadEpisodeTask.OUTPUT_CANCELLED, false)
                 if (missingOrCancelled) {
                     episodeManager.updateDownloadTaskId(episode, null)
+                    episodeManager.updateEpisodeStatus(episode, status = EpisodeStatusEnum.NOT_DOWNLOADED)
+                    episodesUuidsForReQueue.add(episode.uuid)
                     LogBuffer.e(LogBuffer.TAG_BACKGROUND_TASKS, "Cleaned up old workmanager task for ${episode.uuid}.")
                 } else {
                     // This should not happen
@@ -257,6 +299,8 @@ class DownloadManagerImpl @Inject constructor(
                 LogBuffer.e(LogBuffer.TAG_BACKGROUND_TASKS, e, "Could not clean up stale download ${episode.uuid}.")
             }
         }
+
+        return episodesUuidsForReQueue.toList()
     }
 
     override fun hasPendingOrRunningDownloads(): Boolean {
@@ -317,10 +361,9 @@ class DownloadManagerImpl @Inject constructor(
         }
     }
 
-    private suspend fun getRequirementsAsync(episode: BaseEpisode): NetworkRequirements =
-        withContext(downloadsCoroutineContext) {
-            networkRequiredForEpisode(episode)
-        }
+    private suspend fun getRequirementsAsync(episode: BaseEpisode): NetworkRequirements = withContext(downloadsCoroutineContext) {
+        networkRequiredForEpisode(episode)
+    }
 
     override suspend fun getRequirementsAndSetStatusAsync(episode: BaseEpisode): NetworkRequirements {
         return withContext(downloadsCoroutineContext) {
@@ -421,7 +464,7 @@ class DownloadManagerImpl @Inject constructor(
     private fun stopDownloadingJob(info: DownloadingInfo) {
         WorkManager.getInstance(context).cancelWorkById(info.jobId)
         WorkManager.getInstance(context).cancelAllWorkByTag(info.episodeUUID)
-        progressUpdates.remove(info.episodeUUID)
+        removeEpisodeDownloadProgress(info.episodeUUID)
     }
 
     private suspend fun episodeDidDownload(result: DownloadResult) = withContext(downloadsCoroutineContext) {
@@ -429,7 +472,7 @@ class DownloadManagerImpl @Inject constructor(
 
         try {
             pendingQueue.remove(result.episodeUuid)
-            progressUpdates.remove(result.episodeUuid)
+            removeEpisodeDownloadProgress(result.episodeUuid)
             if (episode == null) {
                 removeDownloadingEpisode(result.episodeUuid)
                 return@withContext
@@ -492,7 +535,7 @@ class DownloadManagerImpl @Inject constructor(
                 }
             }
 
-            progressUpdates.remove(episodeUuid)
+            removeEpisodeDownloadProgress(episodeUuid)
         }
     }
 
@@ -536,7 +579,7 @@ class DownloadManagerImpl @Inject constructor(
                 }
 
                 for (task in downloadingQueue) {
-                    progressUpdates[task.episodeUUID]?.let { downloadProgress ->
+                    downloadProgress.value[task.episodeUUID]?.let { downloadProgress ->
                         val (_, _, _, _, downloadedSoFar, totalToDownload) = downloadProgress
                         progress += downloadedSoFar.toDouble()
                         max += totalToDownload.toDouble()
@@ -615,7 +658,11 @@ class DownloadManagerImpl @Inject constructor(
 
     private fun openDownloadingPageIntent(): PendingIntent {
         val intent = DownloadsDeepLink.toIntent(context)
-        return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return if (Util.getAppPlatform(context) == AppPlatform.Phone) {
+            PendingIntent.getActivity(context, 0, NotificationOpenReceiverActivity.toDeeplinkIntentRelay(context, intent), PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        } else {
+            PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
     }
 
     private fun updateSource(source: SourceView) {

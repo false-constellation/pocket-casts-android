@@ -7,6 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Operation
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import au.com.shiftyjelly.pocketcasts.models.to.HistorySyncChange
@@ -14,7 +15,6 @@ import au.com.shiftyjelly.pocketcasts.models.to.HistorySyncRequest
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.HistoryManager
-import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.utils.extensions.switchInvalidForNow
 import au.com.shiftyjelly.pocketcasts.utils.extensions.toIsoString
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
@@ -27,17 +27,16 @@ private const val TAG = "SyncHistoryTask"
 
 @HiltWorker
 class SyncHistoryTask @AssistedInject constructor(
-    @Assisted val context: Context,
+    @Assisted context: Context,
     @Assisted params: WorkerParameters,
-    var episodeManager: EpisodeManager,
-    var syncManager: SyncManager,
-    var podcastManager: PodcastManager,
-    var settings: Settings,
+    private val episodeManager: EpisodeManager,
+    private val syncManager: SyncManager,
+    private val settings: Settings,
     private val historyManager: HistoryManager,
 ) : CoroutineWorker(context, params) {
 
     companion object {
-        fun scheduleToRun(context: Context) {
+        fun scheduleToRun(context: Context): Operation {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
@@ -46,9 +45,9 @@ class SyncHistoryTask @AssistedInject constructor(
                 .setConstraints(constraints)
                 .build()
 
-            WorkManager.getInstance(context)
-                .enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, workRequest)
+            val operation = WorkManager.getInstance(context).enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, workRequest)
             LogBuffer.i(TAG, "Sync history task scheduled")
+            return operation
         }
     }
 

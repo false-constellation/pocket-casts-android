@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.UpgradeFeatureItem
 import au.com.shiftyjelly.pocketcasts.compose.text.HtmlText
@@ -23,7 +24,10 @@ import au.com.shiftyjelly.pocketcasts.ui.R as UR
 fun UpgradeFeatureItem(
     item: UpgradeFeatureItem,
     modifier: Modifier = Modifier,
-    color: Color = Color.Black,
+    iconColor: Color = Color.Black,
+    textColor: Color = Color.Black,
+    iconSize: Dp = 20.dp,
+    spacing: Dp = 16.dp,
 ) {
     Row(
         modifier = modifier
@@ -35,16 +39,16 @@ fun UpgradeFeatureItem(
         Icon(
             painter = painterResource(item.image),
             contentDescription = null,
-            tint = color,
-            modifier = modifier
-                .size(20.dp)
+            tint = iconColor,
+            modifier = Modifier
+                .size(iconSize)
                 .padding(2.dp),
         )
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(spacing))
         HtmlText(
-            html = stringResource(item.title),
-            color = color,
-            linkColor = color,
+            html = stringResource(id = item.title()),
+            color = textColor,
+            linkColor = textColor,
             textStyleResId = UR.style.H50,
         )
     }

@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.KeyboardActionHandler
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
@@ -22,7 +25,6 @@ import au.com.shiftyjelly.pocketcasts.compose.extensions.onTabMoveFocus
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.extensions.removeNewLines
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 
 @Composable
 fun FormField(
@@ -67,19 +69,62 @@ fun FormField(
     )
 }
 
-@ShowkaseComposable(name = "FormField", group = "Form", styleName = "Light", defaultStyle = true)
+@Composable
+fun FormField(
+    state: TextFieldState,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    onImeAction: () -> Unit = {},
+    lineLimits: TextFieldLineLimits = TextFieldLineLimits.SingleLine,
+    enabled: Boolean = true,
+    isError: Boolean = false,
+    keyboardOptions: KeyboardOptions = FormFieldDefaults.keyboardOptions,
+    label: @Composable (() -> Unit)? = null,
+    leadingIcon: @Composable (() -> Unit)? = null,
+    trailingIcon: @Composable (() -> Unit)? = null,
+) {
+    OutlinedTextField(
+        state = state,
+        isError = isError,
+        colors = TextFieldDefaults.outlinedTextFieldColors(
+            textColor = MaterialTheme.theme.colors.primaryText01,
+            placeholderColor = MaterialTheme.theme.colors.primaryText02,
+            unfocusedBorderColor = if (isError) MaterialTheme.theme.colors.support05 else MaterialTheme.theme.colors.primaryField03,
+            errorTrailingIconColor = MaterialTheme.colors.onSurface.copy(alpha = TextFieldDefaults.IconOpacity), // Keep trailing icon the same color in error states
+        ),
+        enabled = enabled,
+        placeholder = { Text(placeholder) },
+        shape = RoundedCornerShape(6.dp),
+        keyboardOptions = keyboardOptions,
+        onKeyboardAction = KeyboardActionHandler { onImeAction() },
+        label = label,
+        lineLimits = lineLimits,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        modifier = modifier
+            .fillMaxWidth()
+            .onTabMoveFocus()
+            .then(
+                if (lineLimits is TextFieldLineLimits.SingleLine) {
+                    Modifier.onEnter(onImeAction)
+                } else {
+                    Modifier
+                },
+            ),
+    )
+}
+
 @Preview(name = "Light")
 @Composable
-fun FormFieldLightPreview() {
+private fun FormFieldLightPreview() {
     AppTheme(Theme.ThemeType.LIGHT) {
         FormFieldPreview()
     }
 }
 
-@ShowkaseComposable(name = "FormField", group = "Form", styleName = "Dark")
 @Preview(name = "Dark")
 @Composable
-fun FormFieldDarkPreview() {
+private fun FormFieldDarkPreview() {
     AppTheme(Theme.ThemeType.DARK) {
         FormFieldPreview()
     }

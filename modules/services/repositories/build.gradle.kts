@@ -34,6 +34,7 @@ dependencies {
     api(projects.modules.services.crashlogging)
     api(projects.modules.services.localization)
     api(projects.modules.services.model)
+    api(projects.modules.services.payment)
     api(projects.modules.services.preferences)
     api(projects.modules.services.protobuf)
     api(projects.modules.services.servers)
@@ -41,6 +42,7 @@ dependencies {
 
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.palette)
     implementation(libs.androidx.preference.ktx)
     implementation(libs.coil)
     implementation(libs.compose.ui.graphics)
@@ -70,6 +72,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.robolectric)
     testImplementation(libs.turbine)
 
     testImplementation(projects.modules.services.sharedtest)

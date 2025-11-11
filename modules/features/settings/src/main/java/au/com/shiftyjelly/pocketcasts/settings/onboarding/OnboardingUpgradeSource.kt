@@ -3,6 +3,7 @@ package au.com.shiftyjelly.pocketcasts.settings.onboarding
 enum class OnboardingUpgradeSource(val analyticsValue: String) {
     ACCOUNT_DETAILS("account_details"),
     APPEARANCE("appearance"),
+    BANNER_AD("banner_ad"),
     ICONS("icons"),
     THEMES("themes"),
     BOOKMARKS("bookmarks"),
@@ -10,6 +11,7 @@ enum class OnboardingUpgradeSource(val analyticsValue: String) {
     END_OF_YEAR("end_of_year"),
     FILES("files"),
     FOLDERS("folders"),
+    SUGGESTED_FOLDERS("suggested_folders"),
     FOLDERS_PODCAST_SCREEN("folders_podcast_screen"),
     HEADPHONE_CONTROLS_SETTINGS("headphone_controls_settings"),
     LOGIN("login"), // for login from within upsell screen
@@ -21,7 +23,8 @@ enum class OnboardingUpgradeSource(val analyticsValue: String) {
     SKIP_CHAPTERS("skip_chapters"),
     SETTINGS("settings"),
     SLUMBER_STUDIOS("slumber_studios"),
-    WHATS_NEW_SKIP_CHAPTERS("what_new_skip_chapters"),
     UP_NEXT_SHUFFLE("up_next_shuffle"),
+    GENERATED_TRANSCRIPTS("generated_transcripts"),
+    DEEP_LINK("deep_link"),
     UNKNOWN("unknown"),
 }

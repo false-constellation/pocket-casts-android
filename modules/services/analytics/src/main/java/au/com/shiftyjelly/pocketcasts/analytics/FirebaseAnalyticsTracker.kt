@@ -23,10 +23,12 @@ class FirebaseAnalyticsTracker @Inject constructor(
             AnalyticsEvent.PLUS_PROMOTION_NOT_NOW_BUTTON_TAPPED,
             AnalyticsEvent.PLAYBACK_PLAY,
             AnalyticsEvent.PODCAST_SUBSCRIBED,
+            AnalyticsEvent.BANNER_AD_IMPRESSION,
+            AnalyticsEvent.BANNER_AD_TAPPED,
+            AnalyticsEvent.BANNER_AD_REPORT,
         )
 
-        private fun shouldTrack(event: AnalyticsEvent) =
-            EVENTS.contains(event)
+        private fun shouldTrack(event: AnalyticsEvent) = EVENTS.contains(event)
 
         // Firebase event names that are different to Tracks
         private val ANALYTIC_EVENT_TO_FIREBASE_NAME = mapOf(

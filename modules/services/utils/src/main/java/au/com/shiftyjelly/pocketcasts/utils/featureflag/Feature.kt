@@ -1,7 +1,8 @@
 package au.com.shiftyjelly.pocketcasts.utils.featureflag
 
 import au.com.shiftyjelly.pocketcasts.helper.BuildConfig
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.ReleaseVersion.Companion.comparedToEarlyPatronAccess
+
+private val isDebugOrPrototypeBuild = BuildConfig.DEBUG || BuildConfig.IS_PROTOTYPE
 
 enum class Feature(
     val key: String,
@@ -14,87 +15,39 @@ enum class Feature(
     SYNC_EOY_DATA_ON_STARTUP(
         key = "sync_eoy_data_on_startup",
         title = "Whether the End of Year data should be synced on startup",
-        defaultValue = BuildConfig.DEBUG,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = false,
-    ),
-    END_OF_YEAR_2024(
-        key = "end_of_year_2024",
-        title = "End of Year 2024",
-        defaultValue = BuildConfig.DEBUG,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = false,
-    ),
-    REPORT_VIOLATION(
-        key = "report_violation",
-        title = "Report Violation",
         defaultValue = false,
         tier = FeatureTier.Free,
         hasFirebaseRemoteFlag = true,
         hasDevToggle = false,
     ),
+    END_OF_YEAR_2025(
+        key = "end_of_year_2025",
+        title = "End of Year 2025",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = false,
+        hasDevToggle = false,
+    ),
     INTRO_PLUS_OFFER_ENABLED(
         key = "intro_plus_offer_enabled",
         title = "Intro Offer Plus",
-        defaultValue = BuildConfig.DEBUG,
+        defaultValue = false,
         tier = FeatureTier.Free,
         hasFirebaseRemoteFlag = true,
-        hasDevToggle = false,
+        hasDevToggle = true,
     ),
     SLUMBER_STUDIOS_YEARLY_PROMO(
         key = "slumber_studios_yearly_promo_code",
         title = "Slumber Studios Yearly Promo",
-        defaultValue = BuildConfig.DEBUG,
+        defaultValue = isDebugOrPrototypeBuild,
         tier = FeatureTier.Plus(null),
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    DESELECT_CHAPTERS(
-        key = "deselect_chapters_enabled",
-        title = "Deselect Chapters",
-        defaultValue = true,
-        tier = FeatureTier.Plus(ReleaseVersion(7, 60)),
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    NOVA_LAUNCHER(
-        key = "nova_launcher",
-        title = "Integrate Pocket Casts with Nova Launcher",
-        defaultValue = BuildConfig.DEBUG,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = false,
-        hasDevToggle = true,
-    ),
-    CACHE_ENTIRE_PLAYING_EPISODE(
-        key = "cache_entire_playing_episode",
-        title = "Cache entire playing episode",
-        defaultValue = true,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    REIMAGINE_SHARING(
-        key = "reimagine_sharing",
-        title = "Use new sharing designs",
-        defaultValue = true,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    TRANSCRIPTS(
-        key = "transcripts",
-        title = "Transcripts",
-        defaultValue = true,
-        tier = FeatureTier.Free,
         hasFirebaseRemoteFlag = true,
         hasDevToggle = true,
     ),
     EXPLAT_EXPERIMENT(
         key = "explat_experiment",
         title = "ExPlat Experiment",
-        defaultValue = BuildConfig.DEBUG,
+        defaultValue = isDebugOrPrototypeBuild,
         tier = FeatureTier.Free,
         hasFirebaseRemoteFlag = true,
         hasDevToggle = true,
@@ -107,164 +60,184 @@ enum class Feature(
         hasFirebaseRemoteFlag = true,
         hasDevToggle = false,
     ),
-    REFERRALS_CLAIM(
-        key = "referrals_claim",
-        title = "Referrals Claim",
+    PODCASTS_SORT_CHANGES(
+        key = "podcasts_sort_changes",
+        title = "Podcasts Sort Changes",
         defaultValue = true,
         tier = FeatureTier.Free,
         hasFirebaseRemoteFlag = true,
         hasDevToggle = true,
     ),
-    REFERRALS_SEND(
-        key = "referrals_send",
-        title = "Referrals Send",
+    GUEST_LISTS_NETWORK_HIGHLIGHTS_REDESIGN(
+        key = "guest_lists_network_highlights_redesign",
+        title = "Guest Lists and Network Highlights Redesign",
         defaultValue = true,
         tier = FeatureTier.Free,
         hasFirebaseRemoteFlag = true,
         hasDevToggle = true,
     ),
-    SEARCH_IN_LISTENING_HISTORY(
-        key = "search_in_listening_history",
-        title = "Search in listening history",
+    LIBRO_FM(
+        key = "libro_fm",
+        title = "Libro FM in Upsell",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Plus(),
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    RECOMMENDATIONS(
+        key = "recommendations",
+        title = "Recommendations",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    NOTIFICATIONS_REVAMP(
+        key = "notifications_revamp",
+        title = "Notifications Revamp",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    BANNER_ADS_PLAYER(
+        key = "banner_ad_player",
+        title = "Banner Ads Player",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    BANNER_ADS_PODCASTS(
+        key = "banner_ad_podcasts",
+        title = "Banner Ads Podcasts",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    SMART_CATEGORIES(
+        key = "smart_categories",
+        title = "Smart Categories",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    NEW_ONBOARDING_UPGRADE(
+        key = "new_onboarding_upgrade",
+        title = "New Onboarding Upgrade",
         defaultValue = true,
         tier = FeatureTier.Free,
         hasFirebaseRemoteFlag = true,
         hasDevToggle = true,
     ),
-    AUTO_DOWNLOAD(
-        key = "auto_download",
-        title = "Auto download episodes after subscribing to a podcast",
-        defaultValue = BuildConfig.DEBUG,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    UP_NEXT_SHUFFLE(
-        key = "up_next_shuffle",
-        title = "Up Next Shuffle",
-        defaultValue = BuildConfig.DEBUG,
-        tier = FeatureTier.Plus(patronExclusiveAccessRelease = null),
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    CUSTOM_PLAYBACK_SETTINGS(
-        key = "custom_playback_settings",
-        title = "Custom playback settings",
-        defaultValue = BuildConfig.DEBUG,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    MANAGE_DOWNLOADED_EPISODES(
-        key = "manage_downloaded_episodes",
-        title = "Manage Downloaded Episodes",
-        defaultValue = BuildConfig.DEBUG,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    RESET_EPISODE_CACHE_ON_416_ERROR(
-        key = "reset_episode_cache_on_416_error",
-        title = "Reset episode cache on 416 error",
+    NEW_ONBOARDING_ACCOUNT_CREATION(
+        key = "new_onboarding_account_creation",
+        title = "New Onboarding Account Creation",
         defaultValue = true,
         tier = FeatureTier.Free,
         hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    NEW_ONBOARDING_RECOMMENDATIONS(
+        key = "new_onboarding_recommendations_changes",
+        title = "New Onboarding Recommendation Changes",
+        defaultValue = true,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    NEW_ONBOARDING_UPGRADE_TRIAL_TIMELINE(
+        key = "new_onboarding_upgrade_trial_timeline",
+        title = "New Onboarding Upgrade Trial Timeline",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    PLAYLISTS_REBRANDING(
+        key = "playlists_rebranding",
+        title = "Playlists",
+        defaultValue = true,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    SHARE_TRANSCRIPTS(
+        key = "share_transcripts",
+        title = "Share transcripts",
+        defaultValue = true,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    IMPROVED_SEARCH_SUGGESTIONS(
+        key = "search_predictive",
+        title = "Predictive search suggestions",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    IMPROVED_SEARCH_RESULTS(
+        key = "search_improvements",
+        title = "Improved search results",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    IMPROVE_APP_RATINGS(
+        key = "improve_app_ratings",
+        title = "Banner prompting for app rating",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = false,
+        hasDevToggle = true,
+    ),
+
+    // This is set of features used only for testing purposes.
+    TEST_FREE_FEATURE(
+        key = "test_free_feature",
+        title = "Free feature used for testing",
+        defaultValue = true,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = false,
         hasDevToggle = false,
     ),
-    BASIC_AUTHENTICATION(
-        key = "basic_authentication",
-        title = "Support episode basic authentication",
-        defaultValue = BuildConfig.DEBUG,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
-    PODCAST_HTML_DESCRIPTION(
-        key = "podcast_html_description",
-        title = "Use HTML in the podcast description",
+    TEST_PLUS_FEATURE(
+        key = "test_plus_feature",
+        title = "Plus feature used for testing",
         defaultValue = true,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
+        tier = FeatureTier.Plus(),
+        hasFirebaseRemoteFlag = false,
+        hasDevToggle = false,
     ),
-    ;
-
-    companion object {
-
-        fun isUserEntitled(
-            feature: Feature,
-            userTier: UserTier,
-            releaseVersion: ReleaseVersionWrapper = ReleaseVersionWrapper(),
-        ) = when (userTier) {
-            // Patron users can use all features
-            UserTier.Patron -> when (feature.tier) {
-                FeatureTier.Patron,
-                is FeatureTier.Plus,
-                FeatureTier.Free,
-                -> true
-            }
-
-            UserTier.Plus -> {
-                when (feature.tier) {
-                    // Patron features can only be used by Patrons
-                    FeatureTier.Patron -> false
-
-                    // Plus users cannot use Plus features during early access for patrons except when the app is in beta
-                    is FeatureTier.Plus -> {
-                        val isReleaseCandidate = releaseVersion.currentReleaseVersion.releaseCandidate != null
-                        val relativeToEarlyAccess = feature.tier.patronExclusiveAccessRelease?.let {
-                            releaseVersion.currentReleaseVersion.comparedToEarlyPatronAccess(it)
-                        }
-                        when (relativeToEarlyAccess) {
-                            null -> true // no early access release
-                            EarlyAccessState.Before,
-                            EarlyAccessState.During,
-                            -> isReleaseCandidate
-                            EarlyAccessState.After -> true
-                        }
-                    }
-
-                    FeatureTier.Free -> true
-                }
-            }
-
-            // Free users can only use free features
-            UserTier.Free -> when (feature.tier) {
-                FeatureTier.Patron -> false
-                is FeatureTier.Plus -> false
-                FeatureTier.Free -> true
-            }
-        }
-    }
-
-    // Please do not delete this method because sometimes we need it
-    fun isCurrentlyExclusiveToPatron(
-        releaseVersion: ReleaseVersionWrapper = ReleaseVersionWrapper(),
-    ): Boolean {
-        val isReleaseCandidate = releaseVersion.currentReleaseVersion.releaseCandidate != null
-        val relativeToEarlyAccessState = (this.tier as? FeatureTier.Plus)?.patronExclusiveAccessRelease?.let {
-            releaseVersion.currentReleaseVersion.comparedToEarlyPatronAccess(it)
-        }
-        return when (relativeToEarlyAccessState) {
-            null -> false
-            EarlyAccessState.Before,
-            EarlyAccessState.During,
-            -> !isReleaseCandidate
-            EarlyAccessState.After -> false
-        }
-    }
-}
-
-// It would be nice to be able to use SubscriptionTier here, but that's in the
-// models module, which already depends on this featureflag module, so we can't depend on it
-enum class UserTier {
-    Patron,
-    Plus,
-    Free,
+    TEST_PLUS_RESTRICTED_FEATURE(
+        key = "test_plus_restricted_feature",
+        title = "Plus feature with Patron exclusive access used for testing",
+        defaultValue = true,
+        tier = FeatureTier.Plus(ReleaseVersion(1, 0)),
+        hasFirebaseRemoteFlag = false,
+        hasDevToggle = false,
+    ),
+    TEST_PATRON_FEATURE(
+        key = "test_patron_feature",
+        title = "Patron feature used for testing",
+        defaultValue = true,
+        tier = FeatureTier.Patron,
+        hasFirebaseRemoteFlag = false,
+        hasDevToggle = false,
+    ),
 }
 
 sealed class FeatureTier {
-    data object Patron : FeatureTier()
-    class Plus(val patronExclusiveAccessRelease: ReleaseVersion?) : FeatureTier()
     data object Free : FeatureTier()
+
+    class Plus(
+        val patronExclusiveAccessRelease: ReleaseVersion? = null,
+    ) : FeatureTier()
+
+    data object Patron : FeatureTier()
 }

@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.sentry)
@@ -13,6 +14,7 @@ android {
 
     defaultConfig {
         applicationId = project.property("applicationId").toString()
+        targetSdk = project.property("targetSdkVersion") as Int
         multiDexEnabled = true
     }
 
@@ -37,6 +39,10 @@ android {
             manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher_3"
         }
 
+        maybeCreate("prototype").apply {
+            manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher_prototype"
+        }
+
         named("release") {
             manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
 
@@ -45,12 +51,15 @@ android {
             }
         }
     }
+
+    lint {
+        checkDependencies = true
+    }
 }
 
 dependencies {
     ksp(libs.dagger.hilt.compiler)
     ksp(libs.hilt.compiler)
-    ksp(libs.showkase.processor)
 
     implementation(platform(libs.compose.bom))
     implementation(platform(libs.firebase.bom))
@@ -68,6 +77,7 @@ dependencies {
     implementation(libs.coroutines.rx2)
     implementation(libs.dagger.hilt.android)
     implementation(libs.dagger.hilt.core)
+    implementation(libs.datastore)?.because("Force using the latest datastore version to stop the app crashing with Glance widgets. Glance and Horologist libraries both include this library. Pull request https://github.com/Automattic/pocket-casts-android/pull/4031.")
     implementation(libs.encryptedlogging)
     implementation(libs.firebase.config)
     implementation(libs.fragment.ktx)
@@ -90,6 +100,7 @@ dependencies {
     implementation(libs.work.runtime)
 
     implementation(projects.modules.features.account)
+    implementation(projects.modules.features.appreview)
     implementation(projects.modules.features.discover)
     implementation(projects.modules.features.engage)
     implementation(projects.modules.features.endofyear)
@@ -110,7 +121,7 @@ dependencies {
     implementation(projects.modules.services.crashlogging)
     implementation(projects.modules.services.deeplink)
     implementation(projects.modules.services.localization)
-    implementation(projects.modules.services.mediaFfmpeg)
+    implementation(projects.modules.services.mediaNoop)
     implementation(projects.modules.services.model)
     implementation(projects.modules.services.preferences)
     implementation(projects.modules.services.repositories)
@@ -139,14 +150,12 @@ dependencies {
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.uiautomator)
-    androidTestImplementation(libs.barista)
     androidTestImplementation(libs.compose.activity)
     androidTestImplementation(libs.compose.ui.test.junit)
     androidTestImplementation(libs.coroutines.test)
-    androidTestImplementation(libs.espresso.contrib)
-    androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.jsonassert)
     androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.hilt.navigation.compose)
     androidTestImplementation(libs.mockito.android)
     androidTestImplementation(libs.mockito.core)
     androidTestImplementation(libs.mockito.kotlin)

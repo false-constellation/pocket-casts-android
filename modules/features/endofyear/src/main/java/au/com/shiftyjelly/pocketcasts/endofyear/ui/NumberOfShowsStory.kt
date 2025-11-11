@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import au.com.shiftyjelly.pocketcasts.compose.Devices
 import au.com.shiftyjelly.pocketcasts.compose.components.HorizontalDirection
-import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImage
+import au.com.shiftyjelly.pocketcasts.compose.components.PodcastImageDeprecated
 import au.com.shiftyjelly.pocketcasts.compose.components.ScrollSpeed
 import au.com.shiftyjelly.pocketcasts.compose.components.ScrollingRow
 import au.com.shiftyjelly.pocketcasts.compose.components.TextH10
@@ -52,7 +52,7 @@ internal fun NumberOfShowsStory(
     val smallSpacingSize = smallCoverSize / 10
     val largeCoverSize = 200.dp * measurements.scale
     val largeSpacingSize = smallCoverSize / 10
-    val carouselRotationOffset = (measurements.width / 1.5f) * tan(StoryRotationRadians)
+    val carouselRotationOffset = (measurements.width / 1.5f) * tan(STORY_ROTATION_RADIANS)
 
     Box(
         modifier = Modifier
@@ -63,7 +63,7 @@ internal fun NumberOfShowsStory(
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .rotate(StoryRotationDegrees)
+                .rotate(STORY_ROTATION_DEGREES)
                 .offset(y = measurements.closeButtonBottomEdge + 8.dp - carouselRotationOffset)
                 .requiredWidth(measurements.width * 1.5f), // Increase the size to account for rotation
         ) {
@@ -140,7 +140,8 @@ private fun PodcastCoverCarousel(
         horizontalArrangement = Arrangement.spacedBy(spacingSize),
         modifier = modifier,
     ) { podcastId ->
-        PodcastImage(
+        @Suppress("DEPRECATION")
+        PodcastImageDeprecated(
             uuid = podcastId,
             elevation = coverElevation,
             cornerSize = 4.dp,
@@ -149,7 +150,7 @@ private fun PodcastCoverCarousel(
     }
 }
 
-@Preview(device = Devices.PortraitRegular)
+@Preview(device = Devices.PORTRAIT_REGULAR)
 @Composable
 private fun NumberOfShowsPreview() {
     PreviewBox(currentPage = 1) { measurements ->

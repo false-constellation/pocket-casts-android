@@ -15,11 +15,13 @@ import androidx.annotation.AttrRes
 import androidx.annotation.DrawableRes
 import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
+import androidx.fragment.app.FragmentManager
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.extensions.dpToPx
 import au.com.shiftyjelly.pocketcasts.views.databinding.FragmentConfirmationBinding
+import au.com.shiftyjelly.pocketcasts.views.extensions.setSystemWindowInsetToPadding
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -51,12 +53,13 @@ open class ConfirmationDialog : BottomSheetDialogFragment() {
 
     private var onConfirm: (() -> Unit)? = null
     private var onSecondary: (() -> Unit)? = null
-    private var onDismiss: (() -> Unit)? = null
+    private var onDismiss: ((Boolean) -> Unit)? = null
     private var forceDarkTheme: Boolean = false
     private var displayConfirmButtonFirst: Boolean = false
     private var removeSecondaryButtonBorder: Boolean = false
     private var summaryTextSize: Float? = null
     private var binding: FragmentConfirmationBinding? = null
+    private var isDismissedWithoutAction = true
 
     @Inject lateinit var theme: Theme
 
@@ -77,6 +80,20 @@ open class ConfirmationDialog : BottomSheetDialogFragment() {
                     .setIconId(IR.drawable.ic_download)
                     .setTitle(resources.getString(LR.string.download_warning_title))
                     .setSummary(resources.getString(LR.string.download_warning_limit_summary, Settings.MAX_DOWNLOAD))
+                    .setOnConfirm(onConfirm)
+            }
+        }
+
+        fun deleteDownloadWarningDialog(episodeCount: Int, warningLimit: Int, resources: Resources, onConfirm: () -> Unit): ConfirmationDialog? {
+            return if (episodeCount <= warningLimit) {
+                onConfirm()
+                null
+            } else {
+                ConfirmationDialog()
+                    .setIconId(IR.drawable.ic_delete)
+                    .setTitle(resources.getString(LR.string.delete_download_warning_title))
+                    .setSummary(resources.getString(LR.string.delete_download_warning_summary))
+                    .setButtonType(ButtonType.Danger(resources.getString(LR.string.delete_download_warning_button, episodeCount)))
                     .setOnConfirm(onConfirm)
             }
         }
@@ -132,24 +149,30 @@ open class ConfirmationDialog : BottomSheetDialogFragment() {
         iconTintAttr?.let { binding.imgIcon.imageTintList = ColorStateList.valueOf(context.getThemeColor(it)) }
 
         val layout = binding.root as ViewGroup
+        layout.setSystemWindowInsetToPadding(bottom = true)
+
         val btnConfirm = binding.btnConfirm
         val btnSecondary = binding.btnSecondary
+        val bottomPaddingView = binding.bottomPaddingView
 
-        if (displayConfirmButtonFirst) {
-            layout.removeView(btnConfirm)
-            layout.removeView(btnSecondary)
-            layout.addView(btnConfirm)
-            layout.addView(btnSecondary)
-        } else {
-            layout.removeView(btnSecondary)
-            layout.removeView(btnConfirm)
-            layout.addView(btnSecondary)
-            layout.addView(btnConfirm)
+        with(layout) {
+            removeView(btnConfirm)
+            removeView(btnSecondary)
+            removeView(bottomPaddingView)
+            if (displayConfirmButtonFirst) {
+                addView(btnConfirm)
+                addView(btnSecondary)
+            } else {
+                addView(btnSecondary)
+                addView(btnConfirm)
+            }
+            addView(bottomPaddingView)
         }
 
         btnConfirm.text = buttonType.text
         btnConfirm.setOnClickListener {
             onConfirm?.invoke()
+            isDismissedWithoutAction = false
             dismiss()
         }
 
@@ -175,13 +198,14 @@ open class ConfirmationDialog : BottomSheetDialogFragment() {
         btnSecondary.text = secondaryType?.text
         btnSecondary.setOnClickListener {
             onSecondary?.invoke()
+            isDismissedWithoutAction = false
             dismiss()
         }
     }
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
-        onDismiss?.invoke()
+        onDismiss?.invoke(isDismissedWithoutAction)
     }
 
     fun setTitle(title: String): ConfirmationDialog {
@@ -224,7 +248,7 @@ open class ConfirmationDialog : BottomSheetDialogFragment() {
         return this
     }
 
-    fun setOnDismiss(onDismiss: (() -> Unit)?): ConfirmationDialog {
+    fun setOnDismiss(onDismiss: ((isDismissedWithoutAction: Boolean) -> Unit)?): ConfirmationDialog {
         this.onDismiss = onDismiss
         return this
     }
@@ -257,5 +281,11 @@ open class ConfirmationDialog : BottomSheetDialogFragment() {
     override fun onPause() {
         super.onPause()
         this.dismissAllowingStateLoss()
+    }
+
+    override fun show(manager: FragmentManager, tag: String?) {
+        if (manager.findFragmentByTag(tag) == null) {
+            super.show(manager, tag)
+        }
     }
 }

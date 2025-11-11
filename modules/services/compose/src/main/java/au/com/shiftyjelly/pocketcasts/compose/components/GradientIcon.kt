@@ -21,7 +21,6 @@ import au.com.shiftyjelly.pocketcasts.compose.plusGradientBrush
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.images.R
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import com.airbnb.android.showkase.annotation.ShowkaseComposable
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 
 @Composable
@@ -64,9 +63,9 @@ fun GradientIcon(
 fun GradientIcon(
     painter: Painter,
     gradientBrush: Brush,
+    modifier: Modifier = Modifier,
     contentDescription: String? = null,
     blendMode: BlendMode = BlendMode.SrcAtop,
-    modifier: Modifier = Modifier,
 ) {
     Icon(
         modifier = modifier
@@ -82,7 +81,7 @@ fun GradientIcon(
 
 @Preview
 @Composable
-fun GradientIconWithBrushPreview() {
+private fun GradientIconWithBrushPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         GradientIcon(
             painter = painterResource(IR.drawable.ic_plus),
@@ -92,19 +91,17 @@ fun GradientIconWithBrushPreview() {
     }
 }
 
-@ShowkaseComposable(name = "GradientIcon", group = "Images", styleName = "Light", defaultStyle = true)
 @Preview(name = "Light")
 @Composable
-fun GradientIconLightPreview() {
+private fun GradientIconLightPreview() {
     AppThemeWithBackground(Theme.ThemeType.LIGHT) {
         GradientIconPreview()
     }
 }
 
-@ShowkaseComposable(name = "GradientIcon", group = "Images", styleName = "Dark")
 @Preview(name = "Dark")
 @Composable
-fun GradientIconDarkPreview() {
+private fun GradientIconDarkPreview() {
     AppThemeWithBackground(Theme.ThemeType.DARK) {
         GradientIconPreview()
     }

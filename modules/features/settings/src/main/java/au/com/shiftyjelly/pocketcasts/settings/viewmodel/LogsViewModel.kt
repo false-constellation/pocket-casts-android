@@ -1,6 +1,9 @@
 package au.com.shiftyjelly.pocketcasts.settings.viewmodel
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import androidx.core.content.ContextCompat.getSystemService
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.repositories.support.Support
@@ -11,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class LogsViewModel @Inject constructor(
@@ -19,17 +23,17 @@ class LogsViewModel @Inject constructor(
 
     data class State(
         val logs: String?,
+        val logLines: List<String>,
     )
 
-    private val _state = MutableStateFlow(State(null))
+    private val _state = MutableStateFlow(State(null, emptyList()))
     val state = _state.asStateFlow()
 
     init {
         viewModelScope.launch {
-            _state.update {
-                val logs = support.getLogs()
-                it.copy(logs = logs)
-            }
+            val logs = support.getLogs()
+            val logLines = withContext(Dispatchers.Default) { logs.split('\n') }
+            _state.update { it.copy(logs = logs, logLines = logLines) }
         }
     }
 
@@ -43,5 +47,10 @@ class LogsViewModel @Inject constructor(
             )
             context.startActivity(intent)
         }
+    }
+
+    fun copyToClipboard(context: Context, logs: String?) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Logs", logs.orEmpty()))
     }
 }

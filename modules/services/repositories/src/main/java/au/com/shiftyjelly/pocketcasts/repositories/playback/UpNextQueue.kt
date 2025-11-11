@@ -2,6 +2,7 @@ package au.com.shiftyjelly.pocketcasts.repositories.playback
 
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
+import au.com.shiftyjelly.pocketcasts.models.type.UpNextSortType
 import au.com.shiftyjelly.pocketcasts.preferences.model.AutoPlaySource
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
@@ -33,11 +34,11 @@ interface UpNextQueue {
     fun isCurrentEpisode(episode: BaseEpisode): Boolean
     suspend fun playNow(episode: BaseEpisode, automaticUpNextSource: AutoPlaySource?, onAdd: (() -> Unit)?)
     suspend fun playNextBlocking(episode: BaseEpisode, downloadManager: DownloadManager, onAdd: (() -> Unit)?)
-    suspend fun playLastBlocking(episode: BaseEpisode, downloadManager: DownloadManager, onAdd: (() -> Unit)?)
+    suspend fun playLast(episode: BaseEpisode, downloadManager: DownloadManager, onAdd: (() -> Unit)?)
     suspend fun playAllNext(episodes: List<BaseEpisode>, downloadManager: DownloadManager)
     suspend fun playAllLast(episodes: List<BaseEpisode>, downloadManager: DownloadManager)
     suspend fun removeEpisode(episode: BaseEpisode, shouldShuffleUpNext: Boolean = false)
-    suspend fun clearAndPlayAllBlocking(episodes: List<BaseEpisode>, downloadManager: DownloadManager)
+    suspend fun clearAndPlayAll(episodes: List<BaseEpisode>, downloadManager: DownloadManager)
     fun moveEpisode(from: Int, to: Int)
     fun changeList(episodes: List<BaseEpisode>)
     fun clearUpNext()
@@ -46,6 +47,7 @@ interface UpNextQueue {
     suspend fun importServerChangesBlocking(episodes: List<BaseEpisode>, playbackManager: PlaybackManager, downloadManager: DownloadManager)
     fun contains(uuid: String): Boolean
     fun updateCurrentEpisodeState(state: State)
+    fun sortUpNext(sortType: UpNextSortType)
 
     sealed class State {
         object Empty : State()

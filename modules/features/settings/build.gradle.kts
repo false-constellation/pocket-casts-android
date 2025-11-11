@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.aboutlibraries)
+    alias(libs.plugins.aboutlibraries.android)
 }
 
 android {
@@ -21,7 +22,6 @@ dependencies {
     ksp(libs.dagger.hilt.compiler)
     ksp(libs.hilt.compiler)
     ksp(libs.moshi.kotlin.codegen)
-    ksp(libs.showkase.processor)
 
     api(libs.androidx.appcompat)
     api(libs.androidx.cardview)
@@ -31,7 +31,6 @@ dependencies {
     api(libs.automattic.crashlogging)
     api(libs.dagger.hilt.android)
     api(libs.material)
-    api(libs.showkase)
 
     api(projects.modules.services.analytics)
     api(projects.modules.services.compose)
@@ -55,6 +54,7 @@ dependencies {
     implementation(libs.compose.rxjava2)
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.webview)
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.rx2)
     implementation(libs.firebase.analytics)
@@ -81,10 +81,12 @@ dependencies {
 
     debugProdImplementation(libs.compose.ui.tooling)
 
+    testImplementation(libs.androidx.arch.core)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.turbine)
 
     testImplementation(projects.modules.services.sharedtest)
 }
