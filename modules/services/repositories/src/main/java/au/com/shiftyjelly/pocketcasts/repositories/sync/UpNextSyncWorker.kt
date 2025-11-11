@@ -92,6 +92,7 @@ class UpNextSyncWorker @AssistedInject constructor(
     }
 
     private suspend fun performSync() {
+        return
         val upNextChangeDao = appDatabase.upNextChangeDao()
         val changes = upNextChangeDao.findAllBlocking()
         val request = buildRequest(changes)
