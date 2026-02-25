@@ -52,6 +52,7 @@ class UpNextSync @Inject constructor(
 ) {
 
     suspend fun sync() {
+        return
         if (FeatureFlag.isEnabled(Feature.UP_NEXT_SYNC_PROTOBUF)) {
             performProtobufSync()
         } else {
