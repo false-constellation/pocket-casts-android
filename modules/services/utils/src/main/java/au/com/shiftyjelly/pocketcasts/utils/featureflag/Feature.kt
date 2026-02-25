@@ -25,7 +25,7 @@ enum class Feature(
         title = "End of Year 2025",
         defaultValue = isDebugOrPrototypeBuild,
         tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = false,
+        hasFirebaseRemoteFlag = true,
         hasDevToggle = false,
     ),
     INTRO_PLUS_OFFER_ENABLED(
@@ -156,14 +156,6 @@ enum class Feature(
         hasFirebaseRemoteFlag = true,
         hasDevToggle = true,
     ),
-    PLAYLISTS_REBRANDING(
-        key = "playlists_rebranding",
-        title = "Playlists",
-        defaultValue = true,
-        tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = true,
-        hasDevToggle = true,
-    ),
     SHARE_TRANSCRIPTS(
         key = "share_transcripts",
         title = "Share transcripts",
@@ -193,7 +185,15 @@ enum class Feature(
         title = "Banner prompting for app rating",
         defaultValue = isDebugOrPrototypeBuild,
         tier = FeatureTier.Free,
-        hasFirebaseRemoteFlag = false,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+    ),
+    NEW_INSTALLMENT_PLAN(
+        key = "new_installment_plan",
+        title = "New Installment Plan",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
         hasDevToggle = true,
     ),
 
@@ -229,6 +229,14 @@ enum class Feature(
         tier = FeatureTier.Patron,
         hasFirebaseRemoteFlag = false,
         hasDevToggle = false,
+    ),
+    UP_NEXT_SYNC_PROTOBUF(
+        key = "up_next_sync_protobuf",
+        title = "Up Next sync with Protocol Buffers",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
     ),
 }
 

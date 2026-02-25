@@ -3,6 +3,7 @@ package au.com.shiftyjelly.pocketcasts.reimagine.clip
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.coroutines.flow.combine
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -14,7 +15,6 @@ import au.com.shiftyjelly.pocketcasts.sharing.Clip
 import au.com.shiftyjelly.pocketcasts.sharing.SharingRequest
 import au.com.shiftyjelly.pocketcasts.sharing.SocialPlatform
 import au.com.shiftyjelly.pocketcasts.sharing.VisualCardType
-import au.com.shiftyjelly.pocketcasts.utils.extensions.combine
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -143,9 +143,11 @@ class ShareClipViewModel @AssistedInject constructor(
             clipRange.durationInSeconds < 1 -> {
                 viewModelScope.launch { _snackbarMessages.emit(SnackbarMessage.ClipStartAfterEnd) }
             }
+
             clipRange.end > episodeDurtion -> {
                 viewModelScope.launch { _snackbarMessages.emit(SnackbarMessage.ClipEndAfterEpisodeDuration(episodeDurtion)) }
             }
+
             else -> {
                 sharingState.update { it.copy(step = Step.PlatformSelection) }
             }
@@ -215,6 +217,7 @@ class ShareClipViewModel @AssistedInject constructor(
                 clipAnalytics.clipShared(clipRange, ClipShareType.Link, cardType)
                 Result.success(clipLinkRequest(podcast, episode, clipRange, platform, cardType, sourceView))
             }
+
             is CardType.Audio -> {
                 clipAnalytics.clipShared(clipRange, ClipShareType.Audio, cardType)
                 Result.success(audioClipRequest(podcast, episode, clipRange, sourceView))

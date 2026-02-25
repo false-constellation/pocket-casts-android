@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.profile.cloud
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -111,7 +112,12 @@ class CloudFilesFragment :
             artworkContext = Element.Files,
             onSwipeAction = { episode, swipeAction ->
                 viewLifecycleOwner.lifecycleScope.launch {
-                    swipeActionViewModel.handleAction(swipeAction, episode.uuid, childFragmentManager)
+                    swipeActionViewModel.handleAction(
+                        action = swipeAction,
+                        episodeUuid = episode.uuid,
+                        podcastUuid = episode.podcastOrSubstituteUuid,
+                        fragmentManager = childFragmentManager,
+                    )
                 }
             },
         )
@@ -145,6 +151,7 @@ class CloudFilesFragment :
         multiSelectHelper.isMultiSelecting = false
     }
 
+    @SuppressLint("MissingSuperCall") // False positive
     override fun onAttach(context: Context) {
         super.onAttach(context)
 

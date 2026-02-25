@@ -12,14 +12,13 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.wear.tooling.preview.devices.WearDevices
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.wear.theme.WearAppTheme
 import au.com.shiftyjelly.pocketcasts.wear.ui.component.WatchListChip
 import au.com.shiftyjelly.pocketcasts.wear.ui.downloads.DownloadsScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.playlists.PlaylistsScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.podcasts.PodcastsScreen
 import au.com.shiftyjelly.pocketcasts.wear.ui.settings.SettingsScreen
+import au.com.shiftyjelly.pocketcasts.wear.ui.starred.StarredScreen
 import com.google.android.horologist.compose.layout.ScalingLazyColumn
 import com.google.android.horologist.compose.layout.ScalingLazyColumnState
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -85,18 +84,9 @@ fun WatchListScreen(
         }
 
         item {
-            val usePlaylists = FeatureFlag.isEnabled(Feature.PLAYLISTS_REBRANDING, immutable = true)
             WatchListChip(
-                title = if (usePlaylists) {
-                    stringResource(LR.string.playlists)
-                } else {
-                    stringResource(LR.string.filters)
-                },
-                iconRes = if (usePlaylists) {
-                    IR.drawable.ic_playlists
-                } else {
-                    IR.drawable.ic_filters
-                },
+                title = stringResource(LR.string.playlists),
+                iconRes = IR.drawable.ic_playlists,
                 onClick = {
                     viewModel.onPlaylistsClicked()
                     navigateToRoute(PlaylistsScreen.ROUTE)
@@ -117,6 +107,17 @@ fun WatchListScreen(
 
         item {
             WatchListChip(
+                title = stringResource(LR.string.profile_navigation_starred),
+                iconRes = IR.drawable.ic_starred,
+                onClick = {
+                    viewModel.onStarredClicked()
+                    navigateToRoute(StarredScreen.ROUTE)
+                },
+            )
+        }
+
+        item {
+            WatchListChip(
                 title = stringResource(LR.string.settings),
                 iconRes = IR.drawable.ic_profile_settings,
                 onClick = {
@@ -128,7 +129,7 @@ fun WatchListScreen(
     }
 }
 
-@Preview(device = WearDevices.SMALL_ROUND, showSystemUi = true)
+@Preview(device = WearDevices.SMALL_ROUND)
 @Composable
 private fun WatchListPreview() {
     WearAppTheme {

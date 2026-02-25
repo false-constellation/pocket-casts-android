@@ -21,6 +21,7 @@ import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationMana
 import au.com.shiftyjelly.pocketcasts.repositories.notification.OnboardingNotificationType
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
+import au.com.shiftyjelly.pocketcasts.utils.extensions.getYearlyPlanWithFeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import dagger.assisted.Assisted
@@ -60,6 +61,12 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
             } else {
                 OnboardingUpgradeFeaturesState.LoadedPlansFilter.BOTH
             }
+
+        // Determine if installment plans should be used based on feature flag and experiment
+        val isFeatureEnabled = FeatureFlag.isEnabled(Feature.NEW_INSTALLMENT_PLAN)
+        val experimentVariation = experimentProvider.getVariation(Experiment.YearlyInstallments)
+        val shouldUseInstallmentPlans = isFeatureEnabled && experimentVariation is Variation.Treatment
+
         return OnboardingUpgradeFeaturesState.Loaded(
             subscriptionPlans,
             selectedBillingCycle = flow.preselectedBillingCycle,
@@ -67,6 +74,7 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
             plansFilter = plansFilter,
             purchaseFailed = false,
             onboardingVariant = variant,
+            shouldUseInstallmentPlans = shouldUseInstallmentPlans,
         )
     }
 
@@ -95,8 +103,12 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
         else -> OnboardingUpgradeFeaturesState.NewOnboardingVariant.FEATURES_FIRST
     }
 
-    fun changeBillingCycle(billingCycle: BillingCycle) {
-        val properties = analyticsProps(flow = flow, variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant()).toMutableMap().apply {
+    fun changeBillingCycle(billingCycle: BillingCycle, source: OnboardingUpgradeSource? = null) {
+        val properties = analyticsProps(
+            flow = flow,
+            source = source,
+            variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant(),
+        ).toMutableMap().apply {
             put("value", billingCycle.analyticsValue)
         }
         analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_SUBSCRIPTION_FREQUENCY_CHANGED, properties)
@@ -120,13 +132,14 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
     fun purchaseSelectedPlan(
         activity: Activity,
         onComplete: () -> Unit,
+        source: OnboardingUpgradeSource? = null,
     ) {
         _state.update { value -> (value as? OnboardingUpgradeFeaturesState.Loaded)?.copy(purchaseFailed = false) ?: value }
         (state.value as? OnboardingUpgradeFeaturesState.Loaded)?.let { loadedState ->
             val planKey = loadedState.selectedPlan.key
-            trackPaymentFrequencyButtonTapped(planKey)
+            trackPaymentFrequencyButtonTapped(planKey, source)
             viewModelScope.launch {
-                val purchaseResult = paymentClient.purchaseSubscriptionPlan(planKey, flow.source.analyticsValue, activity)
+                val purchaseResult = paymentClient.purchaseSubscriptionPlan(key = planKey, purchaseSource = (source ?: flow.source).analyticsValue, activity = activity, purchaseFlow = flow.analyticsValue)
 
                 when (purchaseResult) {
                     is PurchaseResult.Purchased -> {
@@ -135,6 +148,7 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
                     }
 
                     is PurchaseResult.Cancelled -> Unit
+
                     is PurchaseResult.Failure -> {
                         _state.update { value -> (value as? OnboardingUpgradeFeaturesState.Loaded)?.copy(purchaseFailed = true) ?: value }
                     }
@@ -143,15 +157,32 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
         }
     }
 
-    private fun trackPaymentFrequencyButtonTapped(plan: SubscriptionPlan.Key) {
-        analyticsTracker.track(
-            AnalyticsEvent.SELECT_PAYMENT_FREQUENCY_NEXT_BUTTON_TAPPED,
-            mapOf(
-                "flow" to flow.analyticsValue,
-                "source" to flow.source.analyticsValue,
-                "product" to plan.productId,
-            ),
-        )
+    private fun trackPaymentFrequencyButtonTapped(plan: SubscriptionPlan.Key, source: OnboardingUpgradeSource?) {
+        if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)) {
+            analyticsTracker.track(
+                AnalyticsEvent.PLUS_PROMOTION_UPGRADE_BUTTON_TAPPED,
+                buildMap {
+                    putAll(
+                        analyticsProps(
+                            flow = flow,
+                            source = source,
+                            variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant(),
+                        ),
+                    )
+                    put("is_installment", plan.isInstallment.toString())
+                },
+            )
+        } else {
+            analyticsTracker.track(
+                AnalyticsEvent.SELECT_PAYMENT_FREQUENCY_NEXT_BUTTON_TAPPED,
+                mapOf(
+                    "flow" to flow.analyticsValue,
+                    "source" to flow.source.analyticsValue,
+                    "product" to requireNotNull(plan.productId) { "productId shouldn't be null for plan=$plan" },
+                    "is_installment" to plan.isInstallment.toString(),
+                ),
+            )
+        }
     }
 
     fun onShown(flow: OnboardingFlow, source: OnboardingUpgradeSource) {
@@ -166,12 +197,12 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
         analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_NOT_NOW_BUTTON_TAPPED, analyticsProps(flow = flow, source = source, variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant()))
     }
 
-    fun onPrivacyPolicyPressed() {
-        analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_PRIVACY_POLICY_TAPPED, analyticsProps(flow = flow, variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant()))
+    fun onPrivacyPolicyPressed(source: OnboardingUpgradeSource) {
+        analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_PRIVACY_POLICY_TAPPED, analyticsProps(flow = flow, source = source, variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant()))
     }
 
-    fun onTermsAndConditionsPressed() {
-        analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_TERMS_AND_CONDITIONS_TAPPED, analyticsProps(flow = flow, variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant()))
+    fun onTermsAndConditionsPressed(source: OnboardingUpgradeSource) {
+        analyticsTracker.track(AnalyticsEvent.PLUS_PROMOTION_TERMS_AND_CONDITIONS_TAPPED, analyticsProps(flow = flow, source = source, variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant()))
     }
 
     fun onSelectPaymentFrequencyShown(flow: OnboardingFlow, source: OnboardingUpgradeSource) {
@@ -180,6 +211,20 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
 
     fun onSelectPaymentFrequencyDismissed(flow: OnboardingFlow, source: OnboardingUpgradeSource) {
         analyticsTracker.track(AnalyticsEvent.SELECT_PAYMENT_FREQUENCY_DISMISSED, analyticsProps(flow = flow, source = source, variant = experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant()))
+    }
+
+    fun onReportSeeAllFeaturesPressed(
+        variant: OnboardingUpgradeFeaturesState.NewOnboardingVariant?,
+        source: OnboardingUpgradeSource,
+    ) {
+        analyticsTracker.track(
+            AnalyticsEvent.PLUS_PROMOTION_DETAILS_TAPPED,
+            properties = analyticsProps(
+                flow = flow,
+                variant = variant ?: experimentProvider.getVariation(Experiment.NewOnboardingABTest).toNewOnboardingVariant(),
+                source = source,
+            ),
+        )
     }
 
     @AssistedFactory
@@ -193,7 +238,8 @@ class OnboardingUpgradeFeaturesViewModel @AssistedInject constructor(
             variant: OnboardingUpgradeFeaturesState.NewOnboardingVariant,
             source: OnboardingUpgradeSource? = null,
         ) = buildMap {
-            put("flow", flow.analyticsValue)
+            val properFlow = if (source == OnboardingUpgradeSource.FINISHED_ONBOARDING) OnboardingFlow.InitialOnboarding else flow
+            put("flow", properFlow.analyticsValue)
             source?.let {
                 put("source", it.analyticsValue)
             }
@@ -216,9 +262,9 @@ sealed class OnboardingUpgradeFeaturesState {
         BOTH,
     }
 
-    enum class NewOnboardingVariant {
-        FEATURES_FIRST,
-        TRIAL_FIRST_WHEN_ELIGIBLE,
+    enum class NewOnboardingVariant(val analyticsValue: String) {
+        FEATURES_FIRST("A"),
+        TRIAL_FIRST_WHEN_ELIGIBLE("B"),
     }
 
     data class Loaded(
@@ -228,6 +274,7 @@ sealed class OnboardingUpgradeFeaturesState {
         val plansFilter: LoadedPlansFilter,
         val purchaseFailed: Boolean,
         val onboardingVariant: NewOnboardingVariant,
+        val shouldUseInstallmentPlans: Boolean = false,
     ) : OnboardingUpgradeFeaturesState() {
         val availableBasePlans = listOfNotNull(
             plusYearlyPlanWithOffer().takeUnless { plansFilter == LoadedPlansFilter.PATRON_ONLY },
@@ -264,7 +311,12 @@ sealed class OnboardingUpgradeFeaturesState {
                 SubscriptionOffer.Trial
             }
 
-            val offerPlan = subscriptionPlans.findOfferPlan(SubscriptionTier.Plus, BillingCycle.Yearly, offer).getOrNull()
+            val offerPlan = subscriptionPlans.findOfferPlan(
+                SubscriptionTier.Plus,
+                BillingCycle.Yearly,
+                offer,
+                isInstallment = shouldUseInstallmentPlans,
+            ).getOrNull()
             return if (offerPlan == null || OnboardingSubscriptionPlan.create(offerPlan).getOrNull() == null) {
                 plusYearlyPlan()
             } else {
@@ -273,7 +325,8 @@ sealed class OnboardingUpgradeFeaturesState {
         }
 
         private fun plusYearlyPlan(): SubscriptionPlan.Base {
-            return subscriptionPlans.getBasePlan(SubscriptionTier.Plus, BillingCycle.Yearly)
+            // Use installment plan based on feature flag and experiment
+            return subscriptionPlans.getYearlyPlanWithFeatureFlag(SubscriptionTier.Plus, shouldUseInstallmentPlans)
         }
 
         private fun patronYearlyPlan(): SubscriptionPlan.Base {

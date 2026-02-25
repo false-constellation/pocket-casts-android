@@ -38,6 +38,7 @@ import au.com.shiftyjelly.pocketcasts.preferences.model.NewEpisodeNotificationAc
 import au.com.shiftyjelly.pocketcasts.preferences.model.NotificationVibrateSetting
 import au.com.shiftyjelly.pocketcasts.preferences.model.PlayOverNotificationSetting
 import au.com.shiftyjelly.pocketcasts.preferences.model.PodcastGridLayoutType
+import au.com.shiftyjelly.pocketcasts.preferences.model.SelectedPlaylist
 import au.com.shiftyjelly.pocketcasts.preferences.model.ShelfItem
 import au.com.shiftyjelly.pocketcasts.preferences.model.ThemeSetting
 import au.com.shiftyjelly.pocketcasts.utils.AppPlatform
@@ -782,6 +783,14 @@ class SettingsImpl @Inject constructor(
         setLong("historyModified", timeMs)
     }
 
+    override fun getStarredServerModified(): Long {
+        return getLong("starredServerModified", 0)
+    }
+
+    override fun setStarredServerModified(timeMs: Long) {
+        setLong("starredServerModified", timeMs)
+    }
+
     override fun setClearHistoryTime(timeMs: Long) {
         setLong("clearHistoryTime", timeMs)
     }
@@ -848,14 +857,6 @@ class SettingsImpl @Inject constructor(
         sharedPrefs = sharedPreferences,
     )
 
-    override fun selectedFilter(): String? {
-        return getString(Settings.PREFERENCE_SELECTED_FILTER, null)
-    }
-
-    override fun setSelectedFilter(filterUUID: String?) {
-        setString(Settings.PREFERENCE_SELECTED_FILTER, filterUUID, now = true)
-    }
-
     override fun setSelectedTab(selected: Int?) {
         if (selected != null) {
             setInt("selected_tab", selected)
@@ -863,6 +864,16 @@ class SettingsImpl @Inject constructor(
             sharedPreferences.edit().remove("selected_tab").commit()
         }
     }
+
+    private val selectedPlaylistAdapter = moshi.adapter(SelectedPlaylist::class.java)
+
+    override val selectedPlaylist = UserSetting.PrefFromString(
+        sharedPrefKey = "app_start_selected_playlist",
+        defaultValue = null,
+        fromString = { value -> runCatching { selectedPlaylistAdapter.fromJson(value) }.getOrNull() },
+        toString = { value -> selectedPlaylistAdapter.toJson(value) },
+        sharedPrefs = sharedPreferences,
+    )
 
     override fun selectedTab(): Int? {
         if (contains("selected_tab")) {
@@ -981,6 +992,7 @@ class SettingsImpl @Inject constructor(
         fromString = { actionIdsString ->
             when (actionIdsString) {
                 "" -> NewEpisodeNotificationAction.DefaultValues
+
                 else -> actionIdsString.splitIgnoreEmpty(",").mapNotNull { actionIdString ->
                     NewEpisodeNotificationAction.entries.find { action ->
                         action.id.toString() == actionIdString
@@ -1000,6 +1012,7 @@ class SettingsImpl @Inject constructor(
         sharedPrefKey = "autoUpNextEmpty",
         defaultValue = when (Util.getAppPlatform(context)) {
             AppPlatform.Automotive -> true
+
             AppPlatform.Phone,
             AppPlatform.WearOs,
             -> false
@@ -1332,13 +1345,13 @@ class SettingsImpl @Inject constructor(
 
     override val collectAnalytics = UserSetting.BoolPref(
         sharedPrefKey = "SendUsageStatsKey",
-        defaultValue = BuildConfig.DATA_COLLECTION_DEFAULT_VALUE ?: true,
+        defaultValue = true,
         sharedPrefs = sharedPreferences,
     )
 
     override val sendCrashReports = UserSetting.BoolPref(
         sharedPrefKey = "SendCrashReportsKey",
-        defaultValue = BuildConfig.DATA_COLLECTION_DEFAULT_VALUE ?: true,
+        defaultValue = true,
         sharedPrefs = sharedPreferences,
     )
 
@@ -1634,6 +1647,12 @@ class SettingsImpl @Inject constructor(
         sharedPrefs = sharedPreferences,
     )
 
+    override val saveUpNextAsPlaylist = UserSetting.BoolPref(
+        sharedPrefKey = "save_up_next_as_playlist",
+        defaultValue = true,
+        sharedPrefs = sharedPreferences,
+    )
+
     override val appReviewEpisodeCompletedTimestamps = UserSetting.PrefListFromString(
         sharedPrefKey = "app_review_episode_completed_timestamps",
         defaultValue = emptyList(),
@@ -1706,8 +1725,16 @@ class SettingsImpl @Inject constructor(
         sharedPrefs = sharedPreferences,
     )
 
-    override val appReviewPlaybackSharedTimestamp = UserSetting.PrefFromString(
-        sharedPrefKey = "app_review_playback_shared_timestamp",
+    override val appReviewEndOfYearSharedTimestamp = UserSetting.PrefFromString(
+        sharedPrefKey = "app_review_end_of_year_shared_timestamp",
+        defaultValue = null,
+        fromString = { value -> runCatching { Instant.parse(value) }.getOrNull() },
+        toString = { value -> value.toString() },
+        sharedPrefs = sharedPreferences,
+    )
+
+    override val appReviewEndOfYearCompletedTimestamp = UserSetting.PrefFromString(
+        sharedPrefKey = "app_review_end_of_year_completed_timestamp",
         defaultValue = null,
         fromString = { value -> runCatching { Instant.parse(value) }.getOrNull() },
         toString = { value -> value.toString() },

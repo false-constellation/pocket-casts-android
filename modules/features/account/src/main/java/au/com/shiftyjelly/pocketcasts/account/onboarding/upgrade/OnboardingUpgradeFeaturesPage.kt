@@ -132,7 +132,9 @@ internal fun OnboardingUpgradeFeaturesPage(
     SetStatusBarBackground(scrollState, onUpdateSystemBars)
 
     when (state) {
-        is OnboardingUpgradeFeaturesState.Loading -> Unit // Do Nothing
+        is OnboardingUpgradeFeaturesState.Loading -> Unit
+
+        // Do Nothing
         is OnboardingUpgradeFeaturesState.Loaded -> {
             if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)) {
                 OnboardingUpgradeScreen(
@@ -145,10 +147,11 @@ internal fun OnboardingUpgradeFeaturesPage(
                     },
                     state = state,
                     source = source,
-                    onChangeSelectedPlan = { viewModel.changeBillingCycle(it.billingCycle) },
+                    onChangeSelectedPlan = { viewModel.changeBillingCycle(it.billingCycle, source) },
                     onSubscribePress = { onClickSubscribe(false) },
-                    onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed() },
-                    onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed() },
+                    onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed(source) },
+                    onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed(source) },
+                    onClickSeeAllFeatures = { viewModel.onReportSeeAllFeaturesPressed(it, source) },
                 )
             } else {
                 UpgradeLayout(
@@ -160,8 +163,8 @@ internal fun OnboardingUpgradeFeaturesPage(
                     onChangeBillingCycle = { viewModel.changeBillingCycle(it) },
                     onChangeSubscriptionTier = { viewModel.changeSubscriptionTier(it) },
                     onClickSubscribe = { onClickSubscribe(false) },
-                    onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed() },
-                    onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed() },
+                    onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed(source) },
+                    onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed(source) },
                 )
             }
         }
@@ -407,6 +410,7 @@ private fun FeatureCard(
                     SubscriptionBadge(
                         iconRes = subscriptionPlan.badgeIconRes,
                         shortNameRes = subscriptionPlan.shortNameRes,
+                        contentDescriptionRes = subscriptionPlan.badgeContentDescriptionRes,
                         backgroundColor = Color.Black,
                         textColor = Color.White,
                         modifier = Modifier
@@ -434,6 +438,7 @@ private fun FeatureCard(
                     SubscriptionBadge(
                         iconRes = subscriptionPlan.badgeIconRes,
                         shortNameRes = subscriptionPlan.shortNameRes,
+                        contentDescriptionRes = subscriptionPlan.badgeContentDescriptionRes,
                         backgroundColor = Color.Black,
                         textColor = Color.White,
                         modifier = Modifier

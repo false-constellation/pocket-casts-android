@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,7 +46,7 @@ import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.PodcastGrouping
-import au.com.shiftyjelly.pocketcasts.models.type.EpisodeStatusEnum
+import au.com.shiftyjelly.pocketcasts.models.type.EpisodeDownloadStatus
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeViewSource
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodesSortType
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarkActivity
@@ -284,7 +285,7 @@ class PodcastFragment : BaseFragment() {
 
     private val onUnsubscribeClicked: (successCallback: () -> Unit) -> Unit = { successCallback ->
         lifecycleScope.launch {
-            val downloaded = withContext(Dispatchers.Default) { podcastManager.countEpisodesInPodcastWithStatusBlocking(podcastUuid, EpisodeStatusEnum.DOWNLOADED) }
+            val downloaded = withContext(Dispatchers.Default) { podcastManager.countEpisodesInPodcastWithStatusBlocking(podcastUuid, EpisodeDownloadStatus.Downloaded) }
             val title = when (downloaded) {
                 0 -> getString(LR.string.are_you_sure)
                 1 -> getString(LR.string.podcast_unsubscribe_downloaded_file_singular)
@@ -299,8 +300,7 @@ class PodcastFragment : BaseFragment() {
                     successCallback()
                     viewModel.unsubscribeFromPodcast()
 
-                    @Suppress("DEPRECATION")
-                    activity?.onBackPressed()
+                    activity?.onBackPressedDispatcher?.onBackPressed()
                 }
             dialog.show(parentFragmentManager, "unsubscribe")
         }
@@ -688,8 +688,7 @@ class PodcastFragment : BaseFragment() {
                 share()
             },
             onNavigateBack = {
-                @Suppress("DEPRECATION")
-                activity?.onBackPressed()
+                activity?.onBackPressedDispatcher?.onBackPressed()
             },
             onLongClick = {
                 theme.toggleDarkLightThemeActivity(activity as AppCompatActivity)
@@ -802,7 +801,12 @@ class PodcastFragment : BaseFragment() {
             },
             onSwipeAction = { episode, swipeAction ->
                 viewLifecycleOwner.lifecycleScope.launch {
-                    swipeActionViewModel.handleAction(swipeAction, episode.uuid, childFragmentManager)
+                    swipeActionViewModel.handleAction(
+                        action = swipeAction,
+                        episodeUuid = episode.uuid,
+                        podcastUuid = episode.podcastOrSubstituteUuid,
+                        fragmentManager = childFragmentManager,
+                    )
                 }
             },
         ).apply {
@@ -1082,6 +1086,7 @@ class PodcastFragment : BaseFragment() {
             viewModel.refreshState.collect { state ->
                 when (state) {
                     PodcastViewModel.RefreshState.NotStarted -> {}
+
                     PodcastViewModel.RefreshState.NewEpisodeFound -> {
                         binding?.swipeRefreshLayout?.isRefreshing = false
                         showSnackBar(getString(LR.string.podcast_refresh_new_episode_found))
@@ -1305,6 +1310,8 @@ private class ToolbarController {
         onColorChange: (Color) -> Unit,
     ) {
         view.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        // Stop the insets between Compose and the View system interfering with each other. Without this the full screen player is under the status and navigation bars.
+        view.consumeWindowInsets = true
         view.setContent {
             AppTheme(theme.activeTheme) {
                 PodcastToolbar(

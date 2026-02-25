@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.podcasts.view
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -52,9 +53,11 @@ import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration.Element
 import au.com.shiftyjelly.pocketcasts.preferences.model.AutoPlaySource
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
-import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
+import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadQueue
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeRowDataProvider
+import au.com.shiftyjelly.pocketcasts.repositories.sync.StarredSyncWorker
+import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
 import au.com.shiftyjelly.pocketcasts.settings.AutoDownloadSettingsFragment
 import au.com.shiftyjelly.pocketcasts.settings.ManualCleanupFragment
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
@@ -124,7 +127,7 @@ class ProfileEpisodeListFragment :
     }
 
     @Inject
-    lateinit var downloadManager: DownloadManager
+    lateinit var downloadQueue: DownloadQueue
 
     @Inject
     lateinit var playButtonListener: PlayButton.OnClickListener
@@ -146,6 +149,9 @@ class ProfileEpisodeListFragment :
 
     @Inject
     lateinit var rowDataProvider: EpisodeRowDataProvider
+
+    @Inject
+    lateinit var syncManager: SyncManager
 
     private val viewModel: ProfileEpisodeListViewModel by viewModels()
     private val cleanUpViewModel: ManualCleanupViewModel by viewModels()
@@ -203,7 +209,12 @@ class ProfileEpisodeListFragment :
             },
             onSwipeAction = { episode, swipeAction ->
                 viewLifecycleOwner.lifecycleScope.launch {
-                    swipeActionViewModel.handleAction(swipeAction, episode.uuid, childFragmentManager)
+                    swipeActionViewModel.handleAction(
+                        action = swipeAction,
+                        episodeUuid = episode.uuid,
+                        podcastUuid = episode.podcastOrSubstituteUuid,
+                        fragmentManager = childFragmentManager,
+                    )
                 }
             },
         )
@@ -214,6 +225,7 @@ class ProfileEpisodeListFragment :
         return binding?.root
     }
 
+    @SuppressLint("MissingSuperCall") // False positive
     override fun onAttach(context: Context) {
         super.onAttach(context)
 
@@ -251,6 +263,10 @@ class ProfileEpisodeListFragment :
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         viewModel.setup(mode)
+
+        if (savedInstanceState == null) {
+            startStarredSyncWorker()
+        }
 
         updateToolbar()
 
@@ -453,6 +469,15 @@ class ProfileEpisodeListFragment :
         }
     }
 
+    private fun startStarredSyncWorker() {
+        if (mode is Mode.Starred) {
+            StarredSyncWorker.enqueue(
+                syncManager = syncManager,
+                context = requireContext(),
+            )
+        }
+    }
+
     private fun updateEmptyStateView(state: State) {
         binding?.emptyLayout?.isVisible = state is State.Empty
 
@@ -546,7 +571,7 @@ class ProfileEpisodeListFragment :
             if (mode is Mode.Downloaded) {
                 analyticsTracker.track(AnalyticsEvent.DOWNLOADS_OPTIONS_BUTTON_TAPPED)
                 dialog.addTextOption(LR.string.profile_auto_download_settings, imageId = R.drawable.ic_settings_small, click = this::showAutodownloadSettings)
-                if (downloadManager.hasPendingOrRunningDownloads()) {
+                if (downloadQueue.size > 0) {
                     dialog.addTextOption(LR.string.settings_auto_download_stop_all, imageId = IR.drawable.ic_stop, click = this::stopAllDownloads)
                 }
                 dialog.addTextOption(LR.string.profile_clean_up, imageId = VR.drawable.ic_delete, click = this::showCleanupSettings)
@@ -570,7 +595,7 @@ class ProfileEpisodeListFragment :
 
     private fun stopAllDownloads() {
         analyticsTracker.track(AnalyticsEvent.DOWNLOADS_OPTIONS_MODAL_OPTION_TAPPED, mapOf(OPTION_KEY to STOP_ALL_DOWNLOADS))
-        downloadManager.stopAllDownloads()
+        viewModel.cancelAllDownloads()
     }
 
     private fun showCleanupSettings() {

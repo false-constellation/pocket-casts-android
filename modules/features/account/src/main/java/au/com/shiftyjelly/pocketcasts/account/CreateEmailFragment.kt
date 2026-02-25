@@ -62,8 +62,8 @@ class CreateEmailFragment : BaseFragment() {
         viewModel.updateEmail(startingEmailValue)
         viewModel.updatePassword(startingPasswordValue)
 
-        txtEmail.setText(viewModel.email.value?.toString())
-        txtPassword.setText(viewModel.password.value?.toString())
+        txtEmail.setText(viewModel.email.value)
+        txtPassword.setText(viewModel.password.value)
 
         txtEmail.showKeyboard()
         currentEditText = txtEmail
@@ -92,15 +92,18 @@ class CreateEmailFragment : BaseFragment() {
                     progress.isVisible = false
                     updateForm(invalidEmail = false, invalidPassword = false)
                 }
+
                 is CreateAccountState.AccountCreating -> {
                     progress.isVisible = true
                 }
+
                 is CreateAccountState.AccountCreated -> {
                     progress.isVisible = false
                     if (viewModel.subscriptionType.value == SubscriptionType.FREE) {
                         view.findNavController().navigate(R.id.action_createEmailFragment_to_createDoneFragment)
                     }
                 }
+
                 is CreateAccountState.Failure -> {
                     progress.isVisible = false
                     val invalidEmail = viewModel.currentStateHasError(CreateAccountError.INVALID_EMAIL)
@@ -114,6 +117,7 @@ class CreateEmailFragment : BaseFragment() {
                         viewModel.clearError(CreateAccountError.CANNOT_CREATE_ACCOUNT)
                     }
                 }
+
                 else -> {}
             }
         }

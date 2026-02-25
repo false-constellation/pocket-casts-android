@@ -49,6 +49,9 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import dagger.hilt.android.AndroidEntryPoint
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.rxkotlin.plusAssign
+import io.reactivex.rxkotlin.subscribeBy
 import javax.inject.Inject
 import kotlinx.parcelize.Parcelize
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -90,6 +93,7 @@ class CloudFileBottomSheetFragment : BottomSheetDialogFragment() {
     private var pocketCastsImageRequestFactory: PocketCastsImageRequestFactory? = null
     private val viewModel: CloudBottomSheetViewModel by viewModels()
     private var binding: BottomSheetCloudFileBinding? = null
+    private val disposables = CompositeDisposable()
 
     private val args get() = requireArguments().requireParcelable<Args>(NEW_INSTANCE_ARG)
 
@@ -120,6 +124,7 @@ class CloudFileBottomSheetFragment : BottomSheetDialogFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        disposables.clear()
         binding = null
     }
 
@@ -251,12 +256,19 @@ class CloudFileBottomSheetFragment : BottomSheetDialogFragment() {
                     episode = episode,
                     tintColor = tintColor,
                     hideErrorDetails = true,
-                    rowDataObservable = rowDataProvider.episodeRowDataObservable(episode.uuid),
                 )
+
+                disposables.clear()
+                disposables += rowDataProvider.userEpisodeRowDataObservable(episode.uuid)
+                    .subscribeBy(onNext = { data ->
+                        binding.fileStatusIconsView.update(data)
+                    })
 
                 binding.lblCloud.text = when (episode.serverStatus) {
                     UserEpisodeServerStatus.LOCAL -> getString(LR.string.profile_cloud_upload)
+
                     UserEpisodeServerStatus.UPLOADING, UserEpisodeServerStatus.WAITING_FOR_WIFI, UserEpisodeServerStatus.QUEUED -> getString(LR.string.profile_cloud_cancel_upload)
+
                     UserEpisodeServerStatus.UPLOADED -> getString(
                         if (episode.isDownloaded) {
                             LR.string.profile_cloud_remove
@@ -266,6 +278,7 @@ class CloudFileBottomSheetFragment : BottomSheetDialogFragment() {
                             LR.string.download
                         },
                     )
+
                     UserEpisodeServerStatus.MISSING -> ""
                 }
 
@@ -279,7 +292,9 @@ class CloudFileBottomSheetFragment : BottomSheetDialogFragment() {
                 binding.layoutCloud.setOnClickListener {
                     when (episode.serverStatus) {
                         UserEpisodeServerStatus.LOCAL, UserEpisodeServerStatus.MISSING -> upload(episode, Network.isUnmeteredConnection(binding.layoutCloud.context))
+
                         UserEpisodeServerStatus.UPLOADING, UserEpisodeServerStatus.WAITING_FOR_WIFI, UserEpisodeServerStatus.QUEUED -> viewModel.cancelUpload(episode)
+
                         UserEpisodeServerStatus.UPLOADED -> if (episode.isDownloaded) {
                             viewModel.removeEpisode(episode)
                         } else if (episode.isDownloading) {
@@ -336,6 +351,7 @@ class CloudFileBottomSheetFragment : BottomSheetDialogFragment() {
                             layoutLockedCloud.isVisible = true
                         }
                     }
+
                     else -> {
                         layoutCloud.isVisible = false
                         layoutLockedCloud.isVisible = true
@@ -358,7 +374,7 @@ class CloudFileBottomSheetFragment : BottomSheetDialogFragment() {
     fun download(episode: UserEpisode, isOnWifi: Boolean) {
         viewModel.trackOptionTapped(DOWNLOAD)
         if (settings.warnOnMeteredNetwork.value && !isOnWifi) {
-            warningsHelper.downloadWarning(args.episodeId, "user episode sheet")
+            warningsHelper.downloadWarning(args.episodeId, SourceView.FILES)
                 .show(parentFragmentManager, "download_warning")
         } else {
             viewModel.download(episode)

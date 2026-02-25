@@ -62,7 +62,6 @@ class SettingsAppearanceViewModel @Inject constructor(
                     Theme.ThemeType.LIGHT_CONTRAST -> "light_contrast"
                     Theme.ThemeType.ELECTRIC -> "electric"
                     Theme.ThemeType.CLASSIC_LIGHT -> "classic"
-                    Theme.ThemeType.RADIOACTIVE -> "radioactive"
                 },
             ),
         )
@@ -73,14 +72,13 @@ class SettingsAppearanceViewModel @Inject constructor(
 
     fun loadThemesAndIcons() {
         createAccountState.postValue(SettingsAppearanceState.ThemesAndIconsLoading)
-        val appIcons = appIcon.allAppIconTypes.toList()
 
         createAccountState.postValue(
             SettingsAppearanceState.ThemesAndIconsLoaded(
                 theme.activeTheme,
                 theme.allThemes.toList(),
                 appIcon.activeAppIcon,
-                appIcons,
+                appIcon.allAppIconTypes,
             ),
         )
     }

@@ -166,16 +166,6 @@ class Theme @Inject constructor(private val settings: Settings) {
             darkTheme = false,
             isPlus = true,
         ),
-        RADIOACTIVE(
-            themeSetting = ThemeSetting.RADIOACTIVE,
-            labelId = LR.string.settings_theme_radioactivity,
-            resourceId = R.style.Radioactive,
-            iconResourceId = IR.drawable.ic_theme_radioactive,
-            toolbarLightIcons = true,
-            backgroundLightIcons = true,
-            darkTheme = true,
-            isPlus = true,
-        ),
         ;
 
         companion object {
@@ -189,7 +179,6 @@ class Theme @Inject constructor(private val settings: Settings) {
                 ThemeSetting.LIGHT_CONTRAST -> Theme.ThemeType.LIGHT_CONTRAST
                 ThemeSetting.ELECTRIC -> Theme.ThemeType.ELECTRIC
                 ThemeSetting.CLASSIC_LIGHT -> Theme.ThemeType.CLASSIC_LIGHT
-                ThemeSetting.RADIOACTIVE -> Theme.ThemeType.RADIOACTIVE
             }
         }
     }
@@ -225,11 +214,13 @@ class Theme @Inject constructor(private val settings: Settings) {
                     setUseSystemTheme(false, null)
                 }
             }
+
             Configuration.UI_MODE_NIGHT_YES -> { // Night mode is active, we're using dark theme
                 if (!activeTheme.darkTheme) {
                     setUseSystemTheme(false, null)
                 }
             }
+
             else -> getPreferredDarkThemeFromPreferences()
         }
 
@@ -246,10 +237,14 @@ class Theme @Inject constructor(private val settings: Settings) {
             val theme = when (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) {
                 Configuration.UI_MODE_NIGHT_NO -> {
                     getPreferredLightFromPreferences()
-                } // Night mode is not active, we're using the light theme
+                }
+
+                // Night mode is not active, we're using the light theme
                 Configuration.UI_MODE_NIGHT_YES -> {
                     getPreferredDarkThemeFromPreferences()
-                } // Night mode is active, we're using dark theme
+                }
+
+                // Night mode is active, we're using dark theme
                 else -> getPreferredDarkThemeFromPreferences()
             }
 
@@ -362,11 +357,15 @@ class Theme @Inject constructor(private val settings: Settings) {
     }
 
     @ColorInt fun getNavigationBackgroundColor(context: Context): Int {
+        // For SDK 35 and above edge-to-edge will draw a view with this color behind the navigation bar so always make it transparent
+        return if (Build.VERSION.SDK_INT >= 35) {
+            Color.TRANSPARENT
+        }
         // For SDK 24 and 25 the navigation bar icons aren't tinted correctly so always use black
-        return if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             Color.BLACK
         } else {
-            return context.getThemeColor(R.attr.primary_ui_03)
+            context.getThemeColor(R.attr.primary_ui_03)
         }
     }
 
@@ -408,6 +407,7 @@ class Theme @Inject constructor(private val settings: Settings) {
                     useDarkStatusBarIcons(window)
                 }
             }
+
             StatusBarIconColor.ThemeNoToolbar -> {
                 if (activeTheme.backgroundLightIcons) {
                     useLightStatusBarIcons(window)
@@ -415,8 +415,11 @@ class Theme @Inject constructor(private val settings: Settings) {
                     useDarkStatusBarIcons(window)
                 }
             }
+
             StatusBarIconColor.Dark -> useDarkStatusBarIcons(window)
+
             StatusBarIconColor.Light -> useLightStatusBarIcons(window)
+
             is StatusBarIconColor.UpNext -> {
                 if (getUpNextTheme(isFullScreen = color.isFullScreen).toolbarLightIcons) {
                     useLightStatusBarIcons(window)

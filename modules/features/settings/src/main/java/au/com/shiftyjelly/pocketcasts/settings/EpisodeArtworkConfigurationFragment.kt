@@ -72,8 +72,7 @@ class EpisodeArtworkConfigurationFragment : BaseFragment() {
                     settings.artworkConfiguration.set(configuration, updateModifiedAt = true)
                 },
                 onBackPress = {
-                    @Suppress("DEPRECATION")
-                    activity?.onBackPressed()
+                    activity?.onBackPressedDispatcher?.onBackPressed()
                 },
             )
         }
@@ -152,7 +151,7 @@ class EpisodeArtworkConfigurationFragment : BaseFragment() {
 
     private val ArtworkConfiguration.Element.titleId
         get() = when (this) {
-            ArtworkConfiguration.Element.Filters -> LR.string.filters
+            ArtworkConfiguration.Element.Filters -> LR.string.playlists
             ArtworkConfiguration.Element.UpNext -> LR.string.up_next
             ArtworkConfiguration.Element.Downloads -> LR.string.profile_navigation_downloads
             ArtworkConfiguration.Element.Files -> LR.string.profile_navigation_files

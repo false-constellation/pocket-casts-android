@@ -1,10 +1,12 @@
 package au.com.shiftyjelly.pocketcasts.endofyear
 
+import android.app.Activity
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.coroutines.CachedAction
 import au.com.shiftyjelly.pocketcasts.endofyear.StoriesActivity.StoriesSource
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.to.Story
@@ -16,7 +18,7 @@ import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearStats
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearSync
 import au.com.shiftyjelly.pocketcasts.servers.list.ListServiceManager
 import au.com.shiftyjelly.pocketcasts.sharing.SharingRequest
-import au.com.shiftyjelly.pocketcasts.utils.coroutines.CachedAction
+import au.com.shiftyjelly.pocketcasts.utils.accessibility.AccessibilityManager
 import au.com.shiftyjelly.pocketcasts.utils.extensions.padEnd
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -24,12 +26,16 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
 import java.time.Year
+import kotlin.time.Duration
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -47,8 +53,11 @@ class EndOfYearViewModel @AssistedInject constructor(
     private val listServiceManager: ListServiceManager,
     private val sharingClient: StorySharingClient,
     private val analyticsTracker: AnalyticsTracker,
+    private val accessibilityManager: AccessibilityManager,
 ) : ViewModel() {
     private val syncState = MutableStateFlow<SyncState>(SyncState.Syncing)
+    private val _syncFailedSignal = CompletableDeferred<Unit>()
+    internal val syncFailedSignal: Deferred<Unit> get() = _syncFailedSignal
 
     private val eoyStatsAction = CachedAction<Year, Pair<EndOfYearStats, RandomShowIds?>> {
         val stats = endOfYearManager.getStats(year)
@@ -78,22 +87,43 @@ class EndOfYearViewModel @AssistedInject constructor(
     private val _switchStory = MutableSharedFlow<Unit>()
     internal val switchStory get() = _switchStory.asSharedFlow()
 
-    internal val uiState = combine(
+    internal val uiState: StateFlow<UiState> = combine(
         syncState,
         settings.cachedSubscription.flow,
         topPodcastsLink,
         progress,
+        accessibilityManager.isTalkBackOnFlow,
         ::createUiModel,
-    ).stateIn(viewModelScope, SharingStarted.Lazily, UiState.Syncing)
+    ).stateIn(viewModelScope, SharingStarted.Lazily, UiState.Syncing(storyProgress = 0f, isTalkBackOn = false))
+
+    private var syncJob: Job? = null
+
+    init {
+        accessibilityManager.startListening()
+    }
+
+    override fun onCleared() {
+        accessibilityManager.stopListening()
+        super.onCleared()
+    }
 
     internal fun syncData() {
-        viewModelScope.launch {
+        if (syncJob != null) {
+            return
+        }
+
+        syncJob = viewModelScope.launch {
             syncState.emit(SyncState.Syncing)
+
             val isSynced = endOfYearSync.sync(year)
             if (!isSynced) {
                 trackFailedToLoad()
+                _syncFailedSignal.complete(Unit)
+                return@launch
             }
-            syncState.emit(if (isSynced) SyncState.Synced else SyncState.Failure)
+
+            eoyStatsAction.run(year, viewModelScope).await()
+            syncState.emit(SyncState.Synced)
         }
     }
 
@@ -102,9 +132,13 @@ class EndOfYearViewModel @AssistedInject constructor(
         subscription: Subscription?,
         topPodcastsLink: String?,
         progress: Float,
+        isTalkBackOn: Boolean,
     ) = when (syncState) {
-        SyncState.Syncing -> UiState.Syncing
-        SyncState.Failure -> UiState.Failure
+        SyncState.Syncing -> UiState.Syncing(
+            storyProgress = progress,
+            isTalkBackOn = isTalkBackOn,
+        )
+
         SyncState.Synced -> {
             val (stats, randomShowIds) = eoyStatsAction.run(year, viewModelScope).await()
             val stories = createStories(stats, randomShowIds, subscription, topPodcastsLink)
@@ -112,6 +146,7 @@ class EndOfYearViewModel @AssistedInject constructor(
                 stories = stories,
                 isPaidAccount = subscription != null,
                 storyProgress = progress,
+                isTalkBackOn = isTalkBackOn,
             )
         }
     }
@@ -127,9 +162,8 @@ class EndOfYearViewModel @AssistedInject constructor(
             add(
                 Story.NumberOfShows(
                     showCount = stats.playedPodcastCount,
-                    epsiodeCount = stats.playedEpisodeCount,
-                    topShowIds = randomShowIds.topShows,
-                    bottomShowIds = randomShowIds.bottomShows,
+                    episodeCount = stats.playedEpisodeCount,
+                    randomShowIds = (randomShowIds.topShows + randomShowIds.bottomShows).take(7),
                 ),
             )
         }
@@ -144,9 +178,11 @@ class EndOfYearViewModel @AssistedInject constructor(
         if (longestEpisode != null) {
             add(Story.LongestEpisode(longestEpisode))
         }
-        if (subscription == null) {
-            add(Story.PlusInterstitial)
-        }
+        add(
+            Story.PlusInterstitial(
+                subscriptionTier = subscription?.tier,
+            ),
+        )
         add(
             Story.YearVsYear(
                 lastYearDuration = stats.lastYearPlaybackTime,
@@ -167,23 +203,33 @@ class EndOfYearViewModel @AssistedInject constructor(
     internal fun onStoryChanged(story: Story) {
         trackStoryShown(story)
         viewModelScope.launch {
-            countDownJob?.cancelAndJoin()
             progress.value = 0f
+            countDownJob?.cancelAndJoin()
+            val talkbackOn = accessibilityManager.isTalkBackOnFlow.value
             val previewDuration = story.previewDuration
-            if (previewDuration != null) {
-                val progressDelay = previewDuration / 100
-                countDownJob = launch {
-                    var currentProgress = 0f
-                    while (currentProgress < 1f) {
-                        storyAutoProgressPauseReasons.first { it.isEmpty() }
-                        currentProgress += 0.01f
-                        progress.value = currentProgress
-                        delay(progressDelay)
-                    }
-                    _switchStory.emit(Unit)
+            when {
+                previewDuration == Duration.INFINITE || talkbackOn -> {
+                    progress.value = 0f
                 }
-            } else {
-                progress.value = 1f
+
+                previewDuration == null -> {
+                    progress.value = 1f
+                }
+
+                else -> {
+                    progress.value = 0f
+                    val progressDelay = previewDuration / 100
+                    countDownJob = launch {
+                        var currentProgress = 0f
+                        while (currentProgress < 1f) {
+                            storyAutoProgressPauseReasons.first { it.isEmpty() }
+                            currentProgress += 0.01f
+                            progress.value = currentProgress
+                            delay(progressDelay)
+                        }
+                        _switchStory.emit(Unit)
+                    }
+                }
             }
         }
     }
@@ -197,31 +243,50 @@ class EndOfYearViewModel @AssistedInject constructor(
     }
 
     internal fun getNextStoryIndex(currentIndex: Int): Int? {
-        val state = uiState.value as? UiState.Synced ?: return null
-        val stories = state.stories
+        return when (val state = uiState.value) {
+            is UiState.Synced -> {
+                val stories = state.stories
+                val nextStory = stories.getOrNull(currentIndex + 1) ?: return null
+                if (state.isPaidAccount || nextStory.isFree) {
+                    currentIndex + 1
+                } else {
+                    stories
+                        .drop(currentIndex + 1)
+                        .firstOrNull { it.isFree }
+                        ?.let(stories::indexOf)
+                        .takeIf { it != -1 }
+                }
+            }
 
-        val nextStory = stories.getOrNull(currentIndex + 1) ?: return null
-        return if (state.isPaidAccount || nextStory.isFree) {
-            currentIndex + 1
-        } else {
-            stories.drop(currentIndex + 1)
-                .firstOrNull { it.isFree }
-                ?.let(stories::indexOf)
-        }.takeIf { it != -1 }
+            is UiState.Syncing -> {
+                if (currentIndex == 0 && state.storyProgress >= 1f) {
+                    1
+                } else {
+                    null
+                }
+            }
+        }
     }
 
     internal fun getPreviousStoryIndex(currentIndex: Int): Int? {
-        val state = uiState.value as? UiState.Synced ?: return null
-        val stories = state.stories
+        return when (val state = uiState.value) {
+            is UiState.Synced -> {
+                val stories = state.stories
+                val previousStory = state.stories.getOrNull(currentIndex - 1) ?: return null
+                if (state.isPaidAccount || previousStory.isFree) {
+                    currentIndex - 1
+                } else {
+                    stories.take(currentIndex)
+                        .lastOrNull { it.isFree }
+                        ?.let(stories::indexOf)
+                        ?.takeIf { it != -1 }
+                }
+            }
 
-        val previousStory = state.stories.getOrNull(currentIndex - 1) ?: return null
-        return if (state.isPaidAccount || previousStory.isFree) {
-            currentIndex - 1
-        } else {
-            stories.take(currentIndex)
-                .lastOrNull { it.isFree }
-                ?.let(stories::indexOf)
-        }?.takeIf { it != -1 }
+            is UiState.Syncing -> {
+                null
+            }
+        }
     }
 
     internal fun share(story: Story, screenshot: File) {
@@ -242,17 +307,31 @@ class EndOfYearViewModel @AssistedInject constructor(
         )
     }
 
-    internal fun trackStoriesClosed(source: String) {
-        trackEvent(
-            AnalyticsEvent.END_OF_YEAR_STORIES_DISMISSED,
-            mapOf("source" to source),
+    internal fun trackStoriesClosed(source: String, story: Story?) {
+        trackStoriesDismissed(
+            story = story,
+            source = source,
         )
     }
 
-    internal fun trackStoriesAutoFinished() {
+    internal fun trackPlusContinued() {
+        trackEvent(AnalyticsEvent.END_OF_YEAR_PLUS_CONTINUED)
+    }
+
+    internal fun trackStoriesAutoFinished(story: Story) {
+        trackStoriesDismissed(
+            story = story,
+            source = "auto_progress",
+        )
+    }
+
+    private fun trackStoriesDismissed(source: String, story: Story?) {
         trackEvent(
-            AnalyticsEvent.END_OF_YEAR_STORIES_DISMISSED,
-            mapOf("source" to "auto_progress"),
+            event = AnalyticsEvent.END_OF_YEAR_STORIES_DISMISSED,
+            properties = mapOf(
+                "source" to source,
+                "story" to story?.analyticsValue.orEmpty(),
+            ),
         )
     }
 
@@ -283,7 +362,7 @@ class EndOfYearViewModel @AssistedInject constructor(
             event,
             buildMap {
                 putAll(properties)
-                put("year", year.value)
+                put("current_year", year.value)
             },
         )
     }
@@ -304,6 +383,18 @@ class EndOfYearViewModel @AssistedInject constructor(
         }
     }
 
+    fun screenshotDetected(story: Story, activity: Activity) {
+        analyticsTracker.track(
+            event = AnalyticsEvent.END_OF_YEAR_STORY_SHARED,
+            properties = mapOf(
+                "activity" to activity.javaClass.name,
+                "from" to "screenshot",
+                "story" to story.analyticsValue,
+                "current_year" to year.value,
+            ),
+        )
+    }
+
     private data class RandomShowIds(
         val topShows: List<String>,
         val bottomShows: List<String>,
@@ -321,23 +412,28 @@ class EndOfYearViewModel @AssistedInject constructor(
 
 @Immutable
 internal sealed interface UiState {
-    val storyProgress: Float get() = 0f
+    val storyProgress: Float
+    val stories: List<Story>
+    val isTalkBackOn: Boolean
 
-    data object Syncing : UiState
-
-    data object Failure : UiState
+    data class Syncing(
+        override val storyProgress: Float,
+        override val isTalkBackOn: Boolean,
+    ) : UiState {
+        override val stories get() = placeholderStories
+    }
 
     @Immutable
     data class Synced(
-        val stories: List<Story>,
         val isPaidAccount: Boolean,
         override val storyProgress: Float,
+        override val stories: List<Story>,
+        override val isTalkBackOn: Boolean,
     ) : UiState
 }
 
 private sealed interface SyncState {
     data object Syncing : SyncState
-    data object Failure : SyncState
     data object Synced : SyncState
 }
 
@@ -346,4 +442,11 @@ internal enum class StoryProgressPauseReason {
     UserHoldingStory,
     ScreenshotDialog,
     TakingScreenshot,
+}
+
+private val placeholderStories = buildList {
+    add(Story.Cover)
+    repeat(10) {
+        add(Story.PlaceholderWhileLoading)
+    }
 }

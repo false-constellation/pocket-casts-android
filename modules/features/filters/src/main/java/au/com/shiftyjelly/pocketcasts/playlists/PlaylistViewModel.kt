@@ -6,11 +6,14 @@ import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.text.SearchFieldState
+import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.toPodcastEpisodes
 import au.com.shiftyjelly.pocketcasts.models.type.PlaylistEpisodeSortType
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.model.AutoPlaySource
-import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
+import au.com.shiftyjelly.pocketcasts.preferences.model.SelectedPlaylist
+import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadQueue
+import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadType
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlayAllHandler
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlayAllResponse
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
@@ -45,7 +48,7 @@ class PlaylistViewModel @AssistedInject constructor(
     private val podcastManager: PodcastManager,
     private val episodeManager: EpisodeManager,
     private val playbackManager: PlaybackManager,
-    private val downloadManager: DownloadManager,
+    private val downloadQueue: DownloadQueue,
     private val settings: Settings,
     playAllHandlerFactory: PlayAllHandler.Factory,
     private val analyticsTracker: AnalyticsTracker,
@@ -74,6 +77,8 @@ class PlaylistViewModel @AssistedInject constructor(
     val upNextSavedAsPlaylistSignal = _upNextSavedAsPlaylistSignal.asSharedFlow()
 
     val searchState = SearchFieldState()
+
+    val saveUpNextDefaultValue get() = settings.saveUpNextAsPlaylist.value
 
     private val playlistFlow = searchState.textFlow.flatMapLatest { searchTerm ->
         when (playlistType) {
@@ -106,36 +111,38 @@ class PlaylistViewModel @AssistedInject constructor(
     }
 
     private var saveUpNextJob: Job? = null
-
-    fun saveUpNextAsPlaylist(upNextTranslation: String) {
-        if (saveUpNextJob?.isActive == true) {
-            return
-        }
-        saveUpNextJob = viewModelScope.launch(NonCancellable) {
-            playAllHandler.saveUpNextAsPlaylist(upNextTranslation)
-            _upNextSavedAsPlaylistSignal.emit(Unit)
-        }
-    }
-
     private var playAllJob: Job? = null
 
-    fun playAll() {
-        if (playAllJob?.isActive == true) {
-            return
+    fun saveUpNextAsPlaylist(saveUpNext: Boolean, upNextTranslation: String) {
+        analyticsTracker.track(
+            AnalyticsEvent.FILTER_PLAY_ALL_REPLACE_AND_PLAY_TAPPED,
+            mapOf(
+                "filter_type" to playlistType.analyticsValue,
+                "save_up_next" to saveUpNext,
+            ),
+        )
+        settings.saveUpNextAsPlaylist.set(saveUpNext, updateModifiedAt = false)
+        if (saveUpNext && saveUpNextJob?.isActive != true) {
+            saveUpNextJob = viewModelScope.launch(NonCancellable) {
+                playAllHandler.saveUpNextAsPlaylist(upNextTranslation)
+                _upNextSavedAsPlaylistSignal.emit(Unit)
+            }
         }
-        playAllJob = viewModelScope.launch {
-            playAllHandler.playAllPendingEpisodes()
+        if (playAllJob?.isActive != true) {
+            playAllJob = viewModelScope.launch(NonCancellable) {
+                playAllHandler.playAllPendingEpisodes()
+            }
         }
     }
 
     fun downloadAll() {
         val episodes = uiState.value.playlist
             ?.episodes
-            ?.take(DOWNLOAD_ALL_LIMIT)
             ?.toPodcastEpisodes()
-        episodes?.forEach { episode ->
-            downloadManager.addEpisodeToQueue(episode, "filter download all", fireEvent = false, source = SourceView.FILTERS)
-        }
+            ?.take(DOWNLOAD_ALL_LIMIT)
+            ?.map(PodcastEpisode::uuid)
+            .orEmpty()
+        downloadQueue.enqueueAll(episodes, DownloadType.UserTriggered(waitForWifi = false), SourceView.FILTERS)
     }
 
     fun deleteEpisode(episodeUuid: String) {
@@ -282,27 +289,6 @@ class PlaylistViewModel @AssistedInject constructor(
         )
     }
 
-    fun trackSaveUpNextTapped() {
-        analyticsTracker.track(
-            AnalyticsEvent.FILTER_PLAY_ALL_SAVE_UP_NEXT_TAPPED,
-            mapOf("filter_type" to playlistType.analyticsValue),
-        )
-    }
-
-    fun trackReplaceAndPlayTapped() {
-        analyticsTracker.track(
-            AnalyticsEvent.FILTER_PLAY_ALL_REPLACE_AND_PLAY_TAPPED,
-            mapOf("filter_type" to playlistType.analyticsValue),
-        )
-    }
-
-    fun trackReplaceAndPlayConfirmTapped() {
-        analyticsTracker.track(
-            AnalyticsEvent.FILTER_PLAY_ALL_REPLACE_AND_PLAY_CONFIRM_TAPPED,
-            mapOf("filter_type" to playlistType.analyticsValue),
-        )
-    }
-
     fun trackPlayAllDismissed() {
         analyticsTracker.track(
             AnalyticsEvent.FILTER_PLAY_ALL_DISMISSED,
@@ -440,8 +426,35 @@ class PlaylistViewModel @AssistedInject constructor(
         analyticsTracker.track(AnalyticsEvent.FILTER_SHOW_ARCHIVED_CTA_EMPTY_TAPPED)
     }
 
+    fun trackDeleteUnavailableEpisode(episodeUuid: String, podcastUuid: String) {
+        val playlistName = uiState.value.playlist?.title
+        analyticsTracker.track(
+            AnalyticsEvent.EPISODE_REMOVED_FROM_LIST,
+            buildMap {
+                if (playlistName != null) {
+                    put("playlist_name", playlistName)
+                }
+                put("playlist_uuid", playlistUuid)
+                put("episode_uuid", episodeUuid)
+                put("podcast_uuid", podcastUuid)
+                put("source", "unavailable_episode")
+            },
+        )
+    }
+
     fun updateAutoPlaySource() {
         settings.trackingAutoPlaySource.set(AutoPlaySource.fromId(playlistUuid), updateModifiedAt = false)
+    }
+
+    fun setSelectedPlaylist() {
+        val playlist = SelectedPlaylist(playlistUuid, playlistType.analyticsValue)
+        settings.selectedPlaylist.set(playlist, updateModifiedAt = false)
+    }
+
+    fun clearSelectedPlaylist() {
+        if (settings.selectedPlaylist.value?.uuid == playlistUuid) {
+            settings.selectedPlaylist.set(null, updateModifiedAt = false)
+        }
     }
 
     data class UiState(

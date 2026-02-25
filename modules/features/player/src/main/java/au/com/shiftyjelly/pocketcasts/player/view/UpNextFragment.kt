@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.player.view
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.view.ContextThemeWrapper
@@ -252,6 +253,7 @@ class UpNextFragment :
         realBinding = null
     }
 
+    @SuppressLint("MissingSuperCall") // False positive
     override fun onAttach(context: Context) {
         super.onAttach(context)
         multiSelectHelper.source = SourceView.UP_NEXT
@@ -268,7 +270,12 @@ class UpNextFragment :
             swipeRowActionsFactory = swipeRowActionsFactory,
             onSwipeAction = { episode, swipeAction ->
                 viewLifecycleOwner.lifecycleScope.launch {
-                    swipeActionViewModel.handleAction(swipeAction, episode.uuid, childFragmentManager)
+                    swipeActionViewModel.handleAction(
+                        action = swipeAction,
+                        episodeUuid = episode.uuid,
+                        podcastUuid = episode.podcastOrSubstituteUuid,
+                        fragmentManager = childFragmentManager,
+                    )
                 }
             },
             onSortClick = ::showSortDialog,

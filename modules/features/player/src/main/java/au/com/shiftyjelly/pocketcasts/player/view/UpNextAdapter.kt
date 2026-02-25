@@ -139,6 +139,7 @@ class UpNextAdapter(
             )
 
             R.layout.adapter_up_next_playing -> PlayingViewHolder(AdapterUpNextPlayingBinding.inflate(inflater, parent, false))
+
             else -> throw IllegalStateException("Unknown view type in up next")
         }
     }
@@ -382,7 +383,7 @@ private val UPNEXT_ADAPTER_DIFF = object : DiffUtil.ItemCallback<Any>() {
                 oldItem.publishedDate == newItem.publishedDate &&
                 oldItem.duration == newItem.duration &&
                 oldItem.playedUpTo == newItem.playedUpTo &&
-                oldItem.episodeStatus == newItem.episodeStatus
+                oldItem.downloadStatus == newItem.downloadStatus
         } else if (oldItem is UpNextPlaying && newItem is UpNextPlaying) {
             oldItem.episode.uuid == newItem.episode.uuid &&
                 oldItem.progressPercent == newItem.progressPercent &&

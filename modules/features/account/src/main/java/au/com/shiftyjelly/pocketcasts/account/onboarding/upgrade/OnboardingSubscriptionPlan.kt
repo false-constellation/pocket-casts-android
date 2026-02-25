@@ -37,6 +37,7 @@ data class OnboardingSubscriptionPlan private constructor(
     val highlightedPrice
         get() = when (key.offer) {
             SubscriptionOffer.IntroOffer -> requireNotNull(discountedPricingPhase).price
+
             SubscriptionOffer.Trial,
             SubscriptionOffer.Referral,
             SubscriptionOffer.Winback,
@@ -47,6 +48,7 @@ data class OnboardingSubscriptionPlan private constructor(
     val crossedPrice
         get() = when (key.offer) {
             SubscriptionOffer.IntroOffer -> pricingPhase.price
+
             SubscriptionOffer.Trial,
             SubscriptionOffer.Referral,
             SubscriptionOffer.Winback,
@@ -64,6 +66,12 @@ data class OnboardingSubscriptionPlan private constructor(
         get() = when (key.tier) {
             SubscriptionTier.Plus -> IR.drawable.ic_plus
             SubscriptionTier.Patron -> IR.drawable.ic_patron
+        }
+
+    val badgeContentDescriptionRes
+        get() = when (key.tier) {
+            SubscriptionTier.Plus -> LR.string.pocket_casts_plus_badge
+            SubscriptionTier.Patron -> LR.string.pocket_casts_patron_badge
         }
 
     val pageTitle
@@ -144,6 +152,7 @@ data class OnboardingSubscriptionPlan private constructor(
     val offerBadgeText
         @Composable get() = when (key.offer) {
             SubscriptionOffer.IntroOffer -> stringResource(LR.string.half_price_first_year)
+
             SubscriptionOffer.Trial -> {
                 val discountedPhase = requireNotNull(discountedPricingPhase)
                 val recurringPeriods = (discountedPhase.schedule.recurrenceMode as RecurrenceMode.Recurring).value
@@ -152,7 +161,9 @@ data class OnboardingSubscriptionPlan private constructor(
             }
 
             SubscriptionOffer.Referral -> null
+
             SubscriptionOffer.Winback -> null
+
             null -> null
         }
 
@@ -174,6 +185,7 @@ data class OnboardingSubscriptionPlan private constructor(
     } else {
         when (key.offer) {
             SubscriptionOffer.Trial -> stringResource(LR.string.profile_start_free_trial)
+
             SubscriptionOffer.IntroOffer,
             SubscriptionOffer.Referral,
             SubscriptionOffer.Winback,
@@ -220,6 +232,7 @@ data class OnboardingSubscriptionPlan private constructor(
     fun customFeatureTitle(source: OnboardingUpgradeSource) = when (key.tier) {
         SubscriptionTier.Plus -> when (source) {
             OnboardingUpgradeSource.BANNER_AD -> LR.string.banner_ad_plus_prompt
+
             OnboardingUpgradeSource.SKIP_CHAPTERS -> if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)) {
                 LR.string.onboarding_preselect_chapters_title
             } else {
@@ -233,8 +246,11 @@ data class OnboardingSubscriptionPlan private constructor(
             }
 
             OnboardingUpgradeSource.THEMES -> LR.string.themes_plus_prompt
+
             OnboardingUpgradeSource.ICONS -> LR.string.icons_plus_prompt
+
             OnboardingUpgradeSource.FILES -> LR.string.files_plus_prompt
+
             OnboardingUpgradeSource.FOLDERS,
             OnboardingUpgradeSource.FOLDERS_PODCAST_SCREEN,
             OnboardingUpgradeSource.SUGGESTED_FOLDERS,

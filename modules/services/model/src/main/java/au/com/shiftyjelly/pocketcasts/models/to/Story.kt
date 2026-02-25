@@ -7,21 +7,27 @@ import kotlin.time.Duration.Companion.seconds
 import au.com.shiftyjelly.pocketcasts.models.to.LongestEpisode as LongestEpisodeData
 
 sealed interface Story {
-    val previewDuration: Duration? get() = 10.seconds
+    val previewDuration: Duration? get() = 7.seconds
     val isFree: Boolean get() = true
-    val isShareble: Boolean get() = true
+    val isShareable: Boolean get() = true
     val analyticsValue: String
 
+    data object PlaceholderWhileLoading : Story {
+        override val isShareable = false
+        override val analyticsValue = "loading_placeholder"
+        override val previewDuration: Duration
+            get() = Duration.INFINITE
+    }
+
     data object Cover : Story {
-        override val isShareble = false
+        override val isShareable = false
         override val analyticsValue = "cover"
     }
 
     data class NumberOfShows(
         val showCount: Int,
-        val epsiodeCount: Int,
-        val topShowIds: List<String>,
-        val bottomShowIds: List<String>,
+        val episodeCount: Int,
+        val randomShowIds: List<String>,
     ) : Story {
         override val analyticsValue = "number_of_shows"
     }
@@ -42,7 +48,7 @@ sealed interface Story {
     data class Ratings(
         val stats: RatingStats,
     ) : Story {
-        override val isShareble get() = stats.max().second != 0
+        override val isShareable get() = stats.max().second != 0
         override val analyticsValue = "ratings"
     }
 
@@ -58,9 +64,11 @@ sealed interface Story {
         override val analyticsValue = "longest_episode"
     }
 
-    data object PlusInterstitial : Story {
+    data class PlusInterstitial(
+        val subscriptionTier: SubscriptionTier?,
+    ) : Story {
         override val previewDuration = null
-        override val isShareble = false
+        override val isShareable = false
         override val analyticsValue = "plus_interstitial"
     }
 
@@ -112,10 +120,13 @@ sealed interface Story {
                 listenedCount == 0 -> 1.0
                 else -> completedCount.toDouble() / listenedCount
             }
+
+        val completionRatePercentage
+            get() = (completionRate * 100).roundToInt()
     }
 
     data object Ending : Story {
-        override val isShareble get() = false
+        override val isShareable get() = false
         override val analyticsValue = "ending"
     }
 }

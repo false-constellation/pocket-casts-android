@@ -4,7 +4,7 @@ import android.accounts.Account
 import android.content.Context
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
-import au.com.shiftyjelly.pocketcasts.analytics.TracksAnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.Tracker
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
@@ -55,8 +55,10 @@ import com.pocketcasts.service.api.PodcastsEpisodesRequest
 import com.pocketcasts.service.api.ReferralCodeResponse
 import com.pocketcasts.service.api.ReferralRedemptionResponse
 import com.pocketcasts.service.api.ReferralValidationResponse
+import com.pocketcasts.service.api.StarredEpisodesResponse
 import com.pocketcasts.service.api.SyncUpdateRequest
 import com.pocketcasts.service.api.SyncUpdateResponse
+import com.pocketcasts.service.api.UpNextResponse
 import com.pocketcasts.service.api.UserPlaylistListResponse
 import com.pocketcasts.service.api.UserPodcastListResponse
 import com.pocketcasts.service.api.WinbackResponse
@@ -76,6 +78,7 @@ import retrofit2.HttpException
 import retrofit2.Response
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
+import com.pocketcasts.service.api.UpNextSyncRequest as UpNextSyncRequestProtobuf
 
 @Singleton
 class SyncManagerImpl @Inject constructor(
@@ -173,7 +176,7 @@ class SyncManagerImpl @Inject constructor(
         }
     }
 
-    override fun signOut(action: () -> Unit) {
+    override suspend fun signOut(action: suspend () -> Unit) {
         syncServiceManager.signOut()
         action()
         syncAccountManager.signOut()
@@ -299,16 +302,21 @@ class SyncManagerImpl @Inject constructor(
         syncServiceManager.getPlaybackUrl(episode, token)
     }
 
-    override fun getUserEpisodeRxMaybe(uuid: String): Maybe<ServerFile> = getCacheTokenOrLoginRxSingle { token ->
-        syncServiceManager.getUserEpisode(uuid, token)
-    }.flatMapMaybe {
-        if (it.isSuccessful) {
-            Maybe.just(it.body())
-        } else if (it.code() == HttpURLConnection.HTTP_NOT_FOUND) {
-            Maybe.empty()
-        } else {
-            Maybe.error(HttpException(it))
+    override fun getUserEpisodeRxMaybe(uuid: String): Maybe<ServerFile> = if (settings.cachedMembership.value.subscription != null) {
+        getCacheTokenOrLoginRxSingle { token ->
+            syncServiceManager.getUserEpisode(uuid, token)
+        }.flatMapMaybe {
+            if (it.isSuccessful) {
+                Maybe.just(it.body())
+            } else if (it.code() == HttpURLConnection.HTTP_NOT_FOUND) {
+                Maybe.empty()
+            } else {
+                Maybe.error(HttpException(it))
+            }
         }
+    } else {
+        // If the user doesn't have an active subscription, do not bother grabbing the file
+        Maybe.empty()
     }
 
 // History
@@ -375,6 +383,10 @@ class SyncManagerImpl @Inject constructor(
         syncServiceManager.episodeSync(request, token)
     }
 
+    override suspend fun getStarredEpisodesOrThrow(): StarredEpisodesResponse = getCacheTokenOrLogin { token ->
+        syncServiceManager.getStarredEpisodes(token)
+    }
+
     // Rating
 
     override suspend fun addPodcastRating(podcastUuid: String, rate: Int): PodcastRatingResponse = getCacheTokenOrLogin { token ->
@@ -425,6 +437,10 @@ class SyncManagerImpl @Inject constructor(
 
     override suspend fun upNextSync(request: UpNextSyncRequest): UpNextSyncResponse = getCacheTokenOrLogin { token ->
         syncServiceManager.upNextSync(request, token)
+    }
+
+    override suspend fun upNextSyncProtobuf(request: UpNextSyncRequestProtobuf): UpNextResponse = getCacheTokenOrLogin { token ->
+        syncServiceManager.upNextSyncProtobuf(request, token)
     }
 
     // Referral
@@ -502,7 +518,7 @@ class SyncManagerImpl @Inject constructor(
             }
 
             is LoginResult.Failed -> {
-                val errorCodeValue = loginResult.messageId ?: TracksAnalyticsTracker.INVALID_OR_NULL_VALUE
+                val errorCodeValue = loginResult.messageId ?: Tracker.INVALID_OR_NULL_VALUE
                 when (signInSource) {
                     SignInSource.WatchPhoneSync ->
                         analyticsTracker.track(
@@ -537,7 +553,7 @@ class SyncManagerImpl @Inject constructor(
             }
 
             is LoginResult.Failed -> {
-                val errorCodeValue = loginResult.messageId ?: TracksAnalyticsTracker.INVALID_OR_NULL_VALUE
+                val errorCodeValue = loginResult.messageId ?: Tracker.INVALID_OR_NULL_VALUE
                 analyticsTracker.track(
                     AnalyticsEvent.USER_ACCOUNT_CREATION_FAILED,
                     mapOf(

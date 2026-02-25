@@ -3,15 +3,15 @@ package au.com.shiftyjelly.pocketcasts.repositories.user
 import android.accounts.AccountManager
 import android.accounts.OnAccountsUpdateListener
 import android.content.Context
+import au.com.shiftyjelly.pocketcasts.analytics.AccountStatusInfo
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
-import au.com.shiftyjelly.pocketcasts.analytics.TracksAnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.experiments.ExperimentProvider
+import au.com.shiftyjelly.pocketcasts.coroutines.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.models.db.dao.PlaylistDao
 import au.com.shiftyjelly.pocketcasts.models.type.SignInState
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
-import au.com.shiftyjelly.pocketcasts.repositories.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearSync
 import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationScheduler
 import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationSchedulerImpl.Companion.TAG_TRENDING_RECOMMENDATIONS
@@ -62,7 +62,7 @@ class UserManagerImpl @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val playlistsInitializer: DefaultPlaylistsInitializer,
     private val analyticsTracker: AnalyticsTracker,
-    private val tracker: TracksAnalyticsTracker,
+    private val accountStatusInfo: AccountStatusInfo,
     @ApplicationScope private val applicationScope: CoroutineScope,
     private val crashLogging: CrashLogging,
     private val experimentProvider: ExperimentProvider,
@@ -134,8 +134,8 @@ class UserManagerImpl @Inject constructor(
     override fun signOut(playbackManager: PlaybackManager, wasInitiatedByUser: Boolean) {
         if (wasInitiatedByUser || !settings.getFullySignedOut()) {
             LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Signing out")
-            syncManager.signOut {
-                applicationScope.launch {
+            applicationScope.launch {
+                syncManager.signOut {
                     settings.clearPlusPreferences()
 
                     userEpisodeManager.removeCloudStatusFromFiles(playbackManager)
@@ -150,14 +150,14 @@ class UserManagerImpl @Inject constructor(
                     analyticsTracker.clearAllData()
                     analyticsTracker.refreshMetadata()
 
-                    // Force experiments to refresh after signing out with an anonymous UUID
-                    experimentProvider.refreshExperiments(tracker.anonID)
+                    val anonId = accountStatusInfo.recreateAnonId()
+                    experimentProvider.refreshExperiments(anonId)
 
                     settings.setEndOfYearShowModal(true)
                     endOfYearSync.reset()
                 }
+                subscriptionManager.clearCachedMembership()
             }
-            subscriptionManager.clearCachedMembership()
         }
         settings.setFullySignedOut(true)
     }
@@ -195,7 +195,7 @@ class UserManagerImpl @Inject constructor(
             userEpisodeManager.findUserEpisodes().forEach {
                 userEpisodeManager.delete(episode = it, playbackManager = playbackManager)
             }
-            episodeManager.deleteAll()
+            episodeManager.deleteAll(SourceView.UNKNOWN)
         }
     }
 }

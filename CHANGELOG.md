@@ -1,6 +1,117 @@
+8.7
+-----
+*   New Features
+    *   Support predictive back navigation
+        ([#5014](https://github.com/Automattic/pocket-casts-android/pull/5014))
+*   Updates
+    *   Improve the design of podcasts missing artwork on the podcasts tab
+        ([#4976](https://github.com/Automattic/pocket-casts-android/pull/4976))
+    *   This release includes a rewrite of the download system, making downloads more reliable and surfacing issues with additional details; if you manually queued any downloads before this update and they did not complete, you will need to queue them again. Auto downloads will resume as usual after you refresh the app from the Profile page or when the app refreshes automatically.
+        ([#5017](https://github.com/Automattic/pocket-casts-android/pull/5017))
+*   Bug Fixes
+    *   Respect global auto download setting
+        ([#5013](https://github.com/Automattic/pocket-casts-android/pull/5013))
+    *   Fix user file status not updating
+        ([#4998](https://github.com/Automattic/pocket-casts-android/pull/4998))
+
+8.6
+-----
+*   Bug Fixes
+    *   Fix up next queue episode ordering on the large widget
+        ([#4957](https://github.com/Automattic/pocket-casts-android/pull/4957))
+    *   On the podcasts tab show the podcast title when artwork is missing
+        ([#4973](https://github.com/Automattic/pocket-casts-android/pull/4973))
+    *   Fix Up Next not syncing for free users when a custom file is added to it
+        ([#4991](https://github.com/Automattic/pocket-casts-android/pull/4991))
+
+8.5
+-----
+*   New Features
+    *   Add episode to a playlist from episode details
+        ([#4923](https://github.com/Automattic/pocket-casts-android/pull/4923))
+    *   Add toolbar action to add episodes in bulk to playlists
+        ([#4928](https://github.com/Automattic/pocket-casts-android/pull/4928))
+*   Updates
+    *   Only pause playback after 200ms on AUDIO_FOCUS_LOSS_TRANSIENT_CAN_DUCK
+        ([#4905](https://github.com/Automattic/pocket-casts-android/pull/4905))
+    *   Delete orphaned transcripts when downloaded episode is deleted
+        ([#4903](https://github.com/Automattic/pocket-casts-android/pull/4903))
+*   Bug Fixes
+    *   Fix feature item text color on Classic theme
+        ([#4901](https://github.com/Automattic/pocket-casts-android/pull/4901))
+
+8.4
+-----
+*   Updates
+    *   Improved the performance of the Up Next syncing
+        ([#4883](https://github.com/Automattic/pocket-casts-android/pull/4883))
+    *   Removed Radioactivity UI theme
+        ([#4888](https://github.com/Automattic/pocket-casts-android/pull/4888))
+*   Bug Fixes
+    *   Fix transcript content being obstructed by navigation bars
+        ([#4892](https://github.com/Automattic/pocket-casts-android/pull/4892))
+
+8.3
+-----
+*   New Features
+    *   Allow Wear OS playback through the watch speaker
+        ([#4830](https://github.com/Automattic/pocket-casts-android/pull/4830))
+    *   Add the starred episodes screen on Wear OS
+        ([#4838](https://github.com/Automattic/pocket-casts-android/pull/4838))
+*   Updates
+    *   Improve Wear OS downloads page with a loading spinner and empty message
+        ([#4837](https://github.com/Automattic/pocket-casts-android/pull/4837))
+    *   Improve starred page to include episodes for unfollowed podcasts and fix sort order
+        ([#4839](https://github.com/Automattic/pocket-casts-android/pull/4839))
+    *   When following a podcast cache the smaller podcast images
+        ([#4827](https://github.com/Automattic/pocket-casts-android/pull/4827))
+    *   On Wear OS show archived or played episodes as greyed out
+        ([#4842](https://github.com/Automattic/pocket-casts-android/pull/4842))
+*   Bug Fixes
+    *   Fix volume boost displaying as off when it's on
+        ([#4864](https://github.com/Automattic/pocket-casts-android/pull/4864))
+    *   Improve help & feedback page padding
+        ([#4843](https://github.com/Automattic/pocket-casts-android/pull/4843))
+    *   On Wear OS hide archived or played episodes
+        ([#4831](https://github.com/Automattic/pocket-casts-android/pull/4831))
+    *   Fix podcast image crash
+        ([#4880](https://github.com/Automattic/pocket-casts-android/pull/4880))
+
+8.2
+-----
+*   Bug Fixes
+    *   Fix notifications choose podcasts obscuring the mini player
+        ([#4861](https://github.com/Automattic/pocket-casts-android/pull/4861))
+    *   Fix Android 10 full screen player appearing under the status and navigation bars
+        ([#4804](https://github.com/Automattic/pocket-casts-android/pull/4804))
+    *   Fix the mini player Up Next count overflow
+        ([#4826](https://github.com/Automattic/pocket-casts-android/pull/4826))
+    *   Improve help & feedback page padding
+        ([#4858](https://github.com/Automattic/pocket-casts-android/pull/4858)) 
+    *   Fix 3-button navigation obstructing the sharing buttons
+        ([#4810](https://github.com/Automattic/pocket-casts-android/pull/4810))
+    *   Fix unfollow issue
+        ([#4856](https://github.com/Automattic/pocket-casts-android/pull/4856))
+
 8.1
 -----
-
+*   New Features
+    *   Add Playback 2025 so you can get a recap of your listening habits from this year
+        ([#4762](https://github.com/Automattic/pocket-casts-android/pull/4762))
+*   Updates
+    *   Add periodic requests for the app rating
+        ([#4725](https://github.com/Automattic/pocket-casts-android/pull/4725))
+    *   Improve tooltips' contrast issues when dark theme is used
+        ([#4737](https://github.com/Automattic/pocket-casts-android/pull/4737))
+    *   Allow one character episode searches
+        ([#4734](https://github.com/Automattic/pocket-casts-android/pull/4734))
+*   Bug Fixes
+    *   Fix an issue where unplayed episodes do not show play button
+        ([#4749](https://github.com/Automattic/pocket-casts-android/pull/4749))
+    *   Fix autoplay not starting playback from the current position in the list
+        ([#4755](https://github.com/Automattic/pocket-casts-android/pull/4755))
+    *   Fix playlists not reopening on app launch
+        ([#4808](https://github.com/Automattic/pocket-casts-android/pull/4808))
 
 8.0
 -----

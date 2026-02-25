@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
@@ -56,7 +57,9 @@ internal fun YearVsYearStory(
             modifier = Modifier
                 .capturable(controller.captureController(story))
                 .fillMaxSize()
-                .background(story.backgroundColor),
+                .background(story.backgroundColor)
+                .padding(top = measurements.closeButtonBottomEdge + 24.dp)
+                .semantics(mergeDescendants = true) {},
             contentAlignment = Alignment.TopCenter,
         ) {
             YearVsYearAnimation(
@@ -155,14 +158,17 @@ private fun TextInfo(
 ) {
     val title = when (story.trend) {
         Trend.Same -> stringResource(LR.string.end_of_year_stories_year_over_year_title_flat, EndOfYearManager.YEAR_TO_SYNC.value.toString())
+
         Trend.Down -> {
             val percentageString = story.percentageChange.absoluteValue.toString()
             stringResource(LR.string.end_of_year_stories_year_over_year_title_went_down, percentageString)
         }
+
         Trend.Up -> {
             val percentageString = story.percentageChange.toString()
             stringResource(LR.string.end_of_year_stories_year_over_year_title_went_up, (EndOfYearManager.YEAR_TO_SYNC.value - 1).toString(), percentageString)
         }
+
         Trend.UpALot -> stringResource(LR.string.end_of_year_stories_year_over_year_title_went_up_a_lot)
     }
 
@@ -177,7 +183,6 @@ private fun TextInfo(
         title = title,
         subtitle = subtitle,
         subscriptionTier = story.subscriptionTier,
-        titleMaxLines = 2,
         measurements = measurements,
     )
 }

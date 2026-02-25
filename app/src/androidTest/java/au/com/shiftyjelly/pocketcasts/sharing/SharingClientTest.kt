@@ -727,9 +727,8 @@ class SharingClientTest {
         }
         val story = Story.NumberOfShows(
             showCount = 100,
-            epsiodeCount = 200,
-            topShowIds = emptyList(),
-            bottomShowIds = emptyList(),
+            episodeCount = 200,
+            randomShowIds = emptyList(),
         )
         val request = SharingRequest.endOfYearStory(story, Year.of(1000), screenshot).build()
 
@@ -956,13 +955,13 @@ class SharingClientTest {
     fun shareCompletionRateStory() = runTest {
         val screenshot = File(context.cacheDir, "file.png").also { it.writeBytes(Random.nextBytes(8)) }
         val text = buildString {
-            append(context.getString(LR.string.end_of_year_stories_completion_rate_share_text, 1000))
+            append(context.getString(LR.string.end_of_year_stories_completion_rate_share_text, 25))
             append(" https://pca.st")
             append(" #pocketcasts #playback1000")
         }
         val story = Story.CompletionRate(
-            listenedCount = 0,
-            completedCount = 0,
+            listenedCount = 100,
+            completedCount = 25,
             subscriptionTier = null,
         )
         val request = SharingRequest.endOfYearStory(story, Year.of(1000), screenshot).build()
@@ -996,7 +995,7 @@ class SharingClientTest {
     @Test
     fun sharePlusInterstitialStory() = runTest {
         val screenshot = File(context.cacheDir, "file.png").also { it.writeBytes(Random.nextBytes(8)) }
-        val story = Story.PlusInterstitial
+        val story = Story.PlusInterstitial(subscriptionTier = null)
         val request = SharingRequest.endOfYearStory(story, Year.of(1000), screenshot).build()
 
         val response = client.share(request)

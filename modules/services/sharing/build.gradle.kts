@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
@@ -28,6 +27,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
 
     implementation(libs.coil)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.coroutines.core)
     implementation(libs.timber)
 
