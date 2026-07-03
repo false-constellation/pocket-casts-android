@@ -45,9 +45,12 @@ class DeveloperFragment : BaseFragment() {
                 onResetSuggestedFoldersSuggestion = viewModel::resetSuggestedFoldersSuggestion,
                 onShowNotificationsTestingClick = ::onShowNotificationsTestingClick,
                 onResetPlaylistsOnboarding = viewModel::resetPlaylistsOnboarding,
+                onResetUpNextSortTooltip = viewModel::resetUpNextSortTooltip,
                 onResetNotificationsPrompt = viewModel::resetNotificationsPrompt,
                 onShowAppReviewPrompt = viewModel::showAppReviewPrompt,
                 onClearAppReviewSettings = viewModel::clearAppReviewSettings,
+                onTriggerPlaybackError = viewModel::triggerPlaybackError,
+                onTriggerConnectionError = viewModel::triggerConnectionError,
             )
         }
     }

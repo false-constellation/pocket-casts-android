@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-Translation-Revision-Date: 2025-04-11 08:10:10+0000
+Translation-Revision-Date: 2026-06-05 18:10:06+0000
 Plural-Forms: nplurals=2; plural=n != 1;
 Generator: GlotPress/2.4.0-alpha
 Language: nb_NO
 -->
 <resources>
+    <string name="sponsored">Sponset</string>
     <string name="dismiss">Avbryt</string>
     <string name="playback">Avspilling</string>
     <string name="bookmark">Bokmerke</string>
@@ -548,7 +549,6 @@ Language: nb_NO
     <string name="error_unable_to_play">Kan ikke spille av fil</string>
     <string name="error_unable_to_cast">Kan ikke sende denne episoden. Den er kanskje ikke tilgjengelig fra podcast-forfatteren.</string>
     <string name="error_unable_to_cast_local">Kan ikke sende lokal fil</string>
-    <string name="error_streaming_try_downloading">Strømming mislyktes. Prøv å laste ned podcasten.</string>
     <string name="error_streaming_internet">Strømming mislyktes. Sjekk Internett-tilkoblingen.</string>
     <string name="error_chartable_streaming">Strømming mislyktes. Produsenten bruker Chartable-analyse, som er blokkert. Hvis du kjører en filtreringsapp, for eksempel AdGuard, må du hviteliste chtbl.com for å spille av episoden.</string>
     <string name="error_chartable">Produsenten bruker Chartable-analyse, som er blokkert. Hvis du kjører en filtreringsapp, for eksempel AdGuard, må du hviteliste chtbl.com for å spille av episoden.</string>
@@ -630,7 +630,6 @@ Language: nb_NO
     <string name="settings_stats_funny_empty">Du lytter ikke spesielt mye, vel?</string>
     <string name="settings_auto_up_next_limit_reached_stop_summary">Nye episoder slutter å bli lagt til når Neste når %d.</string>
     <string name="settings_auto_up_next_limit_reached_stop">Slutt å legge til</string>
-    <string name="settings_auto_up_next_limit_reached_top_summary">Når Neste når %d, vil nye episoder som legges til automatisk øverst, slette den siste episoden i køen. Ingen nye episoder legges til nederst.</string>
     <string name="settings_auto_up_next_limit_reached_top">Legg bare til øverst</string>
     <string name="settings_auto_up_next_limit_reached">Hvis grensen er nådd</string>
     <string name="settings_auto_up_next_to_bottom">Til nederst</string>
@@ -751,7 +750,6 @@ Language: nb_NO
     <string name="settings_auto_play_summary">Velg en episode for meg automatisk når det ikke er noe igjen for avspilling</string>
     <string name="settings_auto_play">Automatisk avspilling</string>
     <string name="settings_auto_download_up_next">Episoder lagt til i Neste</string>
-    <string name="settings_auto_download_unmetered_summary">Hvis du slår av dette, tillates nedlastinger både på mobilnettverk og andre forbruksmålte nettverk. Kontroller nettverksinnstillingene for å få mer informasjon.</string>
     <string name="settings_auto_download_unmetered">Bare på ikke-forbruksmålt WiFi</string>
     <string name="settings_auto_download_podcasts">Last ned podcaster automatisk</string>
     <string name="settings_auto_download_new_episodes">Nye episoder</string>

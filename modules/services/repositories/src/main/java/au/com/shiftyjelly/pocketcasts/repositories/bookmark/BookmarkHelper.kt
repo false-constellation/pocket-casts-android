@@ -19,7 +19,10 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.utils.AppPlatform
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.extensions.isAppForeground
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
+import com.automattic.eventhorizon.BookmarkSourceType
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
@@ -51,15 +54,19 @@ class BookmarkHelper(
                 timeSecs = timeInSecs,
             )
 
+            val isNew = bookmark == null
             if (bookmark == null) {
                 bookmark = bookmarkManager.add(
                     episode = episode,
                     timeSecs = timeInSecs,
                     title = context.getString(LR.string.bookmark),
-                    creationSource = BookmarkManager.CreationSource.HEADPHONES,
+                    creationSource = BookmarkSourceType.Headphones,
                 )
             }
 
+            if (isNew && FeatureFlag.isEnabled(Feature.SMART_BOOKMARKS)) {
+                bookmarkManager.enrichBookmark(bookmark)
+            }
             if (settings.headphoneControlsPlayBookmarkConfirmationSound.value) {
                 playbackManager.playBookmarkTone()
             }

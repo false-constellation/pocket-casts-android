@@ -5,7 +5,7 @@ import android.os.Environment
 import android.os.StrictMode
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsController
 import au.com.shiftyjelly.pocketcasts.analytics.experiments.ExperimentProvider
 import au.com.shiftyjelly.pocketcasts.coroutines.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.crashlogging.InitializeRemoteLogging
@@ -24,12 +24,14 @@ import au.com.shiftyjelly.pocketcasts.repositories.jobs.VersionMigrationsWorker
 import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationHelper
 import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackServiceToggle
 import au.com.shiftyjelly.pocketcasts.repositories.playback.SleepTimerRestartWhenShakingDevice
 import au.com.shiftyjelly.pocketcasts.repositories.playlist.PlaylistInteractionNotifier
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.shortcuts.DynamicShortcutsSynchronizer
+import au.com.shiftyjelly.pocketcasts.repositories.stats.PlaybackStatsSyncWorker
 import au.com.shiftyjelly.pocketcasts.repositories.support.DatabaseExportHelper
 import au.com.shiftyjelly.pocketcasts.repositories.user.StatsManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
@@ -56,6 +58,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.flow
@@ -103,7 +106,7 @@ class PocketCastsApplication :
 
     @Inject lateinit var userManager: UserManager
 
-    @Inject lateinit var analyticsTracker: AnalyticsTracker
+    @Inject lateinit var analyticsController: AnalyticsController
 
     @Inject lateinit var downloadStatisticsReporter: DownloadStatisticsReporter
 
@@ -156,17 +159,20 @@ class PocketCastsApplication :
 
         super.onCreate()
 
+        PlaybackServiceToggle.ensureCorrectServiceEnabled(this)
+
         RxJavaUncaughtExceptionHandling.setUp()
         setupCrashLogging()
         setupLogging()
         setupAnalytics()
+
         setupApp()
         cleanupDatabaseExportFileIfExists()
     }
 
     private fun setupAnalytics() {
-        analyticsTracker.clearAllData()
-        analyticsTracker.refreshMetadata()
+        analyticsController.clearAllData()
+        analyticsController.refreshMetadata()
         downloadStatisticsReporter.setup()
         experimentProvider.initialize()
     }
@@ -207,6 +213,7 @@ class PocketCastsApplication :
             notificationManager.setupNewFeaturesNotifications()
             notificationManager.setupOffersNotifications()
             appLifecycleObserver.setup()
+            PlaybackServiceToggle.ensureCorrectServiceEnabled(this@PocketCastsApplication)
 
             SingletonImageLoader.setSafe { coilImageLoader }
 
@@ -250,6 +257,8 @@ class PocketCastsApplication :
                         fileStorage.fixBrokenFiles(episodeManager)
                         // reset stats
                         statsManager.reset()
+                        // Flag for login prompt in MainActivity
+                        settings.setNeedsLoginPromptAfterRestore(true)
                     }
                     settings.setRestoreFromBackupEnded()
                 }
@@ -294,6 +303,9 @@ class PocketCastsApplication :
             applicationScope.launch { endOfYearSync.sync() }
         }
 
+        PlaybackStatsSyncWorker.scheduleOneTimeWork(this)
+        PlaybackStatsSyncWorker.schedulePeriodicWork(this)
+
         Timber.i("Launched ${BuildConfig.APPLICATION_ID}")
     }
 
@@ -313,6 +325,7 @@ class PocketCastsApplication :
         playbackManager.playbackStateRelay.asFlow()
             .map { state -> state.isPlaying }
             .distinctUntilChanged()
+            .conflate()
             .onEach(playerWidgetManager::updateIsPlaying)
             .launchIn(applicationScope)
         val queueFlow = flow {
@@ -324,6 +337,7 @@ class PocketCastsApplication :
         }
         queueFlow
             .distinctUntilChangedBy { queue -> queue.map { it.uuid to it.playedUpToMs } }
+            .conflate()
             .onEach(playerWidgetManager::updateQueue)
             .launchIn(applicationScope)
     }

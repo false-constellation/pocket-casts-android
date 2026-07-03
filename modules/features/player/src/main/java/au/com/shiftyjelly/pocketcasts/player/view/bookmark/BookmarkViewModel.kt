@@ -4,12 +4,17 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import com.automattic.eventhorizon.BookmarkEditFormDismissedEvent
+import com.automattic.eventhorizon.BookmarkEditFormShownEvent
+import com.automattic.eventhorizon.BookmarkEditFormSubmittedEvent
+import com.automattic.eventhorizon.BookmarkSourceType
+import com.automattic.eventhorizon.EventHorizon
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
@@ -26,7 +31,7 @@ class BookmarkViewModel
     private val episodeManager: EpisodeManager,
     private val userEpisodeManager: UserEpisodeManager,
     private val bookmarkManager: BookmarkManager,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
 ) : ViewModel(),
     CoroutineScope {
 
@@ -99,7 +104,7 @@ class BookmarkViewModel
                         episode = episode,
                         timeSecs = arguments.timeSecs,
                         title = state.title.text,
-                        creationSource = BookmarkManager.CreationSource.PLAYER,
+                        creationSource = BookmarkSourceType.Player,
                     )
                 } else {
                     bookmarkManager.updateTitle(bookmarkUuid, state.title.text)
@@ -107,6 +112,9 @@ class BookmarkViewModel
                 }
                 if (bookmark != null) {
                     onSaved(bookmark, isExistingBookmark)
+                    if (!isExistingBookmark && FeatureFlag.isEnabled(Feature.SMART_BOOKMARKS)) {
+                        bookmarkManager.enrichBookmark(bookmark)
+                    }
                 }
             } catch (e: Exception) {
                 Timber.e(e)
@@ -115,14 +123,14 @@ class BookmarkViewModel
     }
 
     fun onShown() {
-        analyticsTracker.track(AnalyticsEvent.BOOKMARK_EDIT_FORM_SHOWN)
+        eventHorizon.track(BookmarkEditFormShownEvent)
     }
 
     fun onClose() {
-        analyticsTracker.track(AnalyticsEvent.BOOKMARK_EDIT_FORM_DISMISSED)
+        eventHorizon.track(BookmarkEditFormDismissedEvent)
     }
 
     fun onSubmitBookmark() {
-        analyticsTracker.track(AnalyticsEvent.BOOKMARK_EDIT_FORM_SUBMITTED)
+        eventHorizon.track(BookmarkEditFormSubmittedEvent)
     }
 }

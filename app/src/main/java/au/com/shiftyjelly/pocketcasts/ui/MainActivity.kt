@@ -20,9 +20,18 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.widget.Toolbar
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.ActivityOptionsCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -40,6 +49,7 @@ import androidx.fragment.app.commitNow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.Observer
 import androidx.lifecycle.asFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -55,12 +65,11 @@ import au.com.shiftyjelly.pocketcasts.account.onboarding.OnboardingActivity
 import au.com.shiftyjelly.pocketcasts.account.onboarding.OnboardingActivityContract
 import au.com.shiftyjelly.pocketcasts.account.onboarding.OnboardingActivityContract.OnboardingFinish
 import au.com.shiftyjelly.pocketcasts.account.watchsync.WatchSync
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
-import au.com.shiftyjelly.pocketcasts.analytics.EpisodeAnalytics
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.appreview.AppReviewDialogFragment
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
+import au.com.shiftyjelly.pocketcasts.compose.components.AnimatedNonNullVisibility
+import au.com.shiftyjelly.pocketcasts.compose.components.PlaybackErrorInfoBar
 import au.com.shiftyjelly.pocketcasts.coroutines.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.databinding.ActivityMainBinding
 import au.com.shiftyjelly.pocketcasts.deeplink.AddBookmarkDeepLink
@@ -119,6 +128,7 @@ import au.com.shiftyjelly.pocketcasts.navigation.BottomNavigator
 import au.com.shiftyjelly.pocketcasts.navigation.FragmentInfo
 import au.com.shiftyjelly.pocketcasts.navigation.NavigatorAction
 import au.com.shiftyjelly.pocketcasts.payment.PaymentClient
+import au.com.shiftyjelly.pocketcasts.player.view.PlaybackIssuesBottomSheetFragment
 import au.com.shiftyjelly.pocketcasts.player.view.PlayerBottomSheet
 import au.com.shiftyjelly.pocketcasts.player.view.PlayerContainerFragment
 import au.com.shiftyjelly.pocketcasts.player.view.UpNextFragment
@@ -151,6 +161,7 @@ import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearManager
 import au.com.shiftyjelly.pocketcasts.repositories.notification.NotificationHelper
 import au.com.shiftyjelly.pocketcasts.repositories.opml.OpmlImportTask
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackNoticeType
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackState
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextSource
 import au.com.shiftyjelly.pocketcasts.repositories.playlist.Playlist
@@ -193,6 +204,21 @@ import au.com.shiftyjelly.pocketcasts.views.helper.OffsettingBottomSheetCallback
 import au.com.shiftyjelly.pocketcasts.views.helper.UiUtil
 import au.com.shiftyjelly.pocketcasts.views.helper.WarningsHelper
 import com.automattic.android.tracks.crashlogging.CrashLogging
+import com.automattic.eventhorizon.DiscoverTabOpenedEvent
+import com.automattic.eventhorizon.EndOfYearModalDismissedEvent
+import com.automattic.eventhorizon.EndOfYearModalShownEvent
+import com.automattic.eventhorizon.EndOfYearModalTappedEvent
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.FiltersTabOpenedEvent
+import com.automattic.eventhorizon.PlaybackErrorShownEvent
+import com.automattic.eventhorizon.PlaybackErrorTappedEvent
+import com.automattic.eventhorizon.PlayerErrorBannerSource
+import com.automattic.eventhorizon.PodcastsTabOpenedEvent
+import com.automattic.eventhorizon.ProfileTabOpenedEvent
+import com.automattic.eventhorizon.UpNextDismissedEvent
+import com.automattic.eventhorizon.UpNextShownEvent
+import com.automattic.eventhorizon.UpNextSourceType
+import com.automattic.eventhorizon.UpNextTabOpenedEvent
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
@@ -274,10 +300,7 @@ class MainActivity :
     lateinit var warningsHelper: WarningsHelper
 
     @Inject
-    lateinit var analyticsTracker: AnalyticsTracker
-
-    @Inject
-    lateinit var episodeAnalytics: EpisodeAnalytics
+    lateinit var eventHorizon: EventHorizon
 
     @Inject
     lateinit var syncManager: SyncManager
@@ -326,7 +349,7 @@ class MainActivity :
         get() = resources.getDimension(R.dimen.miniPlayerHeight).toInt()
 
     private val bottomNavigationHeight: Int
-        get() = binding.bottomNavigation.height - binding.bottomNavigation.paddingBottom
+        get() = binding.bottomContainer.height - binding.bottomContainer.paddingBottom
 
     private var bottomSheetTag: String? = null
     private val bottomSheetQueue: MutableList<(() -> Unit)?> = mutableListOf()
@@ -341,9 +364,7 @@ class MainActivity :
         when (result) {
             is OnboardingFinish.Done -> {
                 if (!settings.hasCompletedOnboarding()) {
-                    val podcastCount = runBlocking(Dispatchers.Default) { podcastManager.countSubscribed() }
-                    val landingTab = if (podcastCount == 0) VR.id.navigation_discover else VR.id.navigation_podcasts
-                    openTab(landingTab)
+                    lifecycleScope.launch { openLandingTabAfterOnboarding() }
                 }
                 settings.setHasDoneInitialOnboarding()
             }
@@ -354,8 +375,13 @@ class MainActivity :
             }
 
             is OnboardingFinish.DoneShowPlusPromotion -> {
-                settings.setHasDoneInitialOnboarding()
-                OnboardingLauncher.openOnboardingFlow(this, OnboardingFlow.Upsell(OnboardingUpgradeSource.FINISHED_ONBOARDING))
+                lifecycleScope.launch {
+                    if (!settings.hasCompletedOnboarding()) {
+                        openLandingTabAfterOnboarding()
+                    }
+                    settings.setHasDoneInitialOnboarding()
+                    OnboardingLauncher.openOnboardingFlow(this@MainActivity, OnboardingFlow.Upsell(OnboardingUpgradeSource.FINISHED_ONBOARDING))
+                }
             }
 
             is OnboardingFinish.DoneShowWelcomeInReferralFlow -> {
@@ -446,33 +472,81 @@ class MainActivity :
 
         playbackManager.setNotificationPermissionChecker(this)
 
-        val showOnboarding = !settings.hasCompletedOnboarding() && !syncManager.isLoggedIn()
+        val hasCompletedOnboarding = settings.hasCompletedOnboarding()
+        val isLoggedIn = syncManager.isLoggedIn()
+        val showOnboarding = !hasCompletedOnboarding && !isLoggedIn
+        val needsLoginPromptAfterRestore = settings.getNeedsLoginPromptAfterRestore()
         // Only show if savedInstanceState is null in order to avoid creating onboarding activity twice.
         if (showOnboarding && savedInstanceState == null) {
             openOnboardingFlow(OnboardingFlow.InitialOnboarding)
         }
 
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        lifecycleScope.launch {
-            FeatureFlag.awaitProvidersInitialised()
-            if (!FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_ACCOUNT_CREATION)) {
-                checkForNotificationPermission()
+        // After restore from backup, consume the restore flag on fresh launch so it can't
+        // trigger later unexpectedly, and suppress the generic encouragement flag when this
+        // path launches the same account encouragement flow.
+        if (savedInstanceState == null && needsLoginPromptAfterRestore) {
+            settings.setNeedsLoginPromptAfterRestore(false)
+            if (!showOnboarding && !isLoggedIn) {
+                settings.showFreeAccountEncouragement.set(false, updateModifiedAt = true)
+                openOnboardingFlow(OnboardingFlow.AccountEncouragement)
             }
         }
+
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             binding.root.updatePadding(left = insets.left, right = insets.right)
-            binding.bottomNavigation.updatePadding(bottom = insets.bottom)
+            binding.bottomContainer.updatePadding(bottom = insets.bottom)
             windowInsets
         }
-        binding.bottomNavigation.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+        binding.bottomContainer.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
             binding.mainFragment.updatePadding(bottom = view.height)
 
             BottomSheetBehavior.from(binding.playerBottomSheet).apply {
                 peekHeight = miniPlayerHeight + view.height
+            }
+        }
+
+        binding.playbackIssueBar.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val playbackNotice by viewModel.playbackNoticeFlow.collectAsStateWithLifecycle()
+                val playerOpen by viewModel.isPlayerOpenFlow.collectAsStateWithLifecycle()
+
+                AppTheme(theme.activeTheme) {
+                    AnimatedNonNullVisibility(
+                        item = if (playerOpen) null else playbackNotice,
+                        enter = slideInVertically(initialOffsetY = { it }) + expandVertically(expandFrom = Alignment.Top),
+                        exit = slideOutVertically(targetOffsetY = { it }) + shrinkVertically(shrinkTowards = Alignment.Top),
+                    ) { notice ->
+                        LaunchedEffect(notice) {
+                            if (!viewModel.isPlayerOpen) {
+                                eventHorizon.track(PlaybackErrorShownEvent(playerSource = PlayerErrorBannerSource.MiniPlayer))
+                            }
+                        }
+                        PlaybackErrorInfoBar(
+                            message = notice.message,
+                            linkText = notice.linkText,
+                            onClick = when (notice.type) {
+                                PlaybackNoticeType.PLAYBACK -> {
+                                    {
+                                        if (!viewModel.isPlayerOpen) {
+                                            eventHorizon.track(PlaybackErrorTappedEvent(playerSource = PlayerErrorBannerSource.MiniPlayer))
+                                        }
+                                        PlaybackIssuesBottomSheetFragment.show(supportFragmentManager, notice.supportUrl)
+                                    }
+                                }
+
+                                PlaybackNoticeType.CONNECTION_LOST -> null
+
+                                PlaybackNoticeType.RECOVERY -> null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
         }
 
@@ -763,7 +837,7 @@ class MainActivity :
                 val playerContainerFragment =
                     supportFragmentManager.fragments.find { it is PlayerContainerFragment } as? PlayerContainerFragment
                 playerContainerFragment?.onBackPressed()
-                updatePlayerContainerCallback(this)
+                playerContainerCallbackUpdater?.invoke()
             }
         }
         onBackPressedDispatcher.addCallback(this, playerContainerBackstackCallback)
@@ -771,8 +845,12 @@ class MainActivity :
         fun syncPlayerContainerCallback() {
             val playerContainerFragment =
                 supportFragmentManager.fragments.find { it is PlayerContainerFragment } as? PlayerContainerFragment
-            playerContainerBackstackCallback.isEnabled =
-                playerContainerFragment != null && playerContainerFragment.getBackstackCount() > 0
+            val hasBackstack = playerContainerFragment != null && playerContainerFragment.getBackstackCount() > 0
+            val isPlayerOpen = binding.playerBottomSheet.isPlayerOpen
+            playerContainerBackstackCallback.isEnabled = isPlayerOpen && hasBackstack
+            if (isPlayerOpen) {
+                playerBottomSheetCallback.isEnabled = !hasBackstack
+            }
         }
         playerContainerCallbackUpdater = ::syncPlayerContainerCallback
 
@@ -791,7 +869,7 @@ class MainActivity :
         }
         onBackPressedDispatcher.addCallback(this, modalFragmentCallback)
 
-        val frameBottomSheetCallback = object : OnBackPressedCallback(false) {
+        val frameBottomSheetCallback = object : OnBackPressedCallback(bottomSheetTag != null) {
             override fun handleOnBackPressed() {
                 frameBottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
             }
@@ -826,12 +904,14 @@ class MainActivity :
         this.upNextMultiSelectBackCallback = upNextMultiSelectCallback
         this.playerContainerBackCallback = playerContainerBackstackCallback
         this.modalFragmentBackCallback = modalFragmentCallback
+        this.frameBottomSheetBackCallback = frameBottomSheetCallback
     }
 
     private var playerBottomSheetBackCallback: OnBackPressedCallback? = null
     private var upNextMultiSelectBackCallback: OnBackPressedCallback? = null
     private var playerContainerBackCallback: OnBackPressedCallback? = null
     private var modalFragmentBackCallback: OnBackPressedCallback? = null
+    private var frameBottomSheetBackCallback: OnBackPressedCallback? = null
     private var playerContainerCallbackUpdater: (() -> Unit)? = null
 
     private var upNextMultiSelectObserver: Observer<Boolean>? = null
@@ -854,11 +934,8 @@ class MainActivity :
         upNextMultiSelectBackCallback?.isEnabled = false
     }
 
-    private fun updatePlayerContainerCallback(callback: OnBackPressedCallback? = null) {
-        val cb = callback ?: playerContainerBackCallback ?: return
-        val playerContainerFragment =
-            supportFragmentManager.fragments.find { it is PlayerContainerFragment } as? PlayerContainerFragment
-        cb.isEnabled = playerContainerFragment != null && playerContainerFragment.getBackstackCount() > 0
+    override fun onPlayerBackstackChanged() {
+        playerContainerCallbackUpdater?.invoke()
     }
 
     override fun updateStatusBar() {
@@ -901,14 +978,17 @@ class MainActivity :
             podcastManager = podcastManager,
             episodeManager = episodeManager,
             fragmentManager = supportFragmentManager,
-            analyticsTracker = analyticsTracker,
-            episodeAnalytics = episodeAnalytics,
+            eventHorizon = eventHorizon,
             settings = settings,
         ).show(this)
     }
 
     private fun showUpNextFragment(source: UpNextSource) {
-        analyticsTracker.track(AnalyticsEvent.UP_NEXT_SHOWN, mapOf(SOURCE_KEY to source.analyticsValue))
+        eventHorizon.track(
+            UpNextShownEvent(
+                source = source.analyticsValue,
+            ),
+        )
         showBottomSheet(UpNextFragment.newInstance(source = source))
     }
 
@@ -924,15 +1004,27 @@ class MainActivity :
                             parent = viewGroup,
                             shouldShow = shouldShow,
                             onClick = {
-                                analyticsTracker.trackEndOfYearModalTapped(year = EndOfYearManager.YEAR_TO_SYNC.value)
-                                showStoriesOrAccount(StoriesSource.MODAL.value)
+                                eventHorizon.track(
+                                    EndOfYearModalTappedEvent(
+                                        currentYear = EndOfYearManager.YEAR_TO_SYNC.value.toLong(),
+                                    ),
+                                )
+                                showStoriesOrAccount(StoriesSource.MODAL.key)
                             },
                             onExpand = {
-                                analyticsTracker.trackEndOfYearModalShown(year = EndOfYearManager.YEAR_TO_SYNC.value)
+                                eventHorizon.track(
+                                    EndOfYearModalShownEvent(
+                                        currentYear = EndOfYearManager.YEAR_TO_SYNC.value.toLong(),
+                                    ),
+                                )
                                 settings.setEndOfYearShowModal(false)
                             },
                             onCollapse = {
-                                analyticsTracker.trackEndOfYearModalDismissed(year = EndOfYearManager.YEAR_TO_SYNC.value)
+                                eventHorizon.track(
+                                    EndOfYearModalDismissedEvent(
+                                        currentYear = EndOfYearManager.YEAR_TO_SYNC.value.toLong(),
+                                    ),
+                                )
                             },
                         )
                     }
@@ -963,7 +1055,6 @@ class MainActivity :
         )
     }
 
-    @Suppress("DEPRECATION")
     private fun setupPlayerViews(animateMiniPlayer: Boolean) {
         binding.playerBottomSheet.listener = this
         binding.playerBottomSheet.initializeBottomSheetBehavior()
@@ -1116,19 +1207,24 @@ class MainActivity :
             }
         }
 
-        frameBottomSheetBehavior.setBottomSheetCallback(object :
+        frameBottomSheetBehavior.addBottomSheetCallback(object :
             BottomSheetBehavior.BottomSheetCallback() {
             override fun onSlide(bottomSheet: View, slideOffset: Float) {}
 
             override fun onStateChanged(bottomSheet: View, newState: Int) {
                 settings.updatePlayerOrUpNextBottomSheetState(newState)
                 if (newState == BottomSheetBehavior.STATE_COLLAPSED) {
-                    if (bottomSheetTag == UpNextFragment::class.java.name) {
-                        analyticsTracker.track(AnalyticsEvent.UP_NEXT_DISMISSED)
+                    val fragment = supportFragmentManager.findFragmentByTag(bottomSheetTag)
+
+                    if (fragment is UpNextFragment) {
+                        val source = fragment.args?.source?.analyticsValue ?: UpNextSourceType.Unknown
+                        eventHorizon.track(
+                            UpNextDismissedEvent(
+                                source = source,
+                            ),
+                        )
                     }
-                    supportFragmentManager.findFragmentByTag(bottomSheetTag)?.let {
-                        removeBottomSheetFragment(it)
-                    }
+                    fragment?.let(::removeBottomSheetFragment)
 
                     binding.playerBottomSheet.isDragEnabled = true
                     frameBottomSheetBehavior.swipeEnabled = false
@@ -1224,7 +1320,7 @@ class MainActivity :
     }
 
     override fun onPlayerBottomSheetSlide(bottomSheetView: View, slideOffset: Float) {
-        val view = binding.bottomNavigation
+        val view = binding.bottomContainer
         view.doOnLayout {
             val targetPosition = 2 * view.height * slideOffset
             view.spring(TRANSLATION_Y).animateToFinalPosition(targetPosition)
@@ -1247,7 +1343,7 @@ class MainActivity :
         UiUtil.hideKeyboard(binding.root)
 
         viewModel.isPlayerOpen = true
-        playerBottomSheetBackCallback?.isEnabled = true
+        playerContainerCallbackUpdater?.invoke()
 
         val playerContainerFragment = supportFragmentManager.fragments
             .find { it is PlayerContainerFragment } as? PlayerContainerFragment
@@ -1271,6 +1367,12 @@ class MainActivity :
         navigator.switchTab(tabId)
     }
 
+    private suspend fun openLandingTabAfterOnboarding() {
+        val podcastCount = podcastManager.countSubscribed()
+        val landingTab = if (podcastCount == 0) VR.id.navigation_discover else VR.id.navigation_podcasts
+        openTab(landingTab)
+    }
+
     override fun showBottomSheet(fragment: Fragment) {
         supportFragmentManager.commitNow {
             bottomSheetTag = fragment::class.java.name
@@ -1278,6 +1380,7 @@ class MainActivity :
         }
 
         frameBottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+        frameBottomSheetBackCallback?.isEnabled = true
         frameBottomSheetBehavior.swipeEnabled = true
         binding.frameBottomSheet.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         if (fragment is UpNextFragment) {
@@ -1289,6 +1392,7 @@ class MainActivity :
 
     override fun closeBottomSheet() {
         frameBottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+        frameBottomSheetBackCallback?.isEnabled = false
         binding.frameBottomSheet.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
@@ -1433,10 +1537,10 @@ class MainActivity :
     }
 
     override fun showAccountUpgradeNow(autoSelectPlus: Boolean) {
-        showAccountUpgradeNowDialog(shouldClose = false, autoSelectPlus = autoSelectPlus)
+        showAccountUpgradeNowDialog(autoSelectPlus = autoSelectPlus)
     }
 
-    private fun showAccountUpgradeNowDialog(shouldClose: Boolean, autoSelectPlus: Boolean = false) {
+    private fun showAccountUpgradeNowDialog(autoSelectPlus: Boolean = false) {
         val observer: Observer<SignInState> = Observer { value ->
             val intent = if (value.isSignedInAsFree) {
                 AccountActivity.newUpgradeInstance(this)
@@ -1448,10 +1552,6 @@ class MainActivity :
                 Intent(this, AccountActivity::class.java)
             }
             startActivity(intent)
-
-            if (shouldClose) {
-                finish()
-            }
         }
 
         viewModel.signInState.observeOnce(this, observer)
@@ -1604,7 +1704,7 @@ class MainActivity :
                 }
 
                 is UpgradeAccountDeepLink -> {
-                    showAccountUpgradeNowDialog(shouldClose = true)
+                    showAccountUpgradeNowDialog()
                 }
 
                 is PromoCodeDeepLink -> {
@@ -1883,23 +1983,33 @@ class MainActivity :
     }
 
     private fun trackTabOpened(tab: Int, isInitial: Boolean = false) {
-        val event: AnalyticsEvent? = when (tab) {
-            VR.id.navigation_podcasts -> AnalyticsEvent.PODCASTS_TAB_OPENED
+        val event = when (tab) {
+            VR.id.navigation_podcasts -> PodcastsTabOpenedEvent(
+                initial = isInitial,
+            )
 
-            VR.id.navigation_upnext -> AnalyticsEvent.UP_NEXT_TAB_OPENED
+            VR.id.navigation_upnext -> UpNextTabOpenedEvent(
+                initial = isInitial,
+            )
 
-            VR.id.navigation_filters -> AnalyticsEvent.FILTERS_TAB_OPENED
+            VR.id.navigation_filters -> FiltersTabOpenedEvent(
+                initial = isInitial,
+            )
 
-            VR.id.navigation_discover -> AnalyticsEvent.DISCOVER_TAB_OPENED
+            VR.id.navigation_discover -> DiscoverTabOpenedEvent(
+                initial = isInitial,
+            )
 
-            VR.id.navigation_profile -> AnalyticsEvent.PROFILE_TAB_OPENED
+            VR.id.navigation_profile -> ProfileTabOpenedEvent(
+                initial = isInitial,
+            )
 
             else -> {
                 Timber.e("Can't open invalid tab")
                 null
             }
         }
-        event?.let { analyticsTracker.track(event, mapOf(INITIAL_KEY to isInitial)) }
+        event?.let(eventHorizon::track)
     }
 
     override fun checkNotificationPermission(onPermissionGranted: () -> Unit) {

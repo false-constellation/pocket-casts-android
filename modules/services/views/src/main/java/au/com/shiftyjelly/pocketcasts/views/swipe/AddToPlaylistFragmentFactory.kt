@@ -3,6 +3,9 @@ package au.com.shiftyjelly.pocketcasts.views.swipe
 import au.com.shiftyjelly.pocketcasts.models.to.EpisodeUuidPair
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseDialogFragment
+import com.automattic.eventhorizon.AddToPlaylistFlowSourceType
+import com.automattic.eventhorizon.PlaylistAddEpisodeSourceType
+import com.automattic.eventhorizon.PlaylistRemoveEpisodeSourceType
 
 interface AddToPlaylistFragmentFactory {
     fun create(
@@ -28,24 +31,29 @@ interface AddToPlaylistFragmentFactory {
     )
 
     enum class Source(
-        val analyticsValue: String,
-        val episodeEditAnalyticsValue: String,
+        val analyticsValue: AddToPlaylistFlowSourceType,
+        val episodeAddAnalyticsValue: PlaylistAddEpisodeSourceType,
+        val episodeRemoveAnalyticsValue: PlaylistRemoveEpisodeSourceType,
     ) {
         Swipe(
-            analyticsValue = "swipe",
-            episodeEditAnalyticsValue = "swipe_edit",
+            analyticsValue = AddToPlaylistFlowSourceType.Swipe,
+            episodeAddAnalyticsValue = PlaylistAddEpisodeSourceType.SwipeEdit,
+            episodeRemoveAnalyticsValue = PlaylistRemoveEpisodeSourceType.SwipeEdit,
         ),
         Shelf(
-            analyticsValue = "shelf",
-            episodeEditAnalyticsValue = "shelf",
+            analyticsValue = AddToPlaylistFlowSourceType.Shelf,
+            episodeAddAnalyticsValue = PlaylistAddEpisodeSourceType.Shelf,
+            episodeRemoveAnalyticsValue = PlaylistRemoveEpisodeSourceType.Shelf,
         ),
         EpisodeDetails(
-            analyticsValue = "episode_details",
-            episodeEditAnalyticsValue = "episode_details",
+            analyticsValue = AddToPlaylistFlowSourceType.EpisodeDetails,
+            episodeAddAnalyticsValue = PlaylistAddEpisodeSourceType.EpisodeDetails,
+            episodeRemoveAnalyticsValue = PlaylistRemoveEpisodeSourceType.EpisodeDetails,
         ),
         MultiSelect(
-            analyticsValue = "multi_select",
-            episodeEditAnalyticsValue = "multi_select",
+            analyticsValue = AddToPlaylistFlowSourceType.MultiSelect,
+            episodeAddAnalyticsValue = PlaylistAddEpisodeSourceType.MultiSelect,
+            episodeRemoveAnalyticsValue = PlaylistRemoveEpisodeSourceType.MultiSelect,
         ),
     }
 

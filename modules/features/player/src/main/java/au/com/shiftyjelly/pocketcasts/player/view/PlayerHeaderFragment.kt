@@ -18,9 +18,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,7 +79,6 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import au.com.shiftyjelly.pocketcasts.ads.AdReportFragment
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.LocalPodcastColors
@@ -86,11 +89,11 @@ import au.com.shiftyjelly.pocketcasts.compose.ad.rememberAdColors
 import au.com.shiftyjelly.pocketcasts.compose.adaptive.isAtLeastMediumHeight
 import au.com.shiftyjelly.pocketcasts.compose.adaptive.isAtLeastMediumWidth
 import au.com.shiftyjelly.pocketcasts.compose.components.AnimatedNonNullVisibility
+import au.com.shiftyjelly.pocketcasts.compose.components.PlaybackErrorInfoBar
 import au.com.shiftyjelly.pocketcasts.compose.components.rememberNestedScrollLockableInteropConnection
 import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.models.entity.BlazeAd
-import au.com.shiftyjelly.pocketcasts.models.to.Transcript
 import au.com.shiftyjelly.pocketcasts.player.R
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarkActivity
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarkActivityContract
@@ -110,7 +113,10 @@ import au.com.shiftyjelly.pocketcasts.player.viewmodel.ShelfSharedViewModel.Navi
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.ShelfSharedViewModel.SnackbarMessage
 import au.com.shiftyjelly.pocketcasts.reimagine.ShareDialogFragment
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackNoticeInfo
+import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackNoticeType
 import au.com.shiftyjelly.pocketcasts.repositories.playback.Player
+import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextSource
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
@@ -120,9 +126,6 @@ import au.com.shiftyjelly.pocketcasts.transcripts.ui.TranscriptShareButton
 import au.com.shiftyjelly.pocketcasts.ui.extensions.inPortrait
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
-import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import au.com.shiftyjelly.pocketcasts.views.dialog.ConfirmationDialog
 import au.com.shiftyjelly.pocketcasts.views.dialog.ConfirmationDialog.ButtonType.Danger
@@ -131,6 +134,14 @@ import au.com.shiftyjelly.pocketcasts.views.helper.CloudDeleteHelper
 import au.com.shiftyjelly.pocketcasts.views.helper.UiUtil
 import au.com.shiftyjelly.pocketcasts.views.helper.WarningsHelper
 import au.com.shiftyjelly.pocketcasts.views.swipe.AddToPlaylistFragmentFactory
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.PlaybackErrorShownEvent
+import com.automattic.eventhorizon.PlaybackErrorTappedEvent
+import com.automattic.eventhorizon.PlayerErrorBannerSource
+import com.automattic.eventhorizon.TranscriptDismissedEvent
+import com.automattic.eventhorizon.TranscriptGeneratedPaywallDismissedEvent
+import com.automattic.eventhorizon.TranscriptGeneratedPaywallSubscribeTappedEvent
+import com.automattic.eventhorizon.TranscriptTextHighlightedEvent
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
@@ -164,6 +175,9 @@ class PlayerHeaderFragment :
     @Inject
     lateinit var addToPlaylistFragmentFactory: AddToPlaylistFragmentFactory
 
+    @Inject
+    lateinit var eventHorizon: EventHorizon
+
     private val viewModel: PlayerViewModel by activityViewModels()
     private val shelfSharedViewModel: ShelfSharedViewModel by activityViewModels()
     private val transcriptViewModel by viewModels<TranscriptViewModel>(
@@ -183,7 +197,7 @@ class PlayerHeaderFragment :
     private val showUpNextFlingBehavior = object : FlingBehavior {
         override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
             if (isPlayerExpanded() && isUpNextCollapsed() && initialVelocity > 2000f) {
-                (parentFragment as PlayerContainerFragment).openUpNext()
+                (parentFragment as PlayerContainerFragment).openUpNext(UpNextSource.NOW_PLAYING)
             }
             return 0f
         }
@@ -213,6 +227,7 @@ class PlayerHeaderFragment :
         val headerData by remember { playerHeaderFlow() }.collectAsState(PlayerViewModel.PlayerHeader())
         val artworkOrVideoState by remember { playerVisualsStateFlow() }.collectAsState(ArtworkOrVideoState.NoContent)
         val activeAd by viewModel.activeAd.collectAsState()
+        val playbackNotice by viewModel.playbackNotice.collectAsState()
 
         val isPlayerOpen by isPlayerOpenFlow().collectAsState(false)
         val isTranscriptOpen by shelfSharedViewModel.isTranscriptOpen.collectAsState()
@@ -249,10 +264,12 @@ class PlayerHeaderFragment :
                         playerColors = playerColors,
                         transitionData = transitionData,
                         isPortraitPlayer = isPortraitPlayer,
+                        isPlayerOpen = isPlayerOpen,
+                        playbackNotice = playbackNotice,
                         modifier = Modifier
                             .fillMaxWidth(fraction = maxWidthFraction)
                             .fillMaxHeight()
-                            .padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                            .padding(top = 16.dp),
                     )
                 }
             }
@@ -296,7 +313,7 @@ class PlayerHeaderFragment :
                         is PlayerViewModel.NavigationState.OpenPodcastPage -> {
                             (activity as? FragmentHostListener)?.let { listener ->
                                 listener.closePlayer()
-                                listener.openPodcastPage(navigationState.podcastUuid, navigationState.source.analyticsValue)
+                                listener.openPodcastPage(navigationState.podcastUuid, navigationState.source.key)
                             }
                         }
 
@@ -340,7 +357,7 @@ class PlayerHeaderFragment :
 
                         is NavigationState.ShowPodcast -> {
                             (activity as FragmentHostListener).closePlayer()
-                            (activity as? FragmentHostListener)?.openPodcastPage(navigationState.podcast.uuid, SourceView.PLAYER.analyticsValue)
+                            (activity as? FragmentHostListener)?.openPodcastPage(navigationState.podcast.uuid, SourceView.PLAYER.key)
                         }
 
                         is NavigationState.ShowCloudFiles -> {
@@ -425,12 +442,21 @@ class PlayerHeaderFragment :
                         val containerFragment = parentFragment as? PlayerContainerFragment
                         containerFragment?.updateTabsVisibility(false)
                     } else if (wasTranscriptOpen && !isTranscriptOpen) {
-                        val event = if (uiState.isPaywallVisible) {
-                            AnalyticsEvent.TRANSCRIPT_GENERATED_PAYWALL_DISMISSED
-                        } else {
-                            AnalyticsEvent.TRANSCRIPT_DISMISSED
+                        transcriptViewModel.track { source, podcastUuid, episodeUuid ->
+                            if (uiState.isPaywallVisible) {
+                                TranscriptGeneratedPaywallDismissedEvent(
+                                    podcastUuid = podcastUuid,
+                                    episodeUuid = episodeUuid,
+                                    source = source,
+                                )
+                            } else {
+                                TranscriptDismissedEvent(
+                                    podcastUuid = podcastUuid,
+                                    episodeUuid = episodeUuid,
+                                    source = source,
+                                )
+                            }
                         }
-                        transcriptViewModel.track(event)
                         val containerFragment = parentFragment as? PlayerContainerFragment
                         containerFragment?.updateTabsVisibility(true)
                     }
@@ -561,6 +587,7 @@ class PlayerHeaderFragment :
 
     private fun isListDataEquivalentForVisuals(old: PlayerViewModel.ListData, new: PlayerViewModel.ListData): Boolean {
         return old.podcastHeader.episode?.uuid == new.podcastHeader.episode?.uuid &&
+            old.podcastHeader.isVideo == new.podcastHeader.isVideo &&
             old.podcastHeader.useEpisodeArtwork == new.podcastHeader.useEpisodeArtwork &&
             old.podcastHeader.chapter?.index == new.podcastHeader.chapter?.index &&
             old.podcastHeader.isPrepared == new.podcastHeader.isPrepared
@@ -616,26 +643,82 @@ class PlayerHeaderFragment :
         playerColors: PlayerColors,
         transitionData: TranscriptTransitionData,
         isPortraitPlayer: Boolean,
+        isPlayerOpen: Boolean,
+        playbackNotice: PlaybackNoticeInfo?,
         modifier: Modifier = Modifier,
     ) {
-        if (isPortraitPlayer) {
-            VerticalPlayerContent(
-                ad = ad,
-                artworkOrVideoState = artworkOrVideoState,
-                headerData = headerData,
-                playerColors = playerColors,
-                transitionData = transitionData,
-                modifier = modifier.navigationBarsPadding(),
-            )
-        } else {
-            HorizontalPlayerContent(
-                ad = ad,
-                artworkOrVideoState = artworkOrVideoState,
-                headerData = headerData,
-                playerColors = playerColors,
-                transitionData = transitionData,
-                modifier = modifier,
-            )
+        Column(modifier = modifier) {
+            if (isPortraitPlayer) {
+                VerticalPlayerContent(
+                    ad = ad,
+                    artworkOrVideoState = artworkOrVideoState,
+                    headerData = headerData,
+                    playerColors = playerColors,
+                    transitionData = transitionData,
+                    modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+                        .then(
+                            if (playbackNotice == null || transitionData.isTranscriptOpen) {
+                                Modifier.navigationBarsPadding()
+                            } else {
+                                Modifier
+                            },
+                        ),
+                )
+            } else {
+                HorizontalPlayerContent(
+                    ad = ad,
+                    artworkOrVideoState = artworkOrVideoState,
+                    headerData = headerData,
+                    playerColors = playerColors,
+                    transitionData = transitionData,
+                    modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+                        .then(
+                            if (playbackNotice == null || transitionData.isTranscriptOpen) {
+                                Modifier.navigationBarsPadding()
+                            } else {
+                                Modifier
+                            },
+                        ),
+                )
+            }
+            AnimatedNonNullVisibility(
+                item = if (transitionData.isTranscriptOpen) null else playbackNotice,
+                modifier = Modifier.padding(top = 16.dp),
+                enter = slideInVertically(initialOffsetY = { it }) + expandVertically(expandFrom = Alignment.Top),
+                exit = slideOutVertically(targetOffsetY = { it }) + shrinkVertically(shrinkTowards = Alignment.Top),
+            ) { issue ->
+                Column(
+                    modifier = Modifier
+                        .background(playerColors.contrast06)
+                        .navigationBarsPadding(),
+                ) {
+                    LaunchedEffect(issue, isPlayerOpen) {
+                        if (isPlayerOpen) {
+                            eventHorizon.track(PlaybackErrorShownEvent(playerSource = PlayerErrorBannerSource.FullPlayer))
+                        }
+                    }
+
+                    PlaybackErrorInfoBar(
+                        message = issue.message,
+                        playerColors = playerColors,
+                        linkText = issue.linkText,
+                        onClick = when (issue.type) {
+                            PlaybackNoticeType.PLAYBACK -> {
+                                {
+                                    if (isPlayerOpen) {
+                                        eventHorizon.track(PlaybackErrorTappedEvent(playerSource = PlayerErrorBannerSource.FullPlayer))
+                                    }
+                                    PlaybackIssuesBottomSheetFragment.show(parentFragmentManager, issue.supportUrl)
+                                }
+                            }
+
+                            PlaybackNoticeType.CONNECTION_LOST -> null
+
+                            PlaybackNoticeType.RECOVERY -> null
+                        },
+                    )
+                }
+            }
         }
     }
 
@@ -778,12 +861,16 @@ class PlayerHeaderFragment :
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .verticalScroll(rememberScrollState(), flingBehavior = showUpNextFlingBehavior),
+                    .scrollable(
+                        state = rememberScrollableState { it },
+                        orientation = Orientation.Vertical,
+                        flingBehavior = showUpNextFlingBehavior,
+                    ),
             ) {
                 AdAndArtworkHorizontal(
                     artworkOrVideoState = artworkOrVideoState,
                     playerColors = playerColors,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                 )
                 Spacer(
                     modifier = Modifier.height(16.dp),
@@ -817,7 +904,11 @@ class PlayerHeaderFragment :
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .verticalScroll(rememberScrollState(), flingBehavior = showUpNextFlingBehavior),
+                    .scrollable(
+                        state = rememberScrollableState { it },
+                        orientation = Orientation.Vertical,
+                        flingBehavior = showUpNextFlingBehavior,
+                    ),
             ) {
                 Spacer(
                     modifier = Modifier.weight(1f),
@@ -845,9 +936,13 @@ class PlayerHeaderFragment :
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState(), flingBehavior = showUpNextFlingBehavior),
+                .scrollable(
+                    state = rememberScrollableState { it },
+                    orientation = Orientation.Vertical,
+                    flingBehavior = showUpNextFlingBehavior,
+                ),
         ) {
-            Row {
+            Row(modifier = Modifier.weight(1f)) {
                 val windowWithPx = LocalWindowInfo.current.containerSize.width
                 val windowWidthDp = LocalDensity.current.run { windowWithPx.toDp() }
                 val maxSize = when (artworkOrVideoState) {
@@ -917,6 +1012,9 @@ class PlayerHeaderFragment :
             val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             TranscriptPage(
                 uiState = state,
+                viewModel = transcriptViewModel,
+                fingerprintTimingManager = transcriptViewModel.fingerprintTimingManager,
+                playbackManager = transcriptViewModel.playbackManager,
                 toolbarPadding = PaddingValues(horizontal = 16.dp),
                 paywallPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 transcriptPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = navigationBarPadding + if (isPortraitPlayer) 96.dp else 16.dp),
@@ -932,21 +1030,26 @@ class PlayerHeaderFragment :
                 onShowSearchBar = transcriptViewModel::openSearch,
                 onHideSearchBar = transcriptViewModel::hideSearch,
                 onClickSubscribe = {
-                    transcriptViewModel.track(AnalyticsEvent.TRANSCRIPT_GENERATED_PAYWALL_SUBSCRIBE_TAPPED)
+                    transcriptViewModel.track { source, podcastUuid, episodeUuid ->
+                        TranscriptGeneratedPaywallSubscribeTappedEvent(
+                            podcastUuid = podcastUuid,
+                            episodeUuid = episodeUuid,
+                            source = source,
+                        )
+                    }
                     OnboardingLauncher.openOnboardingFlow(requireActivity(), OnboardingFlow.Upsell(OnboardingUpgradeSource.GENERATED_TRANSCRIPTS))
                 },
-                onShowTranscript = { transcript ->
-                    val properties = mapOf(
-                        "type" to transcript.type.analyticsValue,
-                        "show_as_webpage" to (transcript is Transcript.Web),
-                    )
-                    transcriptViewModel.track(AnalyticsEvent.TRANSCRIPT_SHOWN, properties)
-                },
-                onShowTranscriptPaywall = {
-                    transcriptViewModel.track(AnalyticsEvent.TRANSCRIPT_GENERATED_PAYWALL_SHOWN)
+                onHighlightText = {
+                    transcriptViewModel.track { source, podcastUuid, episodeUuid ->
+                        TranscriptTextHighlightedEvent(
+                            podcastUuid = podcastUuid,
+                            episodeUuid = episodeUuid,
+                            source = source,
+                        )
+                    }
                 },
                 toolbarTrailingContent = { toolbarColors ->
-                    if (state.isTextTranscriptLoaded && FeatureFlag.isEnabled(Feature.SHARE_TRANSCRIPTS)) {
+                    if (state.isTextTranscriptLoaded) {
                         TranscriptShareButton(
                             toolbarColors = toolbarColors,
                             onClick = transcriptViewModel::shareTranscript,

@@ -6,6 +6,7 @@ import android.os.Parcelable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -19,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import androidx.core.os.bundleOf
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.doOnLayout
 import androidx.fragment.app.viewModels
@@ -55,6 +55,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import kotlinx.parcelize.TypeParceler
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
@@ -198,15 +199,22 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
             )
             if (episode.isDownloaded) {
                 add(
-                    shareOption(
-                        textId = LR.string.podcast_share_open_file_in,
-                        textColor = textColor,
-                        onClick = {
-                            lifecycleScope.launch(NonCancellable) {
-                                val request = SharingRequest.episodeFile(podcast, episode)
-                                    .setSourceView(args.source)
-                                    .build()
-                                sharingClient.share(request)
+                    OptionsDialogOption(
+                        titleId = LR.string.podcast_share_open_file_in,
+                        titleColor = textColor?.toArgb(),
+                        click = {
+                            val appContext = requireContext().applicationContext
+                            lifecycleScope.launch {
+                                withContext(NonCancellable) {
+                                    val request = SharingRequest
+                                        .episodeFile(podcast, episode, args.source)
+                                        .build()
+                                    val response = sharingClient.share(request)
+                                    if (!response.isSuccessful && response.feedbackMessage != null) {
+                                        Toast.makeText(appContext, response.feedbackMessage, Toast.LENGTH_SHORT).show()
+                                    }
+                                    dismiss()
+                                }
                             }
                         },
                     ),
@@ -288,22 +296,25 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
             options: List<ShareDialogFragment.Options> = ShareDialogFragment.Options.entries,
             observePlayback: Boolean = false,
         ) = ShareDialogFragment().apply {
-            arguments = bundleOf(
-                NEW_INSTANCE_ARG to Args(
-                    podcastUuid = podcast.uuid,
-                    podcastTitle = podcast.title,
-                    episodeUuid = episode.uuid,
-                    episodeTitle = episode.title,
-                    episodePlayedUpTo = episode.playedUpTo.seconds,
-                    episodeFileType = episode.fileType,
-                    episodeDownloadStatus = episode.downloadStatus,
-                    episodeFilePath = episode.downloadedFilePath,
-                    backgroundColor = null,
-                    options = options,
-                    source = source,
-                    observePlayback = observePlayback,
-                ),
-            )
+            arguments = Bundle().apply {
+                putParcelable(
+                    NEW_INSTANCE_ARG,
+                    Args(
+                        podcastUuid = podcast.uuid,
+                        podcastTitle = podcast.title,
+                        episodeUuid = episode.uuid,
+                        episodeTitle = episode.title,
+                        episodePlayedUpTo = episode.playedUpTo.seconds,
+                        episodeFileType = episode.fileType,
+                        episodeDownloadStatus = episode.downloadStatus,
+                        episodeFilePath = episode.downloadedFilePath,
+                        backgroundColor = null,
+                        options = options,
+                        source = source,
+                        observePlayback = observePlayback,
+                    ),
+                )
+            }
         }
 
         fun newThemedInstance(
@@ -314,22 +325,25 @@ class ShareDialogFragment : BottomSheetDialogFragment() {
             options: List<ShareDialogFragment.Options> = ShareDialogFragment.Options.entries,
             observePlayback: Boolean = true,
         ) = ShareDialogFragment().apply {
-            arguments = bundleOf(
-                NEW_INSTANCE_ARG to Args(
-                    podcastUuid = podcast.uuid,
-                    podcastTitle = podcast.title,
-                    episodeUuid = episode.uuid,
-                    episodeTitle = episode.title,
-                    episodePlayedUpTo = episode.playedUpTo.seconds,
-                    episodeFileType = episode.fileType,
-                    episodeDownloadStatus = episode.downloadStatus,
-                    episodeFilePath = episode.downloadedFilePath,
-                    backgroundColor = Color(theme.playerBackgroundColor(podcast)),
-                    options = options,
-                    source = source,
-                    observePlayback = observePlayback,
-                ),
-            )
+            arguments = Bundle().apply {
+                putParcelable(
+                    NEW_INSTANCE_ARG,
+                    Args(
+                        podcastUuid = podcast.uuid,
+                        podcastTitle = podcast.title,
+                        episodeUuid = episode.uuid,
+                        episodeTitle = episode.title,
+                        episodePlayedUpTo = episode.playedUpTo.seconds,
+                        episodeFileType = episode.fileType,
+                        episodeDownloadStatus = episode.downloadStatus,
+                        episodeFilePath = episode.downloadedFilePath,
+                        backgroundColor = Color(theme.playerBackgroundColor(podcast)),
+                        options = options,
+                        source = source,
+                        observePlayback = observePlayback,
+                    ),
+                )
+            }
         }
     }
 }

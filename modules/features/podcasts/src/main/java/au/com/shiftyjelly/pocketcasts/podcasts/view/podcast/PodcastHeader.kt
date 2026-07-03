@@ -99,6 +99,7 @@ import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.Devices
 import au.com.shiftyjelly.pocketcasts.compose.components.ExpandableText
@@ -112,9 +113,10 @@ import au.com.shiftyjelly.pocketcasts.models.entity.PodcastRatings
 import au.com.shiftyjelly.pocketcasts.podcasts.R
 import au.com.shiftyjelly.pocketcasts.podcasts.view.components.ratings.PodcastRating
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastRatingsViewModel.RatingState
-import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastRatingsViewModel.RatingTappedSource
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import coil3.compose.rememberAsyncImagePainter
 import kotlin.math.roundToInt
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -127,8 +129,10 @@ internal fun PodcastHeader(
     title: String,
     category: String,
     author: String,
+    explicit: Boolean,
     description: AnnotatedString,
     podcastInfoState: PodcastInfoState,
+    linkColor: Color,
     rating: RatingState,
     isFollowed: Boolean,
     areNotificationsEnabled: Boolean,
@@ -139,7 +143,7 @@ internal fun PodcastHeader(
     contentPadding: PaddingValues,
     useBlurredArtwork: Boolean,
     onClickCategory: () -> Unit,
-    onClickRating: (RatingTappedSource) -> Unit,
+    onClickRating: () -> Unit,
     onClickFollow: () -> Unit,
     onClickUnfollow: () -> Unit,
     onClickFolder: () -> Unit,
@@ -197,6 +201,7 @@ internal fun PodcastHeader(
                 title = title,
                 category = category,
                 author = author,
+                explicit = explicit,
                 rating = rating,
                 onClickRating = onClickRating,
                 isFollowed = isFollowed,
@@ -221,6 +226,7 @@ internal fun PodcastHeader(
                 PodcastDetails(
                     description = description,
                     podcastInfoState = podcastInfoState,
+                    linkColor = linkColor,
                     isDescriptionExpanded = isDescriptionExpanded,
                     onClickShowNotes = onToggleDescription,
                     onClickWebsiteLink = onClickWebsiteLink,
@@ -235,6 +241,7 @@ private fun PodcastControls(
     title: String,
     category: String,
     author: String,
+    explicit: Boolean,
     rating: RatingState,
     isFollowed: Boolean,
     areNotificationsEnabled: Boolean,
@@ -243,7 +250,7 @@ private fun PodcastControls(
     isHeaderExpanded: Boolean,
     onClickTitle: () -> Unit,
     onClickCategory: () -> Unit,
-    onClickRating: (RatingTappedSource) -> Unit,
+    onClickRating: () -> Unit,
     onClickFollow: () -> Unit,
     onClickUnfollow: () -> Unit,
     onClickFolder: () -> Unit,
@@ -269,6 +276,7 @@ private fun PodcastControls(
             PodcastCategoriesLabel(
                 category = category,
                 author = author,
+                explicit = explicit,
                 onClickCategory = onClickCategory,
             )
         }
@@ -320,9 +328,11 @@ private fun PodcastControls(
 private fun PodcastCategoriesLabel(
     category: String,
     author: String,
+    explicit: Boolean,
     onClickCategory: () -> Unit,
 ) {
-    val text = remember(category, author, onClickCategory) {
+    val showExplicitIndicator by FeatureFlag.isEnabledFlow(Feature.EXPLICIT_PODCAST_INDICATOR).collectAsStateWithLifecycle()
+    val text = remember(category, author, explicit, onClickCategory, showExplicitIndicator) {
         val text = listOf(category, author).filter(String::isNotBlank).joinToString(separator = " · ")
         buildAnnotatedString {
             append(text)
@@ -340,13 +350,38 @@ private fun PodcastCategoriesLabel(
                     end = category.length,
                 )
             }
+            if (showExplicitIndicator && explicit) {
+                if (text.isNotBlank() || category.isNotBlank()) {
+                    append(" · ")
+                }
+                appendInlineContent("explicit")
+            }
         }
     }
 
+    val iconColor = MaterialTheme.theme.colors.primaryText02
     TextP60(
         text = text,
-        color = MaterialTheme.theme.colors.primaryText02,
+        color = iconColor,
         textAlign = TextAlign.Center,
+        inlineContent = if (showExplicitIndicator && explicit) {
+            mapOf(
+                "explicit" to InlineTextContent(Placeholder(16.sp, 16.sp, PlaceholderVerticalAlign.TextCenter)) {
+                    val explicitDescription = stringResource(LR.string.explicit)
+                    Icon(
+                        painter = painterResource(IR.drawable.explicit),
+                        tint = iconColor,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            // Use this instead of contentDescription so TalkBack only says "Explicit" and doesn't say "Image"
+                            .clearAndSetSemantics { contentDescription = explicitDescription },
+                    )
+                },
+            )
+        } else {
+            emptyMap()
+        },
         modifier = Modifier.padding(bottom = 12.dp),
     )
 }
@@ -354,7 +389,7 @@ private fun PodcastCategoriesLabel(
 @Composable
 private fun PodcastRatingOrSpacing(
     rating: RatingState,
-    onClickRating: (RatingTappedSource) -> Unit,
+    onClickRating: () -> Unit,
 ) {
     SubcomposeLayout { constraints ->
         val anyRating = RatingState.Loaded(
@@ -696,36 +731,40 @@ private fun ActionButton(
 private fun PodcastDetails(
     description: AnnotatedString,
     podcastInfoState: PodcastInfoState,
+    linkColor: Color,
     isDescriptionExpanded: Boolean,
     onClickShowNotes: () -> Unit,
     onClickWebsiteLink: () -> Unit,
 ) {
     Column {
-        Spacer(
-            modifier = Modifier.height(16.dp),
-        )
-        ExpandableText(
-            text = description,
-            overflowText = stringResource(LR.string.see_more),
-            isExpanded = isDescriptionExpanded,
-            style = detailsInfoTextStyle.copy(
-                color = MaterialTheme.theme.colors.primaryText01,
-            ),
-            maxLines = 4,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(
-                    indication = null,
-                    interactionSource = null,
-                    onClick = onClickShowNotes,
+        if (description.isNotEmpty()) {
+            Spacer(
+                modifier = Modifier.height(16.dp),
+            )
+            ExpandableText(
+                text = description,
+                overflowText = stringResource(LR.string.see_more),
+                isExpanded = isDescriptionExpanded,
+                style = detailsInfoTextStyle.copy(
+                    color = MaterialTheme.theme.colors.primaryText01,
                 ),
-        )
+                maxLines = 4,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        indication = null,
+                        interactionSource = null,
+                        onClick = onClickShowNotes,
+                    ),
+            )
+        }
         Spacer(
             modifier = Modifier.height(16.dp),
         )
         PodcastInfoView(
             state = podcastInfoState,
             onWebsiteLinkClick = onClickWebsiteLink,
+            linkColor = linkColor,
         )
     }
 }
@@ -935,6 +974,7 @@ private fun PodcastHeaderPreview(
                 title = "The Pitchfork Review",
                 category = "Music",
                 author = "Pitchfork",
+                explicit = true,
                 description = AnnotatedString(
                     """
                     |Savor & Stir is a culinary podcast exploring flavors, techniques, and food stories from chefs and home cooks.
@@ -948,6 +988,7 @@ private fun PodcastHeaderPreview(
                     schedule = "Every two weeks",
                     next = "Meaning of life",
                 ),
+                linkColor = MaterialTheme.theme.colors.primaryIcon01,
                 rating = RatingState.Loaded(
                     ratings = PodcastRatings(
                         podcastUuid = "uuid",

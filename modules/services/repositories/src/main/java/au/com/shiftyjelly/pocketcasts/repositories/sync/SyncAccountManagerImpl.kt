@@ -7,7 +7,6 @@ import android.accounts.NetworkErrorException
 import android.accounts.OnAccountsUpdateListener
 import android.content.Intent
 import android.os.Bundle
-import androidx.core.os.bundleOf
 import au.com.shiftyjelly.pocketcasts.preferences.AccessToken
 import au.com.shiftyjelly.pocketcasts.preferences.AccountConstants
 import au.com.shiftyjelly.pocketcasts.preferences.RefreshToken
@@ -17,6 +16,7 @@ import au.com.shiftyjelly.pocketcasts.servers.sync.exception.RefreshTokenExpired
 import au.com.shiftyjelly.pocketcasts.utils.Optional
 import au.com.shiftyjelly.pocketcasts.utils.extensions.findParcelable
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
+import com.automattic.eventhorizon.SignInSourceType
 import io.reactivex.BackpressureStrategy
 import io.reactivex.Flowable
 import javax.inject.Inject
@@ -120,6 +120,9 @@ open class SyncAccountManagerImpl @Inject constructor(
                 } else {
                     AccessToken(token)
                 }
+            } catch (e: RefreshTokenExpiredException) {
+                LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Could not get token because the refresh token has expired")
+                throw e
             } catch (e: Exception) {
                 LogBuffer.e(LogBuffer.TAG_BACKGROUND_TASKS, e, "Could not get token")
                 throw e // Rethrow the exception so it carries on
@@ -139,11 +142,14 @@ open class SyncAccountManagerImpl @Inject constructor(
 
     override fun addAccount(email: String, uuid: String, refreshToken: RefreshToken, accessToken: AccessToken, loginIdentity: LoginIdentity) {
         val account = Account(email, AccountConstants.ACCOUNT_TYPE)
-        val userData = bundleOf(
-            AccountConstants.UUID to uuid,
-            AccountConstants.SIGN_IN_TYPE_KEY to AccountConstants.SignInType.Tokens.value,
-            AccountConstants.LOGIN_IDENTITY to loginIdentity.value,
-        )
+        val userData = Bundle().apply {
+            putString(AccountConstants.UUID, uuid)
+            putString(
+                AccountConstants.SIGN_IN_TYPE_KEY,
+                AccountConstants.SignInType.Tokens.value,
+            )
+            putString(AccountConstants.LOGIN_IDENTITY, loginIdentity.key)
+        }
         val accountAdded = accountManager.addAccountExplicitly(account, refreshToken.value, userData)
         accountManager.setAuthToken(account, AccountConstants.TOKEN_TYPE, accessToken.value)
 
@@ -188,10 +194,10 @@ open class SyncAccountManagerImpl @Inject constructor(
 }
 
 sealed class SignInSource {
-    sealed class UserInitiated(val analyticsValue: String) : SignInSource() {
-        object SignInViewModel : UserInitiated("sign_in_view_model")
-        object Onboarding : UserInitiated("onboarding")
-        object Watch : UserInitiated("watch")
+    sealed class UserInitiated(val analyticsValue: SignInSourceType) : SignInSource() {
+        object SignInViewModel : UserInitiated(SignInSourceType.SignInViewModel)
+        object Onboarding : UserInitiated(SignInSourceType.Onboarding)
+        object Watch : UserInitiated(SignInSourceType.Watch)
     }
     object WatchPhoneSync : SignInSource()
 }

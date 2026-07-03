@@ -4,8 +4,6 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.podcasts.view.ProfileEpisodeListFragment.Mode
@@ -13,6 +11,12 @@ import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadQueue
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.InformationalBannerViewCreateAccountTapEvent
+import com.automattic.eventhorizon.InformationalBannerViewDismissedEvent
+import com.automattic.eventhorizon.ListeningHistoryClearedEvent
+import com.automattic.eventhorizon.SearchClearedEvent
+import com.automattic.eventhorizon.SearchPerformedEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
@@ -37,7 +41,7 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 class ProfileEpisodeListViewModel @Inject constructor(
     private val episodeManager: EpisodeManager,
     private val downloadQueue: DownloadQueue,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
     private val settings: Settings,
     private val userManager: UserManager,
 ) : ViewModel(),
@@ -97,7 +101,7 @@ class ProfileEpisodeListViewModel @Inject constructor(
 
     fun clearAllEpisodeHistory() {
         launch {
-            analyticsTracker.track(AnalyticsEvent.LISTENING_HISTORY_CLEARED)
+            eventHorizon.track(ListeningHistoryClearedEvent)
             episodeManager.clearAllEpisodeHistory()
         }
     }
@@ -106,11 +110,19 @@ class ProfileEpisodeListViewModel @Inject constructor(
         val oldValue = _searchQueryFlow.value
         _searchQueryFlow.value = searchQuery
 
-        // Track search events
+        val source = mode?.source ?: return
         if (oldValue.isEmpty() && searchQuery.isNotEmpty()) {
-            track(AnalyticsEvent.SEARCH_PERFORMED)
+            eventHorizon.track(
+                SearchPerformedEvent(
+                    source = source.analyticsValue,
+                ),
+            )
         } else if (oldValue.isNotEmpty() && searchQuery.isEmpty()) {
-            track(AnalyticsEvent.SEARCH_CLEARED)
+            eventHorizon.track(
+                SearchClearedEvent(
+                    source = source.analyticsValue,
+                ),
+            )
         }
     }
 
@@ -126,11 +138,19 @@ class ProfileEpisodeListViewModel @Inject constructor(
     )
 
     internal fun onCreateFreeAccountClick() {
-        analyticsTracker.track(AnalyticsEvent.INFORMATIONAL_BANNER_VIEW_CREATE_ACCOUNT_TAP, mapOf("source" to "listening_history"))
+        eventHorizon.track(
+            InformationalBannerViewCreateAccountTapEvent(
+                source = SourceView.LISTENING_HISTORY.analyticsValue,
+            ),
+        )
     }
 
     internal fun dismissFreeAccountBanner() {
-        analyticsTracker.track(AnalyticsEvent.INFORMATIONAL_BANNER_VIEW_DISMISSED, mapOf("source" to "listening_history"))
+        eventHorizon.track(
+            InformationalBannerViewDismissedEvent(
+                source = SourceView.LISTENING_HISTORY.analyticsValue,
+            ),
+        )
         settings.isFreeAccountHistoryBannerDismissed.set(true, updateModifiedAt = true)
     }
 
@@ -178,12 +198,6 @@ class ProfileEpisodeListViewModel @Inject constructor(
         }
 
         data object Loading : State()
-    }
-
-    private fun track(
-        analyticsEvent: AnalyticsEvent,
-    ) {
-        mode?.let { analyticsTracker.track(analyticsEvent, mapOf("source" to it.source.analyticsValue)) }
     }
 
     fun cancelAllDownloads() {

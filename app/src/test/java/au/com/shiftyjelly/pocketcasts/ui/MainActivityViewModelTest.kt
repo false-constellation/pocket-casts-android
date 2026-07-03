@@ -1,7 +1,7 @@
 package au.com.shiftyjelly.pocketcasts.ui
 
 import app.cash.turbine.test
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.testing.TestEventSink
 import au.com.shiftyjelly.pocketcasts.localization.R
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
@@ -11,18 +11,20 @@ import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackNoticeManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackState
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
 import au.com.shiftyjelly.pocketcasts.sharedtest.MainCoroutineRule
 import au.com.shiftyjelly.pocketcasts.ui.MainActivityViewModel.NavigationState
-import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectBookmarksHelper
+import com.automattic.eventhorizon.EventHorizon
 import com.jakewharton.rxrelay2.BehaviorRelay
 import io.reactivex.Flowable
 import java.util.Date
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,7 +37,6 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
 import org.mockito.junit.MockitoJUnitRunner
 import org.mockito.kotlin.eq
-import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -55,6 +56,9 @@ class MainActivityViewModelTest {
     lateinit var playbackManager: PlaybackManager
 
     @Mock
+    lateinit var playbackNoticeManager: PlaybackNoticeManager
+
+    @Mock
     lateinit var userManager: UserManager
 
     @Mock
@@ -72,15 +76,6 @@ class MainActivityViewModelTest {
     @Mock
     lateinit var bookmarkManager: BookmarkManager
 
-    @Mock
-    lateinit var theme: Theme
-
-    @Mock
-    lateinit var bookmark: Bookmark
-
-    @Mock
-    lateinit var analyticsTracker: AnalyticsTracker
-
     private lateinit var viewModel: MainActivityViewModel
 
     private val episode = UserEpisode(uuid = TEST_EPISODE_UUID, publishedDate = Date())
@@ -94,6 +89,7 @@ class MainActivityViewModelTest {
     @Before
     fun setup() = runTest {
         whenever(playbackManager.playbackStateRelay).thenReturn(BehaviorRelay.create<PlaybackState>().toSerialized())
+        whenever(playbackNoticeManager.playbackNotice).thenReturn(emptyFlow())
     }
 
     /* What's new tests */
@@ -138,7 +134,8 @@ class MainActivityViewModelTest {
 
     @Test
     fun `given episode for bookmark is current playing, when bookmark viewed from notification, then bookmarks on player shown`() = runTest {
-        whenever(bookmark.episodeUuid).thenReturn(TEST_EPISODE_UUID)
+        val bookmark = Bookmark()
+        bookmark.episodeUuid = TEST_EPISODE_UUID
         whenever(bookmarkManager.findBookmark(anyString(), eq(false))).thenReturn(bookmark)
         whenever(playbackManager.getCurrentEpisode()).thenReturn(episode)
         initViewModel()
@@ -151,10 +148,11 @@ class MainActivityViewModelTest {
 
     @Test
     fun `given podcast episode for bookmark currently not playing, when bookmark viewed from notification, then bookmarks for podcast episode shown`() = runTest {
-        whenever(bookmark.episodeUuid).thenReturn(TEST_EPISODE_UUID)
+        val bookmark = Bookmark()
+        bookmark.episodeUuid = TEST_EPISODE_UUID
         whenever(bookmarkManager.findBookmark(anyString(), eq(false))).thenReturn(bookmark)
         whenever(playbackManager.getCurrentEpisode()).thenReturn(null)
-        whenever(episodeManager.findEpisodeByUuid(TEST_EPISODE_UUID)).thenReturn(mock<PodcastEpisode>())
+        whenever(episodeManager.findEpisodeByUuid(TEST_EPISODE_UUID)).thenReturn(PodcastEpisode(uuid = "", publishedDate = Date()))
         initViewModel()
 
         viewModel.navigationState.test {
@@ -165,10 +163,11 @@ class MainActivityViewModelTest {
 
     @Test
     fun `given user episode for bookmark currently not playing, when bookmark viewed from notification, then bookmarks for user episode shown`() = runTest {
-        whenever(bookmark.episodeUuid).thenReturn(TEST_EPISODE_UUID)
+        val bookmark = Bookmark()
+        bookmark.episodeUuid = TEST_EPISODE_UUID
         whenever(bookmarkManager.findBookmark(anyString(), eq(false))).thenReturn(bookmark)
         whenever(playbackManager.getCurrentEpisode()).thenReturn(null)
-        whenever(episodeManager.findEpisodeByUuid(TEST_EPISODE_UUID)).thenReturn(mock<UserEpisode>())
+        whenever(episodeManager.findEpisodeByUuid(TEST_EPISODE_UUID)).thenReturn(UserEpisode(uuid = "", publishedDate = Date()))
         initViewModel()
 
         viewModel.navigationState.test {
@@ -179,7 +178,7 @@ class MainActivityViewModelTest {
 
     @Test
     fun `given bookmark exists, when delete tapped from bookmark added notification, then bookmark is deleted`() = runTest {
-        whenever(bookmarkManager.findBookmark(TEST_BOOKMARK_UUID)).thenReturn(mock())
+        whenever(bookmarkManager.findBookmark(TEST_BOOKMARK_UUID)).thenReturn(Bookmark())
         initViewModel()
 
         viewModel.deleteBookmark(TEST_BOOKMARK_UUID)
@@ -189,7 +188,7 @@ class MainActivityViewModelTest {
 
     @Test
     fun `given bookmark exists, when delete tapped from bookmark added notification, then bookmark deleted message shown`() = runTest {
-        whenever(bookmarkManager.findBookmark(TEST_BOOKMARK_UUID)).thenReturn(mock())
+        whenever(bookmarkManager.findBookmark(TEST_BOOKMARK_UUID)).thenReturn(Bookmark())
         initViewModel()
 
         viewModel.snackbarMessage.test {
@@ -235,14 +234,14 @@ class MainActivityViewModelTest {
         viewModel = MainActivityViewModel(
             episodeManager = episodeManager,
             playbackManager = playbackManager,
+            playbackNoticeManager = playbackNoticeManager,
             userManager = userManager,
             settings = settings,
             endOfYearManager = endOfYearManager,
             multiSelectBookmarksHelper = multiSelectBookmarksHelper,
             podcastManager = podcastManager,
             bookmarkManager = bookmarkManager,
-            theme = theme,
-            analyticsTracker = analyticsTracker,
+            eventHorizon = EventHorizon(TestEventSink()),
         )
     }
 }

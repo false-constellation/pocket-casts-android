@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.AnnotatedString
@@ -49,7 +50,6 @@ import au.com.shiftyjelly.pocketcasts.podcasts.view.podcast.adapter.RecommendedP
 import au.com.shiftyjelly.pocketcasts.podcasts.view.podcast.adapter.TabsViewHolder
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastRatingsViewModel
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastRatingsViewModel.RatingState
-import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastRatingsViewModel.RatingTappedSource
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.PodcastViewModel.PodcastTab
 import au.com.shiftyjelly.pocketcasts.podcasts.viewmodel.podcast.RecommendationsResult
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -57,6 +57,7 @@ import au.com.shiftyjelly.pocketcasts.preferences.model.ArtworkConfiguration.Ele
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeRowDataProvider
 import au.com.shiftyjelly.pocketcasts.servers.model.DiscoverPodcast
+import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
 import au.com.shiftyjelly.pocketcasts.ui.extensions.themed
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
@@ -115,7 +116,6 @@ class PodcastAdapter(
     private val settings: Settings,
     private val swipeRowActionsFactory: SwipeRowActions.Factory,
     private val theme: Theme,
-    private val onHeaderSummaryToggled: (Boolean, Boolean) -> Unit,
     private val onSubscribeClicked: () -> Unit,
     private val onUnsubscribeClicked: (successCallback: () -> Unit) -> Unit,
     private val onEpisodesOptionsClicked: () -> Unit,
@@ -140,7 +140,8 @@ class PodcastAdapter(
     private val onHeadsetSettingsClicked: () -> Unit,
     private val onGetBookmarksClicked: () -> Unit,
     private val onChangeHeaderExpanded: (String, Boolean) -> Unit,
-    private val onClickRating: (Podcast, RatingTappedSource) -> Unit,
+    private val onDescriptionExpanded: (Boolean) -> Unit,
+    private val onClickRating: (Podcast) -> Unit,
     private val onClickCategory: (Podcast) -> Unit,
     private val onClickWebsite: (Podcast) -> Unit,
     private val onArtworkAvailable: (Podcast) -> Unit,
@@ -236,7 +237,7 @@ class PodcastAdapter(
 
     private var headerExpanded: Boolean = false
     private var isDescriptionExpanded = false
-    private var tintColor: Int = 0x000000
+    private var tintColor: Int = context.getThemeColor(UR.attr.primary_icon_01)
     private var signInState: SignInState = SignInState.SignedOut
     private var ratingState: RatingState = RatingState.Loading
 
@@ -275,6 +276,7 @@ class PodcastAdapter(
                 },
                 onToggleDescription = {
                     isDescriptionExpanded = !isDescriptionExpanded
+                    onDescriptionExpanded(isDescriptionExpanded)
                     notifyItemChanged(0)
                 },
                 onLongClickArtwork = {
@@ -407,6 +409,7 @@ class PodcastAdapter(
             text = episodeHeader.searchTerm
         }
         holder.binding.btnArchived.setText(if (episodeHeader.showingArchived) LR.string.podcast_hide_archived else LR.string.podcast_show_archived)
+        holder.binding.btnArchived.setTextColor(ThemeColor.podcastText02(theme.activeTheme, tintColor))
         holder.binding.btnArchived.setOnClickListener { onShowArchivedClicked() }
     }
 
@@ -422,6 +425,7 @@ class PodcastAdapter(
             isSelected = multiSelectEpisodesHelper.isSelected(episode),
             useEpisodeArtwork = settings.artworkConfiguration.value.useEpisodeArtwork(Element.Podcasts),
             streamByDefault = settings.streamingMode.value,
+            tint = tintColor,
             animateMultiSelection = animateMultiSelection,
         )
     }
@@ -449,7 +453,6 @@ class PodcastAdapter(
             headerExpanded = !podcast.isSubscribed
             ratingsViewModel.loadRatings(podcast.uuid)
             ratingsViewModel.refreshPodcastRatings(podcast.uuid)
-            onHeaderSummaryToggled(headerExpanded, false)
         }
         this.podcast = podcast
         val isHtmlDescription = podcast.podcastHtmlDescription.isNotEmpty()
@@ -468,7 +471,9 @@ class PodcastAdapter(
     }
 
     fun setTint(tintColor: Int) {
+        if (this.tintColor == tintColor) return
         this.tintColor = tintColor
+        notifyDataSetChanged()
     }
 
     fun setSignInState(signInState: SignInState) {
@@ -785,7 +790,7 @@ class PodcastAdapter(
         private val theme: Theme,
         private val useBlurredArtwork: Boolean,
         private val onClickCategory: (Podcast) -> Unit,
-        private val onClickRating: (Podcast, RatingTappedSource) -> Unit,
+        private val onClickRating: (Podcast) -> Unit,
         private val onClickFollow: () -> Unit,
         private val onClickUnfollow: () -> Unit,
         private val onClickFolder: () -> Unit,
@@ -825,6 +830,7 @@ class PodcastAdapter(
                         title = podcast.title,
                         category = podcast.getFirstCategory(itemView.context.resources),
                         author = podcast.author,
+                        explicit = podcast.explicit ?: false,
                         description = podcastDescription,
                         podcastInfoState = PodcastInfoState(
                             author = podcast.author,
@@ -832,6 +838,7 @@ class PodcastAdapter(
                             schedule = podcast.displayableFrequency(context.resources),
                             next = podcast.displayableNextEpisodeDate(context),
                         ),
+                        linkColor = Color(ThemeColor.podcastText02(theme.activeTheme, tintColor)),
                         rating = ratingState,
                         isFollowed = podcast.isSubscribed,
                         areNotificationsEnabled = podcast.isShowNotifications,
@@ -851,7 +858,7 @@ class PodcastAdapter(
                         ),
                         useBlurredArtwork = useBlurredArtwork,
                         onClickCategory = { onClickCategory(podcast) },
-                        onClickRating = { source -> onClickRating(podcast, source) },
+                        onClickRating = { onClickRating(podcast) },
                         onClickFollow = onClickFollow,
                         onClickUnfollow = onClickUnfollow,
                         onClickFolder = onClickFolder,

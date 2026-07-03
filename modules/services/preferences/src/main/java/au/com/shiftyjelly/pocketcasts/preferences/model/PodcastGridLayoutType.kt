@@ -1,13 +1,27 @@
 package au.com.shiftyjelly.pocketcasts.preferences.model
 
+import com.automattic.eventhorizon.PodcastListLayoutType
+
 enum class PodcastGridLayoutType(
     val id: Int,
     val serverId: Int,
-    val analyticsValue: String,
+    val analyticsValue: PodcastListLayoutType,
 ) {
-    LARGE_ARTWORK(id = 0, serverId = 0, analyticsValue = "large_artwork"),
-    SMALL_ARTWORK(id = 1, serverId = 1, analyticsValue = "small_artwork"),
-    LIST_VIEW(id = 2, serverId = 2, analyticsValue = "list"),
+    LARGE_ARTWORK(
+        id = 0,
+        serverId = 0,
+        analyticsValue = PodcastListLayoutType.LargeArtwork,
+    ),
+    SMALL_ARTWORK(
+        id = 1,
+        serverId = 1,
+        analyticsValue = PodcastListLayoutType.SmallArtwork,
+    ),
+    LIST_VIEW(
+        id = 2,
+        serverId = 2,
+        analyticsValue = PodcastListLayoutType.List,
+    ),
     ;
 
     companion object {

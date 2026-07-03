@@ -17,15 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.core.content.res.ResourcesCompat
-import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
 import au.com.shiftyjelly.pocketcasts.compose.components.AnimatedPlayPauseButton
 import au.com.shiftyjelly.pocketcasts.compose.components.rememberViewInteropNestedScrollConnection
 import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
-import au.com.shiftyjelly.pocketcasts.models.to.Transcript
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingLauncher
@@ -34,9 +32,10 @@ import au.com.shiftyjelly.pocketcasts.transcripts.ui.ToolbarColors
 import au.com.shiftyjelly.pocketcasts.transcripts.ui.TranscriptPage
 import au.com.shiftyjelly.pocketcasts.transcripts.ui.TranscriptShareButton
 import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseDialogFragment
+import com.automattic.eventhorizon.EpisodeTranscriptShownEvent
+import com.automattic.eventhorizon.TranscriptGeneratedPaywallSubscribeTappedEvent
+import com.automattic.eventhorizon.TranscriptTextHighlightedEvent
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import javax.inject.Inject
@@ -54,7 +53,9 @@ class TranscriptFragment : BaseDialogFragment() {
             episodeUuid: String,
             podcastUuid: String?,
         ) = TranscriptFragment().apply {
-            arguments = bundleOf(NEW_INSTANCE_KEY to Args(episodeUuid, podcastUuid))
+            arguments = Bundle().apply {
+                putParcelable(NEW_INSTANCE_KEY, Args(episodeUuid, podcastUuid))
+            }
         }
     }
 
@@ -80,13 +81,13 @@ class TranscriptFragment : BaseDialogFragment() {
         savedInstanceState: Bundle?,
     ) = contentWithoutConsumedInsets {
         CallOnce {
-            viewModel.track(
-                AnalyticsEvent.EPISODE_TRANSCRIPT_SHOWN,
-                buildMap {
-                    put("episode_uuid", args.episodeUuid)
-                    args.podcastUuid?.let { uuid -> put("podcast_uuid", uuid) }
-                },
-            )
+            viewModel.track { source, _, _ ->
+                EpisodeTranscriptShownEvent(
+                    episodeUuid = args.episodeUuid,
+                    podcastUuid = args.podcastUuid ?: AnalyticsTracker.INVALID_OR_NULL_VALUE,
+                    source = source,
+                )
+            }
         }
 
         DialogBox {
@@ -94,6 +95,9 @@ class TranscriptFragment : BaseDialogFragment() {
 
             TranscriptPage(
                 uiState = uiState,
+                viewModel = viewModel,
+                fingerprintTimingManager = viewModel.fingerprintTimingManager,
+                playbackManager = viewModel.playbackManager,
                 toolbarPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp),
                 paywallPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 transcriptPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 16.dp),
@@ -109,24 +113,32 @@ class TranscriptFragment : BaseDialogFragment() {
                 onShowSearchBar = viewModel::openSearch,
                 onHideSearchBar = viewModel::hideSearch,
                 onClickSubscribe = {
-                    viewModel.track(AnalyticsEvent.TRANSCRIPT_GENERATED_PAYWALL_SUBSCRIBE_TAPPED)
-                    OnboardingLauncher.openOnboardingFlow(requireActivity(), OnboardingFlow.Upsell(OnboardingUpgradeSource.GENERATED_TRANSCRIPTS))
-                },
-                onShowTranscript = { transcript ->
-                    val properties = mapOf(
-                        "type" to transcript.type.analyticsValue,
-                        "show_as_webpage" to (transcript is Transcript.Web),
+                    viewModel.track { source, podcastUuid, episodeUuid ->
+                        TranscriptGeneratedPaywallSubscribeTappedEvent(
+                            podcastUuid = podcastUuid,
+                            episodeUuid = episodeUuid,
+                            source = source,
+                        )
+                    }
+                    OnboardingLauncher.openOnboardingFlow(
+                        requireActivity(),
+                        OnboardingFlow.Upsell(OnboardingUpgradeSource.GENERATED_TRANSCRIPTS),
                     )
-                    viewModel.track(AnalyticsEvent.TRANSCRIPT_SHOWN, properties)
                 },
-                onShowTranscriptPaywall = {
-                    viewModel.track(AnalyticsEvent.TRANSCRIPT_GENERATED_PAYWALL_SHOWN)
+                onHighlightText = {
+                    viewModel.track { source, podcastUuid, episodeUuid ->
+                        TranscriptTextHighlightedEvent(
+                            podcastUuid = podcastUuid,
+                            episodeUuid = episodeUuid,
+                            source = source,
+                        )
+                    }
                 },
                 toolbarTrailingContent = { toolbarColors ->
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (uiState.isTextTranscriptLoaded && FeatureFlag.isEnabled(Feature.SHARE_TRANSCRIPTS)) {
+                        if (uiState.isTextTranscriptLoaded) {
                             TranscriptShareButton(
                                 toolbarColors = toolbarColors,
                                 onClick = viewModel::shareTranscript,

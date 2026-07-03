@@ -63,6 +63,7 @@ import dagger.hilt.components.SingletonComponent
 import java.util.Date
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTime
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -207,24 +208,33 @@ class RefreshPodcastsThread(
 
         addNewEpisodesToUpNext(addedEpisodes.episodesToAddToUpNext)
 
-        var startTime = SystemClock.elapsedRealtime()
         if (!emptyResponse) {
-            episodeManager.checkForEpisodesToAutoArchiveBlocking(playbackManager, podcastManager)
-            LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - checkForEpisodesToAutoArchive - ${SystemClock.elapsedRealtime() - startTime} ms}")
+            val autoArchiveDuration = measureTime {
+                episodeManager.checkForEpisodesToAutoArchiveBlocking(playbackManager, podcastManager)
+            }
+            LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - auto archive check - $autoArchiveDuration")
 
-            startTime = SystemClock.elapsedRealtime()
-            podcastManager.checkForUnusedPodcastsBlocking(playbackManager)
-            LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - checkForUnusedPodcasts - ${SystemClock.elapsedRealtime() - startTime} ms}")
+            val unusedPodcastsDuration = measureTime {
+                podcastManager.checkForUnusedPodcastsBlocking(playbackManager)
+            }
+            LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - unsued podcasts check - $unusedPodcastsDuration")
 
-            startTime = SystemClock.elapsedRealtime()
-            updateNotifications(notificationLastSeen, settings, podcastManager, episodeManager, notificationHelper, context)
-            LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - updateNotifications - ${SystemClock.elapsedRealtime() - startTime} ms}")
+            val notificationsDuration = measureTime {
+                updateNotifications(notificationLastSeen, settings, podcastManager, episodeManager, notificationHelper, context)
+            }
+            LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - notifications check - $notificationsDuration")
         }
 
-        startTime = SystemClock.elapsedRealtime()
-        val episodes = runBlocking { autoDownloadProvider.getAll(addedEpisodes.episodeUuidsAdded) }
-        downloadQueue.enqueueAll(episodes, DownloadType.Automatic(bypassAutoDownloadStatus = false), SourceView.AUTO_DOWNLOAD)
-        LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - checkForEpisodesToDownload - ${SystemClock.elapsedRealtime() - startTime} ms}")
+        val autoDownloadDuration = measureTime {
+            for (uuid in addedEpisodes.episodeUuidsAdded) {
+                LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "New podcast episode received: $uuid")
+            }
+            val episodes = runBlocking {
+                autoDownloadProvider.getAll(addedEpisodes.episodeUuidsAdded)
+            }
+            downloadQueue.enqueueAll(episodes, DownloadType.Automatic(bypassAutoDownloadStatus = false), SourceView.AUTO_DOWNLOAD)
+        }
+        LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Refresh - auto download check - $autoDownloadDuration")
 
         if (syncRefreshState is RefreshState.Failed) {
             settings.setRefreshState(syncRefreshState)
@@ -287,6 +297,7 @@ class RefreshPodcastsThread(
         val entryPoint = getEntryPoint()
         val podcastManager = entryPoint.podcastManager()
         val episodeManager = entryPoint.episodeManager()
+        val alternateEnclosureDao = entryPoint.appDatabase().alternateEnclosureDao()
 
         var newEpisodeCount = 0
 
@@ -306,6 +317,7 @@ class RefreshPodcastsThread(
             for (episode in episodes) {
                 episode.addedDate = addedDate
             }
+            val enclosuresByUuid = episodes.associate { it.uuid to it.alternateEnclosures }
             episodes = episodeManager.addBlocking(episodes, podcast.uuid, downloadMetaData)
 
             if (episodes.isEmpty()) {
@@ -318,6 +330,10 @@ class RefreshPodcastsThread(
                 podcastManager.updateLatestEpisodeBlocking(podcast, episodes[0])
                 for ((uuid) in episodes) {
                     episodeUuidsAdded.add(uuid)
+                    val enclosures = enclosuresByUuid[uuid].orEmpty()
+                    if (enclosures.isNotEmpty()) {
+                        alternateEnclosureDao.replaceForEpisodeBlocking(uuid, enclosures)
+                    }
                 }
 
                 // prepare to add to up next
@@ -463,7 +479,7 @@ class RefreshPodcastsThread(
             val showEpisodeDeepLink = ShowEpisodeDeepLink(
                 episodeUuid = episode.uuid,
                 podcastUuid = podcast.uuid,
-                sourceView = EpisodeViewSource.NOTIFICATION.value,
+                sourceView = EpisodeViewSource.NOTIFICATION.key,
                 autoPlay = false,
             )
 

@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.repositories.download
 
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.content.Context
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -90,6 +91,7 @@ class DownloadEpisodeWorker @AssistedInject constructor(
     private val fileStorage: FileStorage,
     private val progressCache: DownloadProgressCache,
     private val notificationObserver: DownloadNotificationObserver,
+    private val episodeDurationFixer: EpisodeDurationFixer,
 ) : Worker(context, params) {
     private val args = inputData.toArgs()
 
@@ -125,6 +127,7 @@ class DownloadEpisodeWorker @AssistedInject constructor(
         if (!isStopped) {
             LogBuffer.i(LogBuffer.TAG_DOWNLOAD, "Download started. Episode: ${args.episodeUuid}")
         }
+        var resolvedEpisode: BaseEpisode? = null
         val timedValue = measureTimedValue {
             try {
                 // Block the work until the state is dispatched to keep it consistent
@@ -134,6 +137,7 @@ class DownloadEpisodeWorker @AssistedInject constructor(
                 prepareForegroundNotification(episode)
 
                 episode = refreshDownloadUrlOrThrow(episode)
+                resolvedEpisode = episode
                 val downloadFile = getDownloadFileOrThrow(episode)
                 val tempFile = fileStorage.getOrCreatePodcastEpisodeTempFile(episode)
 
@@ -154,6 +158,7 @@ class DownloadEpisodeWorker @AssistedInject constructor(
 
         return when (val result = timedValue.value) {
             is DownloadResult.Success -> {
+                resolvedEpisode?.let { episodeDurationFixer.fixMissingDuration(it, result.file) }
                 val data = Data.Builder()
                     .putString(DOWNLOAD_FILE_PATH_KEY, result.file.path)
                     .build()
@@ -228,12 +233,12 @@ class DownloadEpisodeWorker @AssistedInject constructor(
 
             is DownloadResult.InvalidContentType -> {
                 downloadError.reason = EpisodeDownloadError.Reason.ContentType
-                context.getString(LR.string.error_download_invalid_content_type, result.contentType) to false
+                context.getString(LR.string.error_download_invalid_content_type, result.contentType) to true
             }
 
             is DownloadResult.SuspiciousFileSize -> {
                 downloadError.reason = EpisodeDownloadError.Reason.SuspiciousContent
-                context.getString(LR.string.error_download_suspicious_content_size) to false
+                context.getString(LR.string.error_download_suspicious_content_size) to true
             }
 
             is DownloadResult.ExceptionFailure -> {
@@ -334,7 +339,16 @@ class DownloadEpisodeWorker @AssistedInject constructor(
         val notificationJob = notificationObserver.observeNotificationUpdates(episode)
         this.notificationJob = notificationJob
         val foregroundInfo = createForegroundInfo(notificationJob.id, notificationJob.notification)
-        setForegroundAsync(foregroundInfo).get()
+        try {
+            setForegroundAsync(foregroundInfo).get()
+        } catch (e: Throwable) {
+            // https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start
+            // This is an Android limitation related to foreground services.
+            // Therefore, we cannot move the process to the foreground.
+            // Ignore this exception and continue running in the background.
+            notificationJob.cancel()
+            LogBuffer.i(LogBuffer.TAG_DOWNLOAD, e, "Failed to start foreground work for downloads")
+        }
     }
 
     private fun createForegroundInfo(id: Int, notification: Notification): ForegroundInfo {
@@ -376,6 +390,7 @@ class DownloadEpisodeWorker @AssistedInject constructor(
         val podcastUuid: String,
         val waitForWifi: Boolean,
         val waitForPower: Boolean,
+        val waitForStorage: Boolean,
         val sourceView: SourceView,
     )
 
@@ -392,13 +407,13 @@ class DownloadEpisodeWorker @AssistedInject constructor(
 
         fun podcastTag(podcastUuid: String) = "$WORKER_PODCAST_TAG_PREFIX$podcastUuid"
 
-        fun sourceViewTag(sourceView: SourceView) = "$WORKER_SOURCE_VIEW_TAG_PREFIX${sourceView.analyticsValue}"
+        fun sourceViewTag(sourceView: SourceView) = "$WORKER_SOURCE_VIEW_TAG_PREFIX${sourceView.key}"
 
         fun createWorkRequest(args: Args): Pair<OneTimeWorkRequest, Constraints> {
             val constraints = Constraints.Builder()
                 .setRequiresCharging(args.waitForPower)
                 .setRequiredNetworkType(if (args.waitForWifi) NetworkType.UNMETERED else NetworkType.CONNECTED)
-                .setRequiresStorageNotLow(true)
+                .setRequiresStorageNotLow(args.waitForStorage)
                 .build()
             val request = OneTimeWorkRequestBuilder<DownloadEpisodeWorker>()
                 .setConstraints(constraints)
@@ -588,6 +603,7 @@ private fun Data.toArgs() = DownloadEpisodeWorker.Args(
     podcastUuid = getString(PODCAST_UUID_KEY).orEmpty(),
     waitForWifi = getBoolean(WAIT_FOR_WIFI_KEY, true),
     waitForPower = getBoolean(WAIT_FOR_POWER_KEY, true),
+    waitForStorage = getBoolean(WAIT_FOR_STORAGE_KEY, true),
     sourceView = SourceView.fromString(getString(SOURCE_VIEW_KEY)),
 )
 
@@ -596,7 +612,8 @@ private fun DownloadEpisodeWorker.Args.toData() = Data.Builder()
     .putString(PODCAST_UUID_KEY, podcastUuid)
     .putBoolean(WAIT_FOR_WIFI_KEY, waitForWifi)
     .putBoolean(WAIT_FOR_POWER_KEY, waitForPower)
-    .putString(SOURCE_VIEW_KEY, sourceView.analyticsValue)
+    .putBoolean(WAIT_FOR_STORAGE_KEY, waitForStorage)
+    .putString(SOURCE_VIEW_KEY, sourceView.key)
     .build()
 
 // Input keys
@@ -604,7 +621,8 @@ private const val EPISODE_UUID_KEY = "${WORKER_TAG}episode_uuid"
 private const val PODCAST_UUID_KEY = "${WORKER_TAG}podcast_uuid"
 private const val WAIT_FOR_WIFI_KEY = "${WORKER_TAG}wait_for_wifi"
 private const val WAIT_FOR_POWER_KEY = "${WORKER_TAG}wait_for_power"
-internal const val SOURCE_VIEW_KEY = "${WORKER_TAG}source_view"
+private const val WAIT_FOR_STORAGE_KEY = "${WORKER_TAG}wait_for_storage"
+private const val SOURCE_VIEW_KEY = "${WORKER_TAG}source_view"
 
 // Progress keys
 internal const val IS_WORK_EXECUTING_KEY = "${WORKER_TAG}is_work_executing"

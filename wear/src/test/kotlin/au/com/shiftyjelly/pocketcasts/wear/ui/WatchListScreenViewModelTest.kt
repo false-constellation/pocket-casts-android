@@ -1,21 +1,33 @@
 package au.com.shiftyjelly.pocketcasts.wear.ui
 
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.testing.TestEventSink
+import au.com.shiftyjelly.pocketcasts.models.to.RefreshState
+import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.sharedtest.MainCoroutineRule
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.WearMainListDownloadsTappedEvent
+import com.automattic.eventhorizon.WearMainListFilesTappedEvent
+import com.automattic.eventhorizon.WearMainListFiltersTappedEvent
+import com.automattic.eventhorizon.WearMainListNowPlayingTappedEvent
+import com.automattic.eventhorizon.WearMainListPodcastsTappedEvent
+import com.automattic.eventhorizon.WearMainListSettingsTappedEvent
+import com.automattic.eventhorizon.WearMainListStarredTappedEvent
 import io.reactivex.Observable
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.Mock
 import org.mockito.MockitoAnnotations
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -24,8 +36,10 @@ class WatchListScreenViewModelTest {
     @get:Rule
     val coroutineRule = MainCoroutineRule()
 
+    private val eventSink = TestEventSink()
+
     @Mock
-    private lateinit var analyticsTracker: AnalyticsTracker
+    private lateinit var settings: Settings
 
     @Mock
     private lateinit var episodeManager: EpisodeManager
@@ -39,15 +53,24 @@ class WatchListScreenViewModelTest {
     @Mock
     private lateinit var upNextQueue: UpNextQueue
 
+    private val refreshStateFlow = MutableStateFlow<RefreshState>(RefreshState.Never)
+
     private lateinit var viewModel: WatchListScreenViewModel
 
     @Before
     fun setup() {
         MockitoAnnotations.openMocks(this)
+        whenever(settings.refreshStateFlow).thenReturn(refreshStateFlow)
         whenever(playbackManager.upNextQueue).thenReturn(upNextQueue)
         whenever(upNextQueue.getChangesObservableWithLiveCurrentEpisode(episodeManager, podcastManager))
             .thenReturn(Observable.never())
-        viewModel = WatchListScreenViewModel(analyticsTracker, episodeManager, playbackManager, podcastManager)
+        viewModel = WatchListScreenViewModel(
+            eventHorizon = EventHorizon(eventSink),
+            settings = settings,
+            episodeManager = episodeManager,
+            playbackManager = playbackManager,
+            podcastManager = podcastManager,
+        )
     }
 
     @After
@@ -58,42 +81,93 @@ class WatchListScreenViewModelTest {
     @Test
     fun `test onNowPlayingClicked tapped`() {
         viewModel.onNowPlayingClicked()
-        verify(analyticsTracker).track(AnalyticsEvent.WEAR_MAIN_LIST_NOW_PLAYING_TAPPED)
+
+        assertEquals(
+            WearMainListNowPlayingTappedEvent,
+            eventSink.pollEvent(),
+        )
     }
 
     @Test
     fun `test onPodcastsClicked tapped`() {
         viewModel.onPodcastsClicked()
-        verify(analyticsTracker).track(AnalyticsEvent.WEAR_MAIN_LIST_PODCASTS_TAPPED)
+
+        assertEquals(
+            WearMainListPodcastsTappedEvent,
+            eventSink.pollEvent(),
+        )
     }
 
     @Test
     fun `test onDownloadsClicked tapped`() {
         viewModel.onDownloadsClicked()
-        verify(analyticsTracker).track(AnalyticsEvent.WEAR_MAIN_LIST_DOWNLOADS_TAPPED)
+
+        assertEquals(
+            WearMainListDownloadsTappedEvent,
+            eventSink.pollEvent(),
+        )
     }
 
     @Test
     fun `test onPlaylistsClicked tapped`() {
         viewModel.onPlaylistsClicked()
-        verify(analyticsTracker).track(AnalyticsEvent.WEAR_MAIN_LIST_FILTERS_TAPPED)
+
+        assertEquals(
+            WearMainListFiltersTappedEvent,
+            eventSink.pollEvent(),
+        )
     }
 
     @Test
     fun `test onFilesClicked tapped`() {
         viewModel.onFilesClicked()
-        verify(analyticsTracker).track(AnalyticsEvent.WEAR_MAIN_LIST_FILES_TAPPED)
+
+        assertEquals(
+            WearMainListFilesTappedEvent,
+            eventSink.pollEvent(),
+        )
     }
 
     @Test
     fun `test onStarredClicked tapped`() {
         viewModel.onStarredClicked()
-        verify(analyticsTracker).track(AnalyticsEvent.WEAR_MAIN_LIST_STARRED_TAPPED)
+
+        assertEquals(
+            WearMainListStarredTappedEvent,
+            eventSink.pollEvent(),
+        )
     }
 
     @Test
     fun `test onSettingsClicked tapped`() {
         viewModel.onSettingsClicked()
-        verify(analyticsTracker).track(AnalyticsEvent.WEAR_MAIN_LIST_SETTINGS_TAPPED)
+
+        assertEquals(
+            WearMainListSettingsTappedEvent,
+            eventSink.pollEvent(),
+        )
+    }
+
+    @Test
+    fun `refreshPodcasts calls podcastManager refreshPodcasts`() {
+        viewModel.refreshPodcasts()
+        verify(podcastManager).refreshPodcasts("watch - list screen")
+    }
+
+    @Test
+    fun `refreshPodcasts does not call podcastManager when already refreshing`() = runTest {
+        refreshStateFlow.value = RefreshState.Refreshing
+        testScheduler.advanceUntilIdle()
+
+        viewModel.refreshPodcasts()
+        verify(podcastManager, never()).refreshPodcasts("watch - list screen")
+    }
+
+    @Test
+    fun `state reflects refreshState from settings flow`() = runTest {
+        refreshStateFlow.value = RefreshState.Refreshing
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(RefreshState.Refreshing, viewModel.state.value.refreshState)
     }
 }

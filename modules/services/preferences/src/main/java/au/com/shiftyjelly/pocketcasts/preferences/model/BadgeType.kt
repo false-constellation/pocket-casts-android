@@ -3,32 +3,33 @@ package au.com.shiftyjelly.pocketcasts.preferences.model
 import androidx.annotation.StringRes
 import au.com.shiftyjelly.pocketcasts.localization.R
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
+import com.automattic.eventhorizon.PodcastListBadgeType
 
 enum class BadgeType(
     internal val persistedInt: Int,
     val serverId: Int,
     @StringRes val labelId: Int,
-    val analyticsValue: String,
+    val analyticsValue: PodcastListBadgeType,
 ) {
     OFF(
         persistedInt = 0,
         serverId = 0,
         labelId = R.string.podcasts_badges_off,
-        analyticsValue = "off",
+        analyticsValue = PodcastListBadgeType.Off,
     ),
 
     LATEST_EPISODE(
         persistedInt = 1,
         serverId = 1,
         labelId = R.string.podcasts_badges_only_latest_episode,
-        analyticsValue = "only_latest_episode",
+        analyticsValue = PodcastListBadgeType.OnlyLatestEpisode,
     ),
 
     ALL_UNFINISHED(
         persistedInt = 2,
         serverId = 2,
         labelId = R.string.podcasts_badges_all_unfinished,
-        analyticsValue = "unfinished_episodes",
+        analyticsValue = PodcastListBadgeType.UnfinishedEpisodes,
     ),
     ;
 

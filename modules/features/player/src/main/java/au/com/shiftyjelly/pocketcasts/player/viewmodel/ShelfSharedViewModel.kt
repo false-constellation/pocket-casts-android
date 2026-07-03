@@ -2,8 +2,6 @@ package au.com.shiftyjelly.pocketcasts.player.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.coroutines.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
@@ -15,6 +13,7 @@ import au.com.shiftyjelly.pocketcasts.preferences.model.ShelfItem
 import au.com.shiftyjelly.pocketcasts.repositories.chromecast.ChromeCastAnalytics
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadQueue
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playback.StreamVideoState
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
@@ -22,8 +21,14 @@ import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.transcript.TranscriptManager
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.views.helper.CloudDeleteHelper
 import au.com.shiftyjelly.pocketcasts.views.helper.DeleteState
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.PlayerShelfActionTappedEvent
+import com.automattic.eventhorizon.PlayerShelfOverflowMenuShownEvent
+import com.automattic.eventhorizon.ShelfActionSourceType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
@@ -47,7 +52,7 @@ import kotlinx.coroutines.rx2.asFlow
 @HiltViewModel
 class ShelfSharedViewModel @Inject constructor(
     @ApplicationScope private val applicationScope: CoroutineScope,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
     private val chromeCastAnalytics: ChromeCastAnalytics,
     private val episodeManager: EpisodeManager,
     private val playbackManager: PlaybackManager,
@@ -92,6 +97,8 @@ class ShelfSharedViewModel @Inject constructor(
         shelfUpNextObservable.asFlow()
             .mapNotNull { state -> (state as? UpNextQueue.State.Loaded)?.episode?.uuid }
             .flatMapLatest { episodeUuid -> transcriptManager.observeIsTranscriptAvailable(episodeUuid) },
+        playbackManager.streamVideoState,
+        playbackManager.videoRenderingEnabled,
         ::createUiState,
     ).stateIn(
         viewModelScope,
@@ -103,12 +110,17 @@ class ShelfSharedViewModel @Inject constructor(
         shelfItems: List<ShelfItem>,
         shelfUpNext: UpNextQueue.State,
         isTranscriptAvailable: Boolean,
+        streamVideoState: StreamVideoState,
+        videoRenderingEnabled: Boolean,
     ): UiState {
         val episode = (shelfUpNext as? UpNextQueue.State.Loaded)?.episode
+        val streamHasVideo = streamVideoState == StreamVideoState.HasVideo || streamVideoState == StreamVideoState.Unknown
+        val canToggleVideo = FeatureFlag.isEnabled(Feature.HLS_STREAMING) && episode is PodcastEpisode && streamHasVideo
         return uiState.value.copy(
-            shelfItems = shelfItems.filter { it.showIf(episode) },
+            shelfItems = shelfItems.filter { it.showIf(episode) && (it != ShelfItem.StreamSelector || canToggleVideo) },
             episode = episode,
             isTranscriptAvailable = isTranscriptAvailable,
+            isVideoRenderingEnabled = videoRenderingEnabled,
         )
     }
 
@@ -117,6 +129,10 @@ class ShelfSharedViewModel @Inject constructor(
         viewModelScope.launch {
             _navigationState.emit(NavigationState.ShowEffectsOption)
         }
+    }
+
+    fun onVideoToggleClick(source: ShelfItemSource) {
+        playbackManager.toggleVideoRendering()
     }
 
     fun onSleepClick(source: ShelfItemSource) {
@@ -292,7 +308,7 @@ class ShelfSharedViewModel @Inject constructor(
     }
 
     fun onMoreClick() {
-        track(AnalyticsEvent.PLAYER_SHELF_OVERFLOW_MENU_SHOWN)
+        eventHorizon.track(PlayerShelfOverflowMenuShownEvent)
         viewModelScope.launch {
             _navigationState.emit(NavigationState.ShowMoreActions)
         }
@@ -302,14 +318,10 @@ class ShelfSharedViewModel @Inject constructor(
         shelfItem: ShelfItem,
         shelfItemSource: ShelfItemSource,
     ) {
-        analyticsTracker.track(
-            AnalyticsEvent.PLAYER_SHELF_ACTION_TAPPED,
-            mapOf(
-                AnalyticsProp.FROM to when (shelfItemSource) {
-                    ShelfItemSource.Shelf -> AnalyticsProp.SHELF
-                    ShelfItemSource.OverflowMenu -> AnalyticsProp.OVERFLOW_MENU
-                },
-                AnalyticsProp.ACTION to shelfItem.analyticsValue,
+        eventHorizon.track(
+            PlayerShelfActionTappedEvent(
+                from = shelfItemSource.analyticsValue,
+                action = shelfItem.analyticsValue,
             ),
         )
         if (shelfItem == ShelfItem.Cast) {
@@ -317,14 +329,11 @@ class ShelfSharedViewModel @Inject constructor(
         }
     }
 
-    fun track(event: AnalyticsEvent) {
-        analyticsTracker.track(event)
-    }
-
     data class UiState(
         val shelfItems: List<ShelfItem> = emptyList(),
         val episode: BaseEpisode? = null,
         val isTranscriptAvailable: Boolean = false,
+        val isVideoRenderingEnabled: Boolean = true,
     ) {
         val playerShelfItems: List<ShelfItem>
             get() = shelfItems.take(MIN_SHELF_ITEMS_SIZE)
@@ -384,19 +393,18 @@ class ShelfSharedViewModel @Inject constructor(
         data object ShareNotAvailable : SnackbarMessage
     }
 
-    enum class ShelfItemSource {
-        Shelf,
-        OverflowMenu,
+    enum class ShelfItemSource(
+        val analyticsValue: ShelfActionSourceType,
+    ) {
+        Shelf(
+            analyticsValue = ShelfActionSourceType.Shelf,
+        ),
+        OverflowMenu(
+            analyticsValue = ShelfActionSourceType.OverflowMenu,
+        ),
     }
 
     companion object {
         const val MIN_SHELF_ITEMS_SIZE = 4
-
-        object AnalyticsProp {
-            const val FROM = "from"
-            const val ACTION = "action"
-            const val SHELF = "shelf"
-            const val OVERFLOW_MENU = "overflow_menu"
-        }
     }
 }

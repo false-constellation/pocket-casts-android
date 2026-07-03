@@ -63,9 +63,12 @@ fun DeveloperPage(
     onShowNotificationsTestingClick: () -> Unit,
     onResetSuggestedFoldersSuggestion: () -> Unit,
     onResetPlaylistsOnboarding: () -> Unit,
+    onResetUpNextSortTooltip: () -> Unit,
     onResetNotificationsPrompt: () -> Unit,
     onShowAppReviewPrompt: () -> Unit,
     onClearAppReviewSettings: () -> Unit,
+    onTriggerPlaybackError: () -> Unit,
+    onTriggerConnectionError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var openCrashMessageDialog by remember { mutableStateOf(false) }
@@ -122,6 +125,15 @@ fun DeveloperPage(
         }
         item {
             ResetPlaylistsOnboarding(onClick = onResetPlaylistsOnboarding)
+        }
+        item {
+            ResetUpNextSortTooltip(onClick = onResetUpNextSortTooltip)
+        }
+        item {
+            TriggerPlaybackError(onClick = onTriggerPlaybackError)
+        }
+        item {
+            TriggerConnectionError(onClick = onTriggerConnectionError)
         }
         item {
             CrashApp()
@@ -357,6 +369,45 @@ private fun ResetPlaylistsOnboarding(
 }
 
 @Composable
+private fun ResetUpNextSortTooltip(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Reset Up Next sort tooltip",
+        secondaryText = "Show the \"Sort by Duration\" tooltip on the Up Next tab again",
+        icon = rememberVectorPainter(Icons.AutoMirrored.Outlined.PlaylistPlay),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
+private fun TriggerPlaybackError(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Trigger playback error",
+        secondaryText = "Set playback state to a playback error with chevron",
+        icon = rememberVectorPainter(Icons.Outlined.ErrorOutline),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
+private fun TriggerConnectionError(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SettingRow(
+        primaryText = "Trigger connection error",
+        secondaryText = "Set playback state to a connection error without chevron",
+        icon = rememberVectorPainter(Icons.Outlined.ErrorOutline),
+        modifier = modifier.clickable { onClick() },
+    )
+}
+
+@Composable
 private fun CrashApp(
     modifier: Modifier = Modifier,
 ) {
@@ -414,9 +465,12 @@ private fun DeveloperPagePreview() {
         onResetSuggestedFoldersSuggestion = {},
         onShowNotificationsTestingClick = {},
         onResetPlaylistsOnboarding = {},
+        onResetUpNextSortTooltip = {},
         onResetNotificationsPrompt = {},
         onShowAppReviewPrompt = {},
         onClearAppReviewSettings = {},
+        onTriggerPlaybackError = {},
+        onTriggerConnectionError = {},
     )
 }
 

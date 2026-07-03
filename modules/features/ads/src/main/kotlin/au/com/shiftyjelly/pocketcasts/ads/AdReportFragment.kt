@@ -10,8 +10,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.core.os.bundleOf
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.compose.LocalPodcastColors
 import au.com.shiftyjelly.pocketcasts.compose.PodcastColors
 import au.com.shiftyjelly.pocketcasts.compose.ad.AdReportContent
@@ -25,6 +23,8 @@ import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSourc
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
 import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseDialogFragment
+import com.automattic.eventhorizon.BannerAdReportEvent
+import com.automattic.eventhorizon.EventHorizon
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -36,7 +36,7 @@ import com.google.android.material.R as MR
 class AdReportFragment : BaseDialogFragment() {
 
     @Inject
-    internal lateinit var analyticsTracker: AnalyticsTracker
+    internal lateinit var eventHorizon: EventHorizon
 
     companion object {
         const val NEW_INSTANCE_KEY = "new_instance_key"
@@ -45,7 +45,9 @@ class AdReportFragment : BaseDialogFragment() {
             ad: BlazeAd,
             podcastColors: PodcastColors?,
         ) = AdReportFragment().apply {
-            arguments = bundleOf(NEW_INSTANCE_KEY to Args(ad, podcastColors))
+            arguments = Bundle().apply {
+                putParcelable(NEW_INSTANCE_KEY, Args(ad, podcastColors))
+            }
         }
     }
 
@@ -80,7 +82,13 @@ class AdReportFragment : BaseDialogFragment() {
     }
 
     private fun reportAd(reason: AdReportReason) {
-        analyticsTracker.trackBannerAdReport(id = args.ad.id, reason = reason.analyticsName, location = args.ad.location.value)
+        eventHorizon.track(
+            BannerAdReportEvent(
+                id = args.ad.id,
+                reason = reason.analyticsValue,
+                location = args.ad.location.analyticsValue,
+            ),
+        )
 
         val snackbarView = (requireActivity() as FragmentHostListener).snackBarView()
         Snackbar.make(snackbarView, getString(LR.string.ad_report_confirmation), Snackbar.LENGTH_LONG).show()

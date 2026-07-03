@@ -10,6 +10,8 @@ import android.widget.ImageButton
 import androidx.annotation.ColorInt
 import androidx.appcompat.widget.TooltipCompat
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.view.isVisible
@@ -17,8 +19,6 @@ import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.extensions.setContentWithViewCompositionStrategy
 import au.com.shiftyjelly.pocketcasts.localization.helper.RelativeDateFormatter
@@ -57,7 +57,13 @@ import com.airbnb.lottie.LottieProperty
 import com.airbnb.lottie.SimpleColorFilter
 import com.airbnb.lottie.model.KeyPath
 import com.airbnb.lottie.value.LottieValueCallback
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.UpNextNowPlayingTappedEvent
+import com.automattic.eventhorizon.UpNextQueueEpisodeLongPressedEvent
+import com.automattic.eventhorizon.UpNextQueueEpisodeTappedEvent
+import com.automattic.eventhorizon.UpNextShuffleEnabledEvent
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.flow.StateFlow
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
@@ -68,12 +74,15 @@ class UpNextAdapter(
     val listener: UpNextListener,
     val multiSelectHelper: MultiSelectEpisodesHelper,
     val fragmentManager: FragmentManager,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
     private val upNextSource: UpNextSource,
     private val settings: Settings,
     private val playbackManager: PlaybackManager,
     private val swipeRowActionsFactory: SwipeRowActions.Factory,
+    private val showSortTooltip: StateFlow<Boolean>,
     private val onSortClick: () -> Unit,
+    private val onSortTooltipShown: () -> Unit,
+    private val onSortTooltipTapped: () -> Unit,
     private val onSwipeAction: (BaseEpisode, SwipeAction) -> Unit,
 ) : ListAdapter<Any, RecyclerView.ViewHolder>(UPNEXT_ADAPTER_DIFF) {
     private val dateFormatter = RelativeDateFormatter(context)
@@ -115,7 +124,12 @@ class UpNextAdapter(
                         } else {
                             val podcastUuid = (episode as? PodcastEpisode)?.podcastUuid
                             val playOnTap = settings.tapOnUpNextShouldPlay.value
-                            trackUpNextEvent(AnalyticsEvent.UP_NEXT_QUEUE_EPISODE_TAPPED, mapOf(WILL_PLAY_KEY to playOnTap))
+                            eventHorizon.track(
+                                UpNextQueueEpisodeTappedEvent(
+                                    willPlay = playOnTap,
+                                    source = upNextSource.analyticsValue,
+                                ),
+                            )
                             listener.onEpisodeActionsClick(episodeUuid = episode.uuid, podcastUuid = podcastUuid)
                         }
                     },
@@ -125,7 +139,12 @@ class UpNextAdapter(
                         } else {
                             val podcastUuid = (episode as? PodcastEpisode)?.podcastUuid
                             val playOnLongPress = !settings.tapOnUpNextShouldPlay.value
-                            trackUpNextEvent(AnalyticsEvent.UP_NEXT_QUEUE_EPISODE_LONG_PRESSED, mapOf(WILL_PLAY_KEY to playOnLongPress))
+                            eventHorizon.track(
+                                UpNextQueueEpisodeLongPressedEvent(
+                                    willPlay = playOnLongPress,
+                                    source = upNextSource.analyticsValue,
+                                ),
+                            )
                             listener.onEpisodeActionsLongPress(episodeUuid = episode.uuid, podcastUuid = podcastUuid)
                         }
                     },
@@ -206,10 +225,6 @@ class UpNextAdapter(
         val onSortClick: () -> Unit,
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        init {
-            binding.sort.setOnClickListener { onSortClick() }
-        }
-
         fun bind(header: PlayerViewModel.UpNextSummary) {
             with(binding) {
                 binding.emptyUpNextComposeView.setContentWithViewCompositionStrategy {
@@ -231,14 +246,31 @@ class UpNextAdapter(
                     root.resources.getQuantityString(LR.plurals.player_up_next_header_title, header.episodeCount, header.episodeCount, time)
                 }
 
-                sort.isVisible = isUpNextNotEmpty
+                sortComposeView.isVisible = isUpNextNotEmpty
+                sortComposeView.setContentWithViewCompositionStrategy {
+                    AppTheme(theme) {
+                        val showTooltip by showSortTooltip.collectAsState()
+                        UpNextSortButton(
+                            showTooltip = showTooltip,
+                            onClick = onSortClick,
+                            onTooltipClick = onSortTooltipTapped,
+                            onTooltipShow = onSortTooltipShown,
+                        )
+                    }
+                }
+
                 shuffle.isVisible = isUpNextNotEmpty
                 shuffle.updateShuffleButton()
 
                 shuffle.setOnClickListener {
                     if (isSignedInAsPaidUser) {
                         val newValue = !settings.upNextShuffle.value
-                        analyticsTracker.track(AnalyticsEvent.UP_NEXT_SHUFFLE_ENABLED, mapOf("value" to newValue, SOURCE_KEY to upNextSource.analyticsValue))
+                        eventHorizon.track(
+                            UpNextShuffleEnabledEvent(
+                                value = newValue,
+                                source = upNextSource.analyticsValue,
+                            ),
+                        )
 
                         if (newValue) {
                             (root.context.getActivity() as? FragmentHostListener)?.snackBarView()?.let { snackBarView ->
@@ -302,7 +334,11 @@ class UpNextAdapter(
 
         init {
             binding.root.setOnClickListener {
-                trackUpNextEvent(AnalyticsEvent.UP_NEXT_NOW_PLAYING_TAPPED)
+                eventHorizon.track(
+                    UpNextNowPlayingTappedEvent(
+                        source = upNextSource.analyticsValue,
+                    ),
+                )
                 listener.onNowPlayingClick()
             }
         }
@@ -342,18 +378,6 @@ class UpNextAdapter(
         val keyPath = KeyPath("**")
         val callback = LottieValueCallback<ColorFilter>(filter)
         addValueCallback(keyPath, LottieProperty.COLOR_FILTER, callback)
-    }
-
-    private fun trackUpNextEvent(event: AnalyticsEvent, props: Map<String, Any> = emptyMap()) {
-        val properties = HashMap<String, Any>()
-        properties[SOURCE_KEY] = upNextSource.analyticsValue
-        properties.putAll(props)
-        analyticsTracker.track(event, properties)
-    }
-
-    companion object {
-        private const val SOURCE_KEY = "source"
-        private const val WILL_PLAY_KEY = "will_play"
     }
 }
 

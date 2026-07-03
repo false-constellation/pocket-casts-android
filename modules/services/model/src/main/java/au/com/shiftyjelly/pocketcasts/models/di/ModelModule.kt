@@ -3,11 +3,15 @@ package au.com.shiftyjelly.pocketcasts.models.di
 import android.app.Application
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import au.com.shiftyjelly.pocketcasts.models.converter.AlternateEnclosureSourcesConverter
 import au.com.shiftyjelly.pocketcasts.models.db.AppDatabase
+import au.com.shiftyjelly.pocketcasts.models.db.dao.AlternateEnclosureDao
 import au.com.shiftyjelly.pocketcasts.models.db.dao.ChapterDao
 import au.com.shiftyjelly.pocketcasts.models.db.dao.EndOfYearDao
+import au.com.shiftyjelly.pocketcasts.models.db.dao.EpisodeChatDao
 import au.com.shiftyjelly.pocketcasts.models.db.dao.EpisodeDao
 import au.com.shiftyjelly.pocketcasts.models.db.dao.ExternalDataDao
+import au.com.shiftyjelly.pocketcasts.models.db.dao.PlaybackStatsDao
 import au.com.shiftyjelly.pocketcasts.models.db.dao.PlaylistDao
 import au.com.shiftyjelly.pocketcasts.models.db.dao.PodcastDao
 import au.com.shiftyjelly.pocketcasts.models.db.dao.TranscriptDao
@@ -32,6 +36,7 @@ object ModelModule {
     fun provideRoomConverters(moshi: Moshi): List<Any> {
         return listOf(
             AnonymousBumpStat.CustomEventPropsTypeConverter(moshi),
+            AlternateEnclosureSourcesConverter(moshi),
         )
     }
 
@@ -79,6 +84,15 @@ object ModelModule {
 
     @Provides
     fun userCategoryVisits(database: AppDatabase): UserCategoryVisitsDao = database.userCategoryVisitsDao()
+
+    @Provides
+    fun playbackStatsDao(database: AppDatabase): PlaybackStatsDao = database.playbackStatsDao()
+
+    @Provides
+    fun provideEpisodeChatDao(database: AppDatabase): EpisodeChatDao = database.episodeChatDao()
+
+    @Provides
+    fun provideAlternateEnclosureDao(database: AppDatabase): AlternateEnclosureDao = database.alternateEnclosureDao()
 }
 
 @Qualifier

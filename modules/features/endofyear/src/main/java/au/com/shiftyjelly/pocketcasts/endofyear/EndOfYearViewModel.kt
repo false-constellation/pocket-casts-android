@@ -4,8 +4,6 @@ import android.app.Activity
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.coroutines.CachedAction
 import au.com.shiftyjelly.pocketcasts.endofyear.StoriesActivity.StoriesSource
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
@@ -20,6 +18,19 @@ import au.com.shiftyjelly.pocketcasts.servers.list.ListServiceManager
 import au.com.shiftyjelly.pocketcasts.sharing.SharingRequest
 import au.com.shiftyjelly.pocketcasts.utils.accessibility.AccessibilityManager
 import au.com.shiftyjelly.pocketcasts.utils.extensions.padEnd
+import com.automattic.eventhorizon.EndOfYearLearnRatingsShownEvent
+import com.automattic.eventhorizon.EndOfYearPlusContinuedEvent
+import com.automattic.eventhorizon.EndOfYearShareSourceType
+import com.automattic.eventhorizon.EndOfYearStoriesDismissedEvent
+import com.automattic.eventhorizon.EndOfYearStoriesFailedToLoadEvent
+import com.automattic.eventhorizon.EndOfYearStoriesShownEvent
+import com.automattic.eventhorizon.EndOfYearStoryCloseSourceType
+import com.automattic.eventhorizon.EndOfYearStoryReplayButtonTappedEvent
+import com.automattic.eventhorizon.EndOfYearStorySharedEvent
+import com.automattic.eventhorizon.EndOfYearStoryShownEvent
+import com.automattic.eventhorizon.EndOfYearUpsellShownEvent
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.Trackable
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -52,7 +63,7 @@ class EndOfYearViewModel @AssistedInject constructor(
     settings: Settings,
     private val listServiceManager: ListServiceManager,
     private val sharingClient: StorySharingClient,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
     private val accessibilityManager: AccessibilityManager,
 ) : ViewModel() {
     private val syncState = MutableStateFlow<SyncState>(SyncState.Syncing)
@@ -297,17 +308,23 @@ class EndOfYearViewModel @AssistedInject constructor(
     }
 
     internal fun trackFailedToLoad() {
-        trackEvent(AnalyticsEvent.END_OF_YEAR_STORIES_FAILED_TO_LOAD)
+        trackEvent { year ->
+            EndOfYearStoriesFailedToLoadEvent(
+                currentYear = year,
+            )
+        }
     }
 
     internal fun trackStoriesShown() {
-        trackEvent(
-            AnalyticsEvent.END_OF_YEAR_STORIES_SHOWN,
-            mapOf("source" to source.value),
-        )
+        trackEvent { year ->
+            EndOfYearStoriesShownEvent(
+                currentYear = year,
+                source = source.analyticsValue,
+            )
+        }
     }
 
-    internal fun trackStoriesClosed(source: String, story: Story?) {
+    internal fun trackStoriesClosed(source: EndOfYearStoryCloseSourceType, story: Story?) {
         trackStoriesDismissed(
             story = story,
             source = source,
@@ -315,56 +332,68 @@ class EndOfYearViewModel @AssistedInject constructor(
     }
 
     internal fun trackPlusContinued() {
-        trackEvent(AnalyticsEvent.END_OF_YEAR_PLUS_CONTINUED)
+        trackEvent { year ->
+            EndOfYearPlusContinuedEvent(
+                currentYear = year,
+            )
+        }
     }
 
     internal fun trackStoriesAutoFinished(story: Story) {
         trackStoriesDismissed(
             story = story,
-            source = "auto_progress",
+            source = EndOfYearStoryCloseSourceType.AutoProgress,
         )
     }
 
-    private fun trackStoriesDismissed(source: String, story: Story?) {
-        trackEvent(
-            event = AnalyticsEvent.END_OF_YEAR_STORIES_DISMISSED,
-            properties = mapOf(
-                "source" to source,
-                "story" to story?.analyticsValue.orEmpty(),
-            ),
-        )
+    private fun trackStoriesDismissed(source: EndOfYearStoryCloseSourceType, story: Story?) {
+        trackEvent { year ->
+            EndOfYearStoriesDismissedEvent(
+                source = source,
+                story = story?.analyticsValue,
+                currentYear = year,
+            )
+        }
     }
 
     internal fun trackStoryShown(story: Story) {
-        trackEvent(
-            AnalyticsEvent.END_OF_YEAR_STORY_SHOWN,
-            mapOf("story" to story.analyticsValue),
-        )
+        trackEvent { year ->
+            EndOfYearStoryShownEvent(
+                story = story.analyticsValue,
+                currentYear = year,
+            )
+        }
     }
 
     internal fun trackReplayStoriesTapped() {
-        trackEvent(AnalyticsEvent.END_OF_YEAR_STORY_REPLAY_BUTTON_TAPPED)
+        trackEvent { year ->
+            EndOfYearStoryReplayButtonTappedEvent(
+                currentYear = year,
+            )
+        }
     }
 
     internal fun trackUpsellShown() {
-        trackEvent(AnalyticsEvent.END_OF_YEAR_UPSELL_SHOWN)
+        trackEvent { year ->
+            EndOfYearUpsellShownEvent(
+                currentYear = year,
+            )
+        }
     }
 
     internal fun trackLearnRatingsShown() {
-        trackEvent(AnalyticsEvent.END_OF_YEAR_LEARN_RATINGS_SHOWN)
+        trackEvent { year ->
+            EndOfYearLearnRatingsShownEvent(
+                currentYear = year,
+            )
+        }
     }
 
     private fun trackEvent(
-        event: AnalyticsEvent,
-        properties: Map<String, Any> = emptyMap(),
+        event: (year: Long) -> Trackable,
     ) {
-        analyticsTracker.track(
-            event,
-            buildMap {
-                putAll(properties)
-                put("current_year", year.value)
-            },
-        )
+        val event = event(year.value.toLong())
+        eventHorizon.track(event)
     }
 
     private fun getRandomShowIds(stats: EndOfYearStats): RandomShowIds? {
@@ -384,13 +413,12 @@ class EndOfYearViewModel @AssistedInject constructor(
     }
 
     fun screenshotDetected(story: Story, activity: Activity) {
-        analyticsTracker.track(
-            event = AnalyticsEvent.END_OF_YEAR_STORY_SHARED,
-            properties = mapOf(
-                "activity" to activity.javaClass.name,
-                "from" to "screenshot",
-                "story" to story.analyticsValue,
-                "current_year" to year.value,
+        eventHorizon.track(
+            EndOfYearStorySharedEvent(
+                from = EndOfYearShareSourceType.Screenshot,
+                story = story.analyticsValue,
+                currentYear = year.value.toLong(),
+                activity = activity.javaClass.name,
             ),
         )
     }

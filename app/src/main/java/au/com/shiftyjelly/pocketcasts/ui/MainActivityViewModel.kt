@@ -4,8 +4,6 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.toLiveData
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.PodcastColors
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
@@ -17,21 +15,27 @@ import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackNoticeInfo
+import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackNoticeManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackState
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
 import au.com.shiftyjelly.pocketcasts.settings.whatsnew.WhatsNewFragment
-import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.views.multiselect.MultiSelectBookmarksHelper
+import com.automattic.eventhorizon.BookmarkDeletedEvent
+import com.automattic.eventhorizon.EventHorizon
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.reactivex.BackpressureStrategy
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactive.asFlow
@@ -44,14 +48,14 @@ class MainActivityViewModel
 @Inject constructor(
     private val episodeManager: EpisodeManager,
     private val playbackManager: PlaybackManager,
+    playbackNoticeManager: PlaybackNoticeManager,
     userManager: UserManager,
     private val settings: Settings,
     private val endOfYearManager: EndOfYearManager,
     private val multiSelectBookmarksHelper: MultiSelectBookmarksHelper,
     private val podcastManager: PodcastManager,
     private val bookmarkManager: BookmarkManager,
-    private val theme: Theme,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
 ) : ViewModel() {
     private val _state = MutableStateFlow(State())
     val state = _state.asStateFlow()
@@ -65,8 +69,17 @@ class MainActivityViewModel
     private val _navigationState: MutableSharedFlow<NavigationState> = MutableSharedFlow()
     val navigationState = _navigationState.asSharedFlow()
 
-    var isPlayerOpen: Boolean = false
+    private val _isPlayerOpen = MutableStateFlow(false)
+    val isPlayerOpenFlow: StateFlow<Boolean> = _isPlayerOpen.asStateFlow()
+    var isPlayerOpen: Boolean
+        get() = _isPlayerOpen.value
+        set(value) {
+            _isPlayerOpen.value = value
+        }
     var lastPlaybackState: PlaybackState? = null
+
+    val playbackNoticeFlow: StateFlow<PlaybackNoticeInfo?> = playbackNoticeManager.playbackNotice
+        .stateIn(viewModelScope, started = SharingStarted.WhileSubscribed(5_000), initialValue = null)
     val shouldShowStoriesModal = MutableStateFlow(false)
     var waitingForSignInToShowStories = false
 
@@ -193,9 +206,10 @@ class MainActivityViewModel
             } else {
                 _snackbarMessage.emit(LR.string.bookmarks_deleted_singular)
                 bookmarkManager.deleteToSync(bookmarkUuid)
-                analyticsTracker.track(
-                    AnalyticsEvent.BOOKMARK_DELETED,
-                    mapOf("source" to SourceView.NOTIFICATION_BOOKMARK.analyticsValue),
+                eventHorizon.track(
+                    BookmarkDeletedEvent(
+                        source = SourceView.NOTIFICATION_BOOKMARK.analyticsValue,
+                    ),
                 )
             }
         }

@@ -22,6 +22,7 @@ import androidx.media3.ui.WearUnsuitableOutputPlaybackSuppressionResolverListene
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.to.PlaybackEffects
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
+import au.com.shiftyjelly.pocketcasts.repositories.stats.PlaybackStatsCollector
 import au.com.shiftyjelly.pocketcasts.repositories.user.StatsManager
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
@@ -31,9 +32,10 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 class SimplePlayer(
-    val settings: Settings,
-    val statsManager: StatsManager,
-    val context: Context,
+    private val settings: Settings,
+    private val statsManager: StatsManager,
+    private val playbackStatsCollector: PlaybackStatsCollector,
+    private val context: Context,
     private val dataSourceFactory: ExoPlayerDataSourceFactory,
     override val onPlayerEvent: (au.com.shiftyjelly.pocketcasts.repositories.playback.Player, PlayerEvent) -> Unit,
 ) : LocalPlayer(onPlayerEvent) {
@@ -210,6 +212,7 @@ class SimplePlayer(
             .setSeekBackIncrementMs(settings.skipBackInSecs.value * 1000L)
             .build()
         player.addListener(WearUnsuitableOutputPlaybackSuppressionResolverListener(context))
+        player.addListener(PlayPauseListener(playbackStatsCollector))
         player.addAnalyticsListener(renderer)
 
         handleStop()
@@ -222,6 +225,7 @@ class SimplePlayer(
                 val episodeMetadata = EpisodeFileMetadata(filenamePrefix = episodeUuid)
                 episodeMetadata.read(tracks, settings.artworkConfiguration.value.useEpisodeArtwork, context)
                 onMetadataAvailable(episodeMetadata)
+                clearVideoIfAudioOnly()
             }
 
             override fun onIsLoadingChanged(isLoading: Boolean) {
@@ -233,6 +237,7 @@ class SimplePlayer(
                     Player.STATE_READY -> {
                         onBufferingStateChanged()
                         onDurationAvailable()
+                        clearVideoIfAudioOnly()
                     }
 
                     Player.STATE_BUFFERING -> onBufferingStateChanged()
@@ -283,11 +288,23 @@ class SimplePlayer(
         prepared = true
     }
 
+    private fun clearVideoIfAudioOnly() {
+        val player = player ?: return
+        if (player.playbackState == Player.STATE_READY && !player.currentTracks.containsType(C.TRACK_TYPE_VIDEO)) {
+            onVideoTrackChanged(false)
+        }
+    }
+
     private fun addVideoListener(player: ExoPlayer) {
         player.addListener(object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 videoWidth = videoSize.width
                 videoHeight = videoSize.height
+
+                // Real video dimensions are definitive proof the stream carries video.
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    onVideoTrackChanged(true)
+                }
 
                 videoChangedListener?.let {
                     Handler(Looper.getMainLooper()).post { it.videoSizeChanged(videoSize.width, videoSize.height, videoSize.pixelWidthHeightRatio) }
@@ -340,5 +357,17 @@ class SimplePlayer(
             it.setBoostVolume(playbackEffects.isVolumeBoosted)
         }
         player.playbackParameters = PlaybackParameters(playbackEffects.playbackSpeed.toFloat(), 1f)
+    }
+}
+
+private class PlayPauseListener(
+    private val statsCollector: PlaybackStatsCollector,
+) : Player.Listener {
+    override fun onEvents(player: Player, events: Player.Events) {
+        if (player.isPlaying) {
+            statsCollector.onStart()
+        } else {
+            statsCollector.onStop()
+        }
     }
 }

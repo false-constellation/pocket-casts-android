@@ -64,6 +64,7 @@
     <string name="mark_as_unplayed">Mark as unplayed</string>
     <string name="mark_played">Mark played</string>
     <string name="mark_unplayed">Mark unplayed</string>
+    <string name="less">Less</string>
     <string name="more">More</string>
     <string name="more_options">More options</string>
     <string name="next_episode">Next episode</string>
@@ -97,6 +98,8 @@
     <string name="you_might_like">You might like</string>
     <string name="sort_newest_to_oldest">Newest to oldest</string>
     <string name="sort_oldest_to_newest">Oldest to newest</string>
+    <string name="sort_shortest_to_longest">Shortest to longest</string>
+    <string name="sort_longest_to_shortest">Longest to shortest</string>
     <string name="not_selected">Not selected</string>
     <string name="select_all">Select all</string>
     <string name="select_none">Select none</string>
@@ -123,6 +126,12 @@
     <string name="token_refresh_sign_in_error_title">Sign In Error</string>
     <string name="token_refresh_sign_in_error_description">There was a problem and you\'ve been signed out. Tap here to sign back in.</string>
     <string name="view_transcript">View transcript</string>
+    <string name="episode_chat">Chat with Episode</string>
+    <string name="episode_summary">Episode Summary</string>
+    <string name="summary_upsell_title">AI-Powered Summaries</string>
+    <string name="summary_upsell_description">Subscribe to Plus to get access to it and other Premium&#160;features like bookmarks and folders.</string>
+    <string name="description">Description</string>
+    <string name="summary">Summary</string>
     <string name="transcript">Transcript</string>
     <string name="episode_description">Episode Description</string>
     <string name="unstar">Unstar</string>
@@ -137,6 +146,7 @@
     <string name="get_pocket_casts_plus">Get Pocket Casts Plus</string>
     <string name="unplayed">Unplayed</string>
     <string name="unsubscribe">Unfollow</string>
+    <string name="home">Home</string>
     <string name="up_next">Up Next</string>
     <string name="learn_more">Learn more.</string>
     <string name="today">Today</string>
@@ -236,6 +246,13 @@
     <string name="ad_report_confirmation">You reported this ad.</string>
     <string name="add_episodes">Add episodes</string>
     <string name="your_podcasts">Your podcasts</string>
+    <string name="tv_tab_your_podcasts">Your Podcasts</string>
+    <string name="tv_row_featured">Made for TV</string>
+    <string name="tv_row_trending_videos">Trending Videos</string>
+    <string name="tv_row_recommendations">Recommendations</string>
+    <string name="tv_row_because_you_liked">Because you liked Podcast</string>
+    <string name="tv_sign_in_or_enter_code">or enter the following code</string>
+    <string name="tv_sign_in_go_to_url">going to %1$s</string>
     <string name="unavailable">Unavailable</string>
     <string name="browse_podcasts">Browse podcasts</string>
     <string name="pocket_casts_plus_badge">Pocket Casts Plus badge</string>
@@ -243,6 +260,7 @@
     <!-- "View" is used as a verb here. As in "view this object" -->
     <string name="view">View</string>
     <string name="no_episodes">No episodes</string>
+    <string name="explicit">Explicit</string>
 
     <string name="multiselect_actions_shown">Shortcut in toolbar</string>
     <string name="multiselect_actions_hidden">In overflow</string>
@@ -368,8 +386,10 @@
 
     <!-- Player -->
 
+    <string name="player_action_hide_video">Hide video</string>
     <string name="player_action_next_chapter">Next chapter</string>
     <string name="player_action_previous_chapter">Previous chapter</string>
+    <string name="player_action_show_video">Show video</string>
     <string name="player_actions">Episode actions</string>
     <string name="player_battery_warning_snackbar">Your battery restrictions may cause playback interruptions.</string>
     <string name="player_battery_warning_snackbar_action">update</string>
@@ -431,6 +451,7 @@
     <string name="player_tab_chapters" translatable="false">@string/chapters</string>
     <string name="player_tab_notes">Details</string>
     <string name="player_tab_playing">Playing</string>
+    <string name="player_tab_summary">Summary</string>
     <string name="player_tab_playing_wide">Now Playing</string>
     <string name="player_time_saved_detail">In total you have saved %s using this feature.</string>
     <string name="player_time_saved_no_hour">Congrats! You\'re saving time and getting through more podcasts.</string>
@@ -475,6 +496,8 @@
     <string name="player_time_remaining">Time remaining %s</string>
     <string name="drag_down_to_dismiss_content_description">Drag down to dismiss</string>
     <string name="player_up_next_sort">Sort Up Next</string>
+    <string name="up_next_sort_duration_tooltip_title">Sort by duration</string>
+    <string name="up_next_sort_duration_tooltip_body">Shortest to longest, or the reverse — fit the episode to the time you\'ve actually got.</string>
 
     <!-- Chapters -->
 
@@ -488,6 +511,7 @@
     <string name="number_of_chapters_summary_plural">%1$d chapters &#x2022; %2$d hidden</string>
     <string name="number_of_chapters_summary_singular">1 chapter &#x2022; %d hidden</string>
     <string name="skip_chapters_plus_prompt">Preselect chapters and more with Pocket Casts Plus</string>
+    <string name="chapters_generated_disclaimer">These chapters are automatically generated and may not be perfectly accurate.</string>
     <!-- %1$d is the current selected chapter. %2$d is the total number of chapters. -->
     <string name="chapter_count_summary">%1$d of %2$d</string>
     <plurals name="chapter">
@@ -1161,8 +1185,11 @@
     <string name="profile_get_plus">Get Pocket Casts Plus to unlock this feature, plus lots more!</string>
     <string name="profile_help_support">Help support Pocket Casts by upgrading your account</string>
     <string name="profile_joined">Joined:</string>
+    <string name="profile_just_now">Just now</string>
     <string name="profile_just_sign_out">Just sign out</string>
     <string name="profile_last_refresh">Last refresh: %s ago</string>
+    <!-- WearOS uses absolute time format (e.g., "3:45 PM") instead of relative time. Will be translated via GlotPress. -->
+    <string name="profile_last_refresh_at">Last refresh: %s</string>
     <string name="profile_license_agreement">Pocket Casts values your privacy. This Privacy Policy explains what information we collect about you and why, what we may do with that information and how we handle it. It applies to the iOS and Android Pocket Casts apps, and the Pocket Casts web service with associated macOS and Windows apps (jointly and severally, the Service). By using the Service, you agree to this Privacy Policy. If you turn on push notifications in the app, we store the push token Apple provides us in order to deliver those push notifications to your device. If you buy the web app we store a transaction id for your purchase. If you choose not to create an account, and don&#x2019;t use push notifications, no data is stored about you on our servers. Pocket Casts web service also uses cookies and like technologies to keep you logged in. Should you choose to generate a support request from within the Service, we may generate an attachment containing additional data to assist in addressing your support request which you&#x2019;re welcome to view prior to submission.</string>
     <string name="profile_monthly">Monthly</string>
     <string name="profile_navigation_downloads" translatable="false">@string/downloads</string>
@@ -1170,6 +1197,7 @@
     <string name="profile_navigation_listening_history">Listening History</string>
     <string name="profile_navigation_starred" translatable="false">@string/starred</string>
     <string name="profile_navigation_stats">Stats</string>
+    <string name="profile_navigation_blogs">Blogs</string>
     <string name="profile_new_email_address">New Email Address</string>
     <string name="profile_new_password">New Password</string>
     <string name="profile_newsletter_detail">Receive news, app updates, themed playlists, interviews, and more.</string>
@@ -1284,6 +1312,8 @@
     <string name="profile_stats_variable_speed">Variable Speed</string>
     <string name="profile_status_error_internet">🤔\n\nUnable to load stats,\ncheck your internet connection.</string>
     <string name="profile_start_free_trial">Start Free Trial</string>
+    <string name="profile_start_free_trial_specific_duration">Start your 30-day Free Trial</string>
+    <string name="profile_try_days_for_free">Try 30 days for free</string>
     <string name="profile_sub_android_goto">To cancel your subscription, you&#x2019;ll need to cancel via the Google Play Store.</string>
     <string name="profile_sub_cancel_hint0">Your current subscription will remain active until</string>
     <string name="profile_sub_cancel_hint1">Access to Pocket Casts Plus features will be locked</string>
@@ -1414,11 +1444,14 @@
     <string name="settings_auto_download_stop_all">Stop all downloads</string>
     <string name="settings_auto_download_stopping_all">Stopping all downloads</string>
     <string name="settings_auto_download_charging">Only when charging</string>
+    <string name="settings_auto_download_charging_summary">When disabled, downloads can occur without the device being connected to a charger.</string>
     <string name="settings_auto_download_clear_errors">Clear all download errors</string>
     <string name="settings_auto_download_clearing_errors">Clearing all download errors</string>
     <string name="settings_auto_download_playlists">Auto download playlists</string>
     <string name="settings_auto_download_new_episodes">New episodes</string>
     <string name="settings_auto_download_on_follow_podcast">On Follow</string>
+    <string name="settings_auto_download_storage">Only when enough storage</string>
+    <string name="settings_auto_download_storage_summary">When disabled, downloads can occur when the device is low on internal storage.</string>
 
     <plurals name="settings_auto_download_on_follow_podcast_description">
         <item quantity="one">Automatically download the latest episode from new shows you follow.</item>
@@ -1443,11 +1476,14 @@
     <string name="settings_auto_download_limit_all_latest_episodes">All Latest Episode</string>
     <string name="settings_auto_download_limit_auto_downloads">Limit auto downloads</string>
     <string name="settings_auto_download_unmetered">Only on unmetered WiFi</string>
-    <string name="settings_auto_download_unmetered_summary">Turning this off will allow downloads on cellular as well as other metered networks. Check your network settings for more info.</string>
+    <string name="settings_auto_download_unmetered_summary">When disabled, downloads can occur on cellular as well as other metered networks. Check your network settings for more info.</string>
     <string name="settings_auto_download_up_next">Episodes added to Up Next</string>
     <string name="settings_auto_play">Auto play</string>
     <string name="settings_auto_play_summary">When there\'s nothing left to play, automatically pick an episode for me</string>
     <string name="settings_beta_features">Beta features</string>
+    <string name="settings_beta_features_sort">Sort beta features</string>
+    <string name="settings_beta_features_sort_name">Name (A–Z)</string>
+    <string name="settings_beta_features_sort_release_date">Release date (newest first)</string>
     <string name="settings_battery">Battery</string>
     <string name="settings_battery_settings">Battery settings</string>
     <string name="settings_battery_learn_more">Learn more</string>
@@ -1687,7 +1723,7 @@
     <string name="settings_auto_up_next_to_bottom">To bottom</string>
     <string name="settings_auto_up_next_limit_reached">If limit reached</string>
     <string name="settings_auto_up_next_limit_reached_top">Only add to top</string>
-    <string name="settings_auto_up_next_limit_reached_top_summary">When Up Next reaches %d, new episodes auto-added to the top will remove the last episode in the queue. No new episodes will be added to the bottom.</string>
+    <string name="settings_auto_up_next_limit_reached_top_summary">When Up Next reaches %d, new episodes auto‑added to the top will remove the last episode in the queue. Episodes set to auto‑add to the bottom won’t be added until Up Next is below the limit.</string>
     <string name="settings_auto_up_next_limit_reached_stop">Stop adding</string>
     <string name="settings_auto_up_next_limit_reached_stop_summary">New episodes will stop being added when Up Next reaches %d.</string>
     <string name="settings_stats_funny_empty">You really don\'t listen much, do you?</string>
@@ -1812,6 +1848,8 @@
     <string name="settings_privacy_analytics">Analytics</string>
     <string name="settings_privacy_analytics_first_party">First-party analytics</string>
     <string name="settings_privacy_analytics_summary">Allow us to collect analytics.</string>
+    <string name="settings_privacy_listening_stats">Listening statistics</string>
+    <string name="settings_privacy_listening_stats_summary">Allow us to collect listening statistics to display them in your Stats page.</string>
     <string name="settings_privacy_analytics_third_party">Third-party analytics</string>
     <string name="settings_privacy_analytics_third_party_summary">Allow us to use trusted third-party services to collect anonymous data.</string>
     <string name="settings_privacy_crash">Crash reports</string>
@@ -1841,7 +1879,14 @@
     <string name="error_chartable">The producer is using Chartable analytics which is being blocked, if you run any filtering app such as AdGuard you will need to whitelist chtbl.com to play the episode.</string>
     <string name="error_chartable_streaming">Streaming failed. The producer is using Chartable analytics which is being blocked, if you run any filtering app such as AdGuard you will need to whitelist chtbl.com to play the episode.</string>
     <string name="error_streaming_internet">Streaming failed check your internet connection.</string>
-    <string name="error_streaming_try_downloading">Streaming failed try downloading the podcast.</string>
+    <string name="error_streaming_try_downloading">Streaming failed. Try downloading the episode.</string>
+    <string name="error_streaming_access_denied">This episode can\'t be played.</string>
+    <string name="error_streaming_not_found">This episode could not be found on the server. It may have been removed by the publisher.</string>
+    <string name="error_streaming_no_longer_available">This episode is no longer available from the publisher.</string>
+    <string name="error_streaming_server_error">The podcast server is experiencing issues. Please try again later.</string>
+    <string name="error_decoder_initialization">Unable to play this audio format on your device.</string>
+    <string name="error_audio_output">Could not play audio. Please check your audio output device and try again.</string>
+    <string name="error_cast_connection_failed">Could not connect to the Chromecast device. Please check the device and try again.</string>
     <string name="error_unable_to_cast_local">Unable to cast local file</string>
     <string name="error_unable_to_cast">Unable to cast this episode. It may not be available from the podcast author.</string>
     <string name="error_unable_to_play">Unable to play file</string>
@@ -1859,12 +1904,16 @@
     <string name="error_login_failed">Unable to login to your sync account, sorry. Please try again later.</string>
     <string name="error_search_failed">Search Failed</string>
     <string name="error_check_your_internet_connection">Check your internet connection.</string>
+    <string name="error_playback_offline">You\'re offline</string>
+    <string name="error_playback_connected">You\'re connected</string>
+    <string name="error_playback_failed_try_again">Playback failed, please try again.</string>
+    <string name="error_episode_not_available">Episode not available</string>
     <string name="error_download_missing_episode">Unable to find the episode data on this device. Please contact support.</string>
     <string name="error_download_no_episode_file">Unable to create a download file for the episode. Please check that you have enough storage space on your device.</string>
     <string name="error_download_invalid_url">The episode URL is invalid. Please contact the podcast author.</string>
     <string name="error_download_http_failure">Failed to download the episode. Received HTTP status code %1$s. Please contact the podcast author.</string>
     <string name="error_download_invalid_content_type">Failed to download the episode. Received content type %1$s. Please contact the podcast author.</string>
-    <string name="error_download_suspicious_content_size">Failed to download the episode. The downloaded file is too small. Please contact the podcast author.</string>
+    <string name="error_download_suspicious_content_size">Failed to download the episode. The downloaded file is too small. Please try again.</string>
     <string name="error_download_no_storage">Failed to download the episode. Please check that you have enough storage space on your device.</string>
     <string name="error_download_chartable" translatable="false">@string/error_chartable</string>
     <string name="error_download_unknown_host">Unable to reach the podcast author’s server. Please check your internet connection.</string>
@@ -2166,16 +2215,12 @@
     <string name="watch_sync_success">Logged in from phone!</string>
 
     <!-- Watch sync errors -->
-    <string name="watch_sync_error_timeout">Couldn\'t connect to phone</string>
     <string name="watch_sync_error_no_connection">Phone not connected</string>
     <string name="watch_sync_error_login_failed">Login failed</string>
-    <string name="watch_sync_error_unknown">Something went wrong</string>
 
     <!-- Watch sync error help text -->
-    <string name="watch_sync_error_timeout_help">Make sure your phone is nearby and connected via Bluetooth</string>
     <string name="watch_sync_error_no_connection_help">Check Bluetooth connection to your phone</string>
     <string name="watch_sync_error_login_failed_help">Try logging in manually</string>
-    <string name="watch_sync_error_unknown_help">Try again or log in manually</string>
 
     <!-- Watch sync actions -->
     <string name="watch_sync_retry">Try Again</string>
@@ -2296,6 +2341,7 @@
     <!-- Bookmarks -->
 
     <string name="bookmark_play">Play at bookmark position %s</string>
+    <string name="bookmark_play_from">Play from %s</string>
     <string name="bookmarks_headphone_settings">Headphone settings</string>
     <string name="bookmarks_plural">%d bookmarks</string>
     <string name="bookmarks_singular">1 bookmark</string>
@@ -2338,9 +2384,28 @@
     <string name="transcript_generated_paywall_description">Subscribe to Plus to get access to it and other Premium&#160;features like bookmarks and folders.</string>
     <string name="transcript_generated_header">This transcript is automatically generated and available to Plus&#160;subscribers only.</string>
     <string name="transcript_share">Share transcript</string>
+    <string name="transcript_tap_to_seek_streaming_unavailable">Download the episode to tap to seek</string>
+
+    <!-- Chat -->
+    <string name="chat_paywall_title">Chat with this episode</string>
+    <string name="chat_context_label">Chatting with this episode</string>
+    <string name="chat_context_label_with_duration">Chatting with this episode · %1$s</string>
+    <string name="chat_episode_assistant">EPISODE ASSISTANT</string>
+    <string name="chat_thinking">THINKING</string>
+    <string name="chat_preview_ai_1">Hi! I\'m here to help you explore this episode. Ask me anything about the topics discussed, key takeaways, or specific moments.</string>
+    <string name="chat_preview_user_1">What was the main topic of this episode?</string>
+    <string name="chat_preview_ai_2">This episode dives into the science of habit formation, exploring how small daily routines can lead to big changes over time.</string>
+    <string name="chat_preview_user_2">Were there any practical tips mentioned?</string>
+    <string name="chat_input_hint">Ask about this episode…</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_clear">Clear Chat</string>
+    <string name="chat_error_server">Something went wrong. Please try again.</string>
+    <string name="chat_error_network">Unable to reach the server. Check your connection.</string>
+    <string name="chat_tap_to_retry">Tap to retry</string>
+    <string name="chat_play_quote">Play quote</string>
+    <string name="chat_stop_quote">Stop quote</string>
 
     <!--    Tasker Plugin-->
-
     <string name="must_provide_filter_name">Must provide playlist name</string>
     <string name="filter_x_not_found">Playlist %1$s not found</string>
     <string name="no_episodes_in_filter_x">No episodes in playlist %1$s</string>
@@ -2417,9 +2482,6 @@
 
     <string name="wear_hide_password">Hide password</string>
     <string name="wear_show_password">Show password</string>
-    <string name="wear_connectivity_lost">Connection lost</string>
-    <string name="wear_connectivity_restored">Connected</string>
-    <string name="wear_connectivity_streaming_warning">Streaming may be affected</string>
 
     <!-- Nova Launcher -->
     <string name="nova_launcher_subscribed_podcasts">Subscribed Podcasts</string>
@@ -2478,8 +2540,9 @@
     <string name="share_end_minutes">Clip end minutes</string>
     <!-- Content description of a text field that allows to control clip's end seconds position in hh:mm:ss format -->
     <string name="share_end_seconds">Clip end seconds</string>
-    <string name="shuffle_whats_new_title">Introducing Shuffle</string>
-    <string name="shuffle_whats_new_message">Easily play a random episode without changing the order of your queue.</string>
+    <string name="synced_transcripts_whats_new_title">Read along. Even at&#160;2x.</string>
+    <string name="synced_transcripts_whats_new_message">Read fast, miss nothing. The name you blew past, the book they recommended, the stat you wanted — tap the word, jump&#160;back.</string>
+    <string name="synced_transcripts_whats_new_button_note">Synced transcripts available for recent episodes only.</string>
 
     <!-- Pocket Casts Champion -->
     <string name="pocket_casts_champion_dialog_title">You’re a true champion of Pocket Casts!</string>
@@ -2699,6 +2762,9 @@
     <string name="onboarding_shuffle_item_duration_hours">%1$dh %2$dm</string>
     <string name="onboarding_preselect_chapters_title">Preselect Chapters: cut to the good stuff</string>
     <string name="onboarding_preselect_chapters_chapter_title">Chapter %1$d</string>
+    <string name="onboarding_blogs_title">Blogs: listen to\nwhat you read.</string>
+    <string name="onboarding_blogs_upsell_sample_title">Why we redesigned the player</string>
+    <string name="onboarding_blogs_upsell_sample_label">Blog · Apr 24</string>
     <string name="onboarding_upgrade_tnc">Terms\u00A0and\u00A0Conditions</string>
     <string name="onboarding_upgrade_pp">Privacy\u00A0Policy</string>
     <string name="onboarding_notification_popup_newsletter">Subscribe to our Newsletter</string>
@@ -2738,4 +2804,43 @@
     <string name="app_rating_no_label">Not really</string>
     <!-- A label under the happy face emoji. A user will be redirected to leave a review after tapping it. -->
     <string name="app_rating_yes_label">Yes!</string>
+    <string name="offline_icon_content_description">Offline icon</string>
+
+    <string name="blogs_empty_title">Turn any blog into a podcast</string>
+    <string name="blogs_empty_description">Paste a blog or RSS URL. We\'ll narrate every post and add new episodes automatically as the site publishes.</string>
+    <string name="blogs_add_button">Add a blog</string>
+    <string name="blogs_experiment_banner_lead">This is an experiment.</string>
+    <string name="blogs_experiment_banner_body">Blogs is something we\'re trying out. It might stick around, get reworked, or quietly go away.</string>
+    <string name="blogs_empty_url_label">Blog or RSS URL</string>
+    <string name="blogs_empty_url_placeholder" translatable="false">https://</string>
+    <string name="blogs_add_url_hint">Paste a blog or RSS URL and we\'ll find the feed for you.</string>
+    <string name="blogs_pick_a_feed">PICK A FEED TO FOLLOW</string>
+    <string name="blogs_found_on_this_site">Found %d feeds on this site</string>
+    <string name="blogs_looking_up_feed">Looking up feed...</string>
+    <string name="blogs_error_no_internet">Check your internet connection and try again.</string>
+    <string name="blogs_error_no_feeds_found">We couldn\'t find any feeds at that URL. Please check the URL and try again.</string>
+    <string name="blogs_error_generic">Something went wrong. Please try again.</string>
+    <string name="blogs_found_feed_detected">Feed found</string>
+    <string name="blogs_found_followed_badge">PODCAST FOLLOWED</string>
+    <string name="blogs_found_headline">Reading your blog out loud</string>
+    <string name="blogs_found_description">We\'re turning the latest posts into podcast episodes. We\'ll take you to the podcast page as soon as the first episode is ready, or come back to the podcast page anytime and pull down to refresh.</string>
+    <string name="blogs_found_go_to_podcast">Go to podcast</string>
+    <string name="sponsored">Sponsored</string>
+    <string name="play_latest_episode">Play latest episode</string>
+    <string name="play_this_episode">Play this episode</string>
+
+    <!-- TV Onboarding -->
+    <string name="tv_onboarding_welcome">Welcome to Pocket Casts</string>
+    <string name="tv_onboarding_welcome_tv">Welcome to Pocket Casts TV</string>
+    <string name="tv_onboarding_subtitle">Your podcasts, on the big screen</string>
+    <string name="tv_onboarding_create_free_account">Create free account</string>
+    <string name="tv_onboarding_browse_without_account">Browse without an account</string>
+    <string name="tv_onboarding_sign_in_title">Sign in with your phone</string>
+    <string name="tv_onboarding_sign_in_instructions">Open the camera and point to this QR code</string>
+    <string name="tv_onboarding_syncing">Syncing your podcasts\u2026</string>
+    <string name="tv_onboarding_welcome_back">Welcome back!</string>
+    <string name="tv_onboarding_syncing_subtitle">Your podcasts are syncing, we\'ll sign you in soon!</string>
+    <string name="tv_create_account_title">Create your free account</string>
+    <string name="tv_create_account_subtitle">Scan this code to get started on your phone, it only takes a minute.</string>
+    <string name="tv_create_account_come_back">Once you\'ve created your account, come back and sign in</string>
 </resources>

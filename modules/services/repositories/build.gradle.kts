@@ -15,6 +15,7 @@ android {
 dependencies {
     ksp(libs.dagger.hilt.compiler)
     ksp(libs.hilt.compiler)
+    ksp(libs.moshi.kotlin.codegen)
 
     api(libs.billing.ktx)
     api(libs.dagger.hilt.android)
@@ -33,6 +34,7 @@ dependencies {
     api(projects.modules.services.analytics)
     api(projects.modules.services.coroutines)
     api(projects.modules.services.crashlogging)
+    api(projects.modules.services.fingerprint)
     api(projects.modules.services.localization)
     api(projects.modules.services.model)
     api(projects.modules.services.payment)
@@ -59,6 +61,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.media3.datasource.okhttp)
     implementation(libs.media3.exoplayer.hls)
+    api(libs.media3.session)
     implementation(libs.media3.ui)
     implementation(libs.play.auth)
     implementation(libs.play.cast)
@@ -81,4 +84,5 @@ dependencies {
     testImplementation(libs.turbine)
 
     testImplementation(projects.modules.services.sharedtest)
+    testImplementation(projects.modules.services.analytics.testing)
 }

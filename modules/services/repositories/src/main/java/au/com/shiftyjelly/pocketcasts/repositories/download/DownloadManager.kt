@@ -12,8 +12,6 @@ import androidx.work.WorkManager
 import androidx.work.impl.WorkManagerImpl
 import androidx.work.impl.constraints.ConstraintListener
 import androidx.work.impl.constraints.trackers.ConstraintTracker
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.EpisodeDownloadError
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.coroutines.di.ApplicationScope
@@ -26,11 +24,22 @@ import au.com.shiftyjelly.pocketcasts.models.type.DownloadStatusUpdate
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeDownloadStatus
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.download.task.UpdateShowNotesTask
+import au.com.shiftyjelly.pocketcasts.repositories.fingerprint.FingerprintMappingCache
+import au.com.shiftyjelly.pocketcasts.repositories.fingerprint.FingerprintReferenceRetriever
 import au.com.shiftyjelly.pocketcasts.utils.FileUtil
 import au.com.shiftyjelly.pocketcasts.utils.Network
 import au.com.shiftyjelly.pocketcasts.utils.Power
 import au.com.shiftyjelly.pocketcasts.utils.extensions.toUuidOrNull
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
+import com.automattic.eventhorizon.EpisodeBulkDownloadCancelledEvent
+import com.automattic.eventhorizon.EpisodeBulkDownloadDeletedEvent
+import com.automattic.eventhorizon.EpisodeBulkDownloadQueuedEvent
+import com.automattic.eventhorizon.EpisodeDownloadCancelledEvent
+import com.automattic.eventhorizon.EpisodeDownloadDeletedEvent
+import com.automattic.eventhorizon.EpisodeDownloadFailedEvent
+import com.automattic.eventhorizon.EpisodeDownloadFinishedEvent
+import com.automattic.eventhorizon.EpisodeDownloadQueuedEvent
+import com.automattic.eventhorizon.EventHorizon
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.time.Clock
@@ -55,6 +64,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 @Singleton
@@ -63,7 +73,7 @@ class DownloadManager @Inject constructor(
     settings: Settings,
     clock: Clock,
     progressCache: DownloadProgressCache,
-    tracker: AnalyticsTracker,
+    eventHorizon: EventHorizon,
     @ApplicationContext private val context: Context,
     @ApplicationScope private val scope: CoroutineScope,
 ) : DownloadQueue,
@@ -72,7 +82,7 @@ class DownloadManager @Inject constructor(
 
     private val downloadDao = EpisodeDownloadDao(appDatabase, clock)
 
-    private val analytics = DownloadAnalytics(tracker)
+    private val analytics = DownloadAnalytics(eventHorizon)
 
     private val prerequisitesProvider = DownloadPrerequisitesProvider(context)
 
@@ -251,7 +261,14 @@ private class DownloadQueueController(
             transcriptDao.deleteForEpisodes(episodes.keys)
             val deletedEpisodes = episodes.mapNotNull { (_, episode) ->
                 val deletedEpisode = runCatching {
-                    val isFileDeleted = episode.downloadedFilePath?.let(::File)?.delete() == true
+                    val isFileDeleted = episode.downloadedFilePath?.let { filePath ->
+                        val deleted = File(filePath).delete()
+                        if (deleted) {
+                            File(FingerprintMappingCache.mappingPath(filePath)).delete()
+                            File(FingerprintReferenceRetriever.referencePath(filePath)).delete()
+                        }
+                        deleted
+                    } == true
                     if (isFileDeleted) episode else null
                 }
                 if (episode is UserEpisode) {
@@ -313,7 +330,8 @@ private class DownloadQueueController(
             is DownloadType.UserTriggered -> true
             is DownloadType.Automatic -> !episode.isDownloadFailure && (downloadType.bypassAutoDownloadStatus || !episode.isAutoDownloadDisabled)
         }
-        return !episode.isDownloaded && isFileAvailable && isDownloadTypeAllowed
+        // HLS-only episodes have no progressive file to download, only a manifest.
+        return !episode.isDownloaded && isFileAvailable && isDownloadTypeAllowed && !episode.isHlsOnly
     }
 
     private fun BaseEpisode.toDownloadCommand(
@@ -328,6 +346,7 @@ private class DownloadQueueController(
             pendingWork == null -> ExistingWorkPolicy.KEEP
             !args.waitForWifi && pendingWork.isWifiRequired -> ExistingWorkPolicy.REPLACE
             !args.waitForPower && pendingWork.isPowerRequired -> ExistingWorkPolicy.REPLACE
+            !args.waitForStorage && pendingWork.isStorageRequired -> ExistingWorkPolicy.REPLACE
             else -> ExistingWorkPolicy.KEEP
         }
 
@@ -342,32 +361,32 @@ private class DownloadQueueController(
     private fun BaseEpisode.toDownloadArgs(
         downloadType: DownloadType,
         sourceView: SourceView,
-    ) = when (this) {
-        is PodcastEpisode -> DownloadEpisodeWorker.Args(
-            episodeUuid = uuid,
-            podcastUuid = podcastUuid,
-            waitForWifi = when (downloadType) {
-                is DownloadType.UserTriggered -> downloadType.waitForWifi
-                is DownloadType.Automatic -> settings.autoDownloadUnmeteredOnly.value
-            },
-            waitForPower = when (downloadType) {
-                is DownloadType.UserTriggered -> false
-                is DownloadType.Automatic -> settings.autoDownloadOnlyWhenCharging.value
-            },
-            sourceView = sourceView,
-        )
+    ) = DownloadEpisodeWorker.Args(
+        episodeUuid = uuid,
+        podcastUuid = podcastOrSubstituteUuid,
+        waitForWifi = when (downloadType) {
+            is DownloadType.UserTriggered -> downloadType.waitForWifi
 
-        is UserEpisode -> DownloadEpisodeWorker.Args(
-            episodeUuid = uuid,
-            podcastUuid = podcastOrSubstituteUuid,
-            waitForWifi = when (downloadType) {
-                is DownloadType.UserTriggered -> downloadType.waitForWifi
-                is DownloadType.Automatic -> settings.cloudDownloadOnlyOnWifi.value
-            },
-            waitForPower = false,
-            sourceView = sourceView,
-        )
-    }
+            is DownloadType.Automatic -> when (this) {
+                is PodcastEpisode -> settings.autoDownloadUnmeteredOnly.value
+                is UserEpisode -> settings.cloudDownloadOnlyOnWifi.value
+            }
+        },
+        waitForPower = when (downloadType) {
+            is DownloadType.UserTriggered -> false
+            is DownloadType.Automatic -> settings.autoDownloadOnlyWhenCharging.value
+        },
+        waitForStorage = when (downloadType) {
+            is DownloadType.UserTriggered -> false
+
+            is DownloadType.Automatic -> if (settings.usingCustomFolderStorage()) {
+                false
+            } else {
+                settings.autoDownloadOnlyWhenEnoughStorage.value
+            }
+        },
+        sourceView = sourceView,
+    )
 
     private fun enqueueShowNotesUpdate(episode: BaseEpisode, constraints: Constraints) {
         when (episode) {
@@ -620,7 +639,7 @@ private class EpisodeDownloadDao(
 }
 
 private class DownloadAnalytics(
-    private val tracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
 ) {
     fun trackDownloadQueued(episodes: Collection<BaseEpisode>, downloadType: DownloadType, sourceView: SourceView) {
         for (episode in episodes) {
@@ -630,21 +649,19 @@ private class DownloadAnalytics(
             0 -> Unit
 
             1 -> {
-                tracker.track(
-                    AnalyticsEvent.EPISODE_DOWNLOAD_QUEUED,
-                    mapOf(
-                        "episode_uuid" to episodes.first().uuid,
-                        "source" to sourceView.analyticsValue,
+                eventHorizon.track(
+                    EpisodeDownloadQueuedEvent(
+                        episodeUuid = episodes.first().uuid,
+                        source = sourceView.analyticsValue,
                     ),
                 )
             }
 
             else -> {
-                tracker.track(
-                    AnalyticsEvent.EPISODE_BULK_DOWNLOAD_QUEUED,
-                    mapOf(
-                        "count" to episodes.size,
-                        "source" to sourceView.analyticsValue,
+                eventHorizon.track(
+                    EpisodeBulkDownloadQueuedEvent(
+                        count = episodes.size.toLong(),
+                        source = sourceView.analyticsValue,
                     ),
                 )
             }
@@ -654,11 +671,10 @@ private class DownloadAnalytics(
     fun trackDownloadFinished(infos: Collection<DownloadWorkInfo.Success>) {
         for (info in infos) {
             LogBuffer.i(LogBuffer.TAG_DOWNLOAD, "Download finished. Episode: ${info.episodeUuid}, Source: ${info.sourceView}.")
-            tracker.track(
-                AnalyticsEvent.EPISODE_DOWNLOAD_FINISHED,
-                mapOf(
-                    "episode_uuid" to info.episodeUuid,
-                    "source" to info.sourceView.analyticsValue,
+            eventHorizon.track(
+                EpisodeDownloadFinishedEvent(
+                    episodeUuid = info.episodeUuid,
+                    source = info.sourceView.analyticsValue,
                 ),
             )
         }
@@ -666,11 +682,22 @@ private class DownloadAnalytics(
 
     fun trackDownloadFailed(infos: Collection<DownloadWorkInfo.Failure>) {
         for (info in infos) {
-            val errorProperties = info.error.toProperties()
-            LogBuffer.i(LogBuffer.TAG_DOWNLOAD, "Download failed. Episode: ${info.episodeUuid}, Error: $errorProperties, Source: ${info.sourceView}.")
-            tracker.track(
-                AnalyticsEvent.EPISODE_DOWNLOAD_FAILED,
-                errorProperties,
+            LogBuffer.i(LogBuffer.TAG_DOWNLOAD, "Download failed. Episode: ${info.episodeUuid}, Error: ${info.error.toProperties()}, Source: ${info.sourceView}.")
+            eventHorizon.track(
+                EpisodeDownloadFailedEvent(
+                    reason = info.error.reason.analyticsValue,
+                    episodeUuid = info.error.episodeUuid,
+                    podcastUuid = info.error.podcastUuid,
+                    duration = info.error.taskDuration,
+                    httpStatusCode = info.error.httpStatusCode?.toLong(),
+                    httpContentType = info.error.contentType,
+                    expectedContentLength = info.error.expectedContentLength,
+                    responseBodyBytesReceived = info.error.responseBodyBytesReceived,
+                    fileSize = info.error.fileSize,
+                    tlsCipherSuite = info.error.tlsCipherSuite,
+                    isCellular = info.error.isCellular,
+                    isProxy = info.error.isProxy,
+                ),
             )
         }
     }
@@ -683,21 +710,19 @@ private class DownloadAnalytics(
             0 -> Unit
 
             1 -> {
-                tracker.track(
-                    AnalyticsEvent.EPISODE_DOWNLOAD_CANCELLED,
-                    mapOf(
-                        "episode_uuid" to episodes.first().uuid,
-                        "source" to sourceView.analyticsValue,
+                eventHorizon.track(
+                    EpisodeDownloadCancelledEvent(
+                        episodeUuid = episodes.first().uuid,
+                        source = sourceView.analyticsValue,
                     ),
                 )
             }
 
             else -> {
-                tracker.track(
-                    AnalyticsEvent.EPISODE_BULK_DOWNLOAD_CANCELLED,
-                    mapOf(
-                        "count" to episodes.size,
-                        "source" to sourceView.analyticsValue,
+                eventHorizon.track(
+                    EpisodeBulkDownloadCancelledEvent(
+                        count = episodes.size.toLong(),
+                        source = sourceView.analyticsValue,
                     ),
                 )
             }
@@ -712,21 +737,19 @@ private class DownloadAnalytics(
             0 -> Unit
 
             1 -> {
-                tracker.track(
-                    AnalyticsEvent.EPISODE_DOWNLOAD_DELETED,
-                    mapOf(
-                        "episode_uuid" to episodes.first().uuid,
-                        "source" to sourceView.analyticsValue,
+                eventHorizon.track(
+                    EpisodeDownloadDeletedEvent(
+                        episodeUuid = episodes.first().uuid,
+                        source = sourceView.analyticsValue,
                     ),
                 )
             }
 
             else -> {
-                tracker.track(
-                    AnalyticsEvent.EPISODE_BULK_DOWNLOAD_DELETED,
-                    mapOf(
-                        "count" to episodes.size,
-                        "source" to sourceView.analyticsValue,
+                eventHorizon.track(
+                    EpisodeBulkDownloadDeletedEvent(
+                        count = episodes.size.toLong(),
+                        source = sourceView.analyticsValue,
                     ),
                 )
             }
@@ -778,7 +801,7 @@ private class DownloadPrerequisitesProvider(
 
         val trackers = workManager.trackers
         val powerFlow = trackers.batteryChargingTracker.asFlow()
-        val networkFlow = trackers.networkStateTracker.asFlow().map { it.isConnected to it.isMetered }
+        val networkFlow = trackers.networkStateTracker?.asFlow()?.map { it.isConnected to it.isMetered } ?: inAppNetworkFlow()
         val storageTracker = trackers.storageNotLowTracker.asFlow()
         return combine(powerFlow, networkFlow, storageTracker) { isCharging, (isConnected, isMetered), isStorageNotLow ->
             DownloadPrerequisites(
@@ -787,6 +810,15 @@ private class DownloadPrerequisitesProvider(
                 isUnmeteredAvailable = !isMetered,
                 isStorageAvailable = isStorageNotLow,
             )
+        }
+    }
+
+    private fun inAppNetworkFlow(): Flow<Pair<Boolean, Boolean>> {
+        return flow {
+            while (true) {
+                emit(Network.isConnected(context) to Network.isUnmeteredConnection(context))
+                delay(10.seconds)
+            }
         }
     }
 

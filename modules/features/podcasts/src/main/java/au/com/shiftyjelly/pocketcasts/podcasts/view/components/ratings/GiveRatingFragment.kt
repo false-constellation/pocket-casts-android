@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
 import au.com.shiftyjelly.pocketcasts.compose.layout.verticalNavigationBars
@@ -36,9 +34,9 @@ class GiveRatingFragment : BaseDialogFragment() {
 
     companion object {
         fun newInstance(podcastUuid: String) = GiveRatingFragment().apply {
-            arguments = bundleOf(
-                ARG_PODCAST_UUID to podcastUuid,
-            )
+            arguments = Bundle().apply {
+                putString(ARG_PODCAST_UUID, podcastUuid)
+            }
         }
     }
 
@@ -97,9 +95,9 @@ class GiveRatingFragment : BaseDialogFragment() {
         val state = viewModel.state.value
 
         if (state is GiveRatingViewModel.State.Loaded) {
-            viewModel.trackOnDismissed(AnalyticsEvent.RATING_SCREEN_DISMISSED)
+            viewModel.trackRatingDismissedEvent()
         } else if (state is GiveRatingViewModel.State.NotAllowedToRate) {
-            viewModel.trackOnDismissed(AnalyticsEvent.NOT_ALLOWED_TO_RATE_SCREEN_DISMISSED)
+            viewModel.trackNotAllowedDismissedEvent()
         }
     }
 

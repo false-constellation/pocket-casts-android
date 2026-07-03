@@ -2,8 +2,6 @@ package au.com.shiftyjelly.pocketcasts.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.to.EpisodeItem
@@ -13,9 +11,22 @@ import au.com.shiftyjelly.pocketcasts.models.to.SearchAutoCompleteItem
 import au.com.shiftyjelly.pocketcasts.models.to.SearchHistoryEntry
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.searchhistory.SearchHistoryManager
-import au.com.shiftyjelly.pocketcasts.search.SearchResultsFragment.Companion.ResultsType
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
 import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.PodcastSubscribedEvent
+import com.automattic.eventhorizon.SearchDismissedEvent
+import com.automattic.eventhorizon.SearchEmptyResultsEvent
+import com.automattic.eventhorizon.SearchFailedEvent
+import com.automattic.eventhorizon.SearchFilterTappedEvent
+import com.automattic.eventhorizon.SearchListShownEvent
+import com.automattic.eventhorizon.SearchPredictiveFailedEvent
+import com.automattic.eventhorizon.SearchPredictiveShownEvent
+import com.automattic.eventhorizon.SearchPredictiveTermTappedEvent
+import com.automattic.eventhorizon.SearchPredictiveViewAllTappedEvent
+import com.automattic.eventhorizon.SearchResultFilterType
+import com.automattic.eventhorizon.SearchResultTappedEvent
+import com.automattic.eventhorizon.SearchShownEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,13 +34,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
+import com.automattic.eventhorizon.SearchResultType as EventHorizonSearchResultType
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val searchHandler: SearchHandler,
     private val searchHistoryManager: SearchHistoryManager,
     private val podcastManager: PodcastManager,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
 ) : ViewModel() {
     var isFragmentChangingConfigurations: Boolean = false
     var showSearchHistory: Boolean = true
@@ -50,22 +62,20 @@ class SearchViewModel @Inject constructor(
                         _state.update { uiState ->
                             when (operation) {
                                 is SearchUiState.SearchOperation.Error -> {
-                                    analyticsTracker.track(
-                                        AnalyticsEvent.IMPROVED_SEARCH_SUGGESTIONS_FAILED,
-                                        mapOf(
-                                            "source" to source.analyticsValue,
-                                            "term" to operation.searchTerm,
+                                    eventHorizon.track(
+                                        SearchPredictiveFailedEvent(
+                                            source = source.analyticsValue,
+                                            term = operation.searchTerm,
                                         ),
                                     )
                                 }
 
                                 is SearchUiState.SearchOperation.Success -> {
                                     if (operation.results.isEmpty() && operation.searchTerm.isNotEmpty()) {
-                                        analyticsTracker.track(
-                                            AnalyticsEvent.IMPROVED_SEARCH_EMPTY_RESULTS,
-                                            mapOf(
-                                                "source" to source.analyticsValue,
-                                                "term" to operation.searchTerm,
+                                        eventHorizon.track(
+                                            SearchEmptyResultsEvent(
+                                                source = source.analyticsValue,
+                                                term = operation.searchTerm,
                                             ),
                                         )
                                     }
@@ -86,23 +96,11 @@ class SearchViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            if (FeatureFlag.isEnabled(Feature.IMPROVED_SEARCH_RESULTS)) {
-                searchHandler.improvedSearchResults.collect {
-                    showSearchHistory = false
-                    _state.value = SearchUiState.ImprovedResults(operation = it)
-                    if (!FeatureFlag.isEnabled(Feature.IMPROVED_SEARCH_SUGGESTIONS) && it is SearchUiState.SearchOperation.Loading) {
-                        saveSearchTerm(it.searchTerm)
-                    }
-                }
-            } else {
-                searchHandler.searchResults.collect {
-                    showSearchHistory = false
-                    if (_state.value is SearchUiState.OldResults) {
-                        _state.value = SearchUiState.OldResults(operation = it)
-                    }
-                    if (!FeatureFlag.isEnabled(Feature.IMPROVED_SEARCH_SUGGESTIONS) && it is SearchUiState.SearchOperation.Loading) {
-                        saveSearchTerm(it.searchTerm)
-                    }
+            searchHandler.improvedSearchResults.collect {
+                showSearchHistory = false
+                _state.value = SearchUiState.Results(operation = it)
+                if (!FeatureFlag.isEnabled(Feature.IMPROVED_SEARCH_SUGGESTIONS) && it is SearchUiState.SearchOperation.Loading) {
+                    saveSearchTerm(it.searchTerm)
                 }
             }
         }
@@ -115,7 +113,7 @@ class SearchViewModel @Inject constructor(
         if (FeatureFlag.isEnabled(Feature.IMPROVED_SEARCH_SUGGESTIONS)) {
             searchHandler.updateAutCompleteQuery(query)
             _state.update {
-                if ((it is SearchUiState.OldResults || it is SearchUiState.ImprovedResults) && it.searchTerm.orEmpty().length > query.length) {
+                if (it is SearchUiState.Results && it.searchTerm.orEmpty().length > query.length) {
                     SearchUiState.Suggestions(operation = SearchUiState.SearchOperation.Success(searchTerm = query, results = emptyList()))
                 } else {
                     it
@@ -148,46 +146,42 @@ class SearchViewModel @Inject constructor(
     }
 
     fun reportEmptyResultsShown() {
-        analyticsTracker.track(
-            AnalyticsEvent.IMPROVED_SEARCH_EMPTY_RESULTS,
-            mapOf(
-                "source" to source.analyticsValue,
-                "term" to state.value.searchTerm.orEmpty(),
+        eventHorizon.track(
+            SearchEmptyResultsEvent(
+                term = state.value.searchTerm.orEmpty(),
+                source = source.analyticsValue,
             ),
         )
     }
 
     fun reportResultsShown() {
-        analyticsTracker.track(
-            AnalyticsEvent.SEARCH_LIST_SHOWN,
-            mapOf(
-                "source" to source.analyticsValue,
+        eventHorizon.track(
+            SearchListShownEvent(
+                source = source.analyticsValue,
             ),
         )
     }
 
     fun reportErrorResultsShown() {
-        analyticsTracker.track(
-            AnalyticsEvent.SEARCH_FAILED,
-            mapOf(
-                "source" to source.analyticsValue,
-                "term" to state.value.searchTerm.orEmpty(),
+        eventHorizon.track(
+            SearchFailedEvent(
+                source = source.analyticsValue,
+                term = state.value.searchTerm.orEmpty(),
             ),
         )
     }
 
     fun selectFilter(filter: ResultsFilters) {
-        if (FeatureFlag.isEnabled(Feature.IMPROVED_SEARCH_RESULTS) && _state.value is SearchUiState.ImprovedResults) {
-            analyticsTracker.track(
-                AnalyticsEvent.IMPROVED_SEARCH_FILTER_TAPPED,
-                mapOf(
-                    "source" to source.analyticsValue,
-                    "filter" to filter.analyticsValue,
+        if (_state.value is SearchUiState.Results) {
+            eventHorizon.track(
+                SearchFilterTappedEvent(
+                    source = source.analyticsValue,
+                    filter = filter.analyticsValue,
                 ),
             )
             _state.update { state ->
                 when (state) {
-                    is SearchUiState.ImprovedResults -> {
+                    is SearchUiState.Results -> {
                         if (state.operation is SearchUiState.SearchOperation.Success) {
                             state.copy(
                                 selectedFilterIndex = ResultsFilters.entries.indexOf(filter),
@@ -212,14 +206,7 @@ class SearchViewModel @Inject constructor(
         // Optimistically update subscribe status
         _state.update {
             when (it) {
-                is SearchUiState.OldResults ->
-                    it.copy(
-                        operation = (it.operation as? SearchUiState.SearchOperation.Success)?.copy(
-                            results = it.operation.results.subscribeToPodcast(uuid),
-                        ) ?: it.operation,
-                    )
-
-                is SearchUiState.ImprovedResults ->
+                is SearchUiState.Results ->
                     it.copy(
                         operation = (it.operation as? SearchUiState.SearchOperation.Success)?.copy(
                             results = it.operation.results.subscribeToPodcast(uuid),
@@ -242,9 +229,11 @@ class SearchViewModel @Inject constructor(
             }
         }
 
-        analyticsTracker.track(
-            AnalyticsEvent.PODCAST_SUBSCRIBED,
-            AnalyticsProp.podcastSubscribed(uuid = uuid, source = source),
+        eventHorizon.track(
+            PodcastSubscribedEvent(
+                uuid = uuid,
+                source = source.analyticsValue,
+            ),
         )
     }
 
@@ -252,19 +241,14 @@ class SearchViewModel @Inject constructor(
         saveSearchTerm(term)
         searchHandler.updateSearchQuery(term, true)
 
-        _state.value = if (FeatureFlag.isEnabled(Feature.IMPROVED_SEARCH_RESULTS)) {
-            SearchUiState.ImprovedResults(operation = SearchUiState.SearchOperation.Loading(term))
-        } else {
-            SearchUiState.OldResults(operation = SearchUiState.SearchOperation.Loading(term))
-        }
+        _state.value = SearchUiState.Results(operation = SearchUiState.SearchOperation.Loading(term))
     }
 
     fun selectSuggestion(suggestion: String) {
-        analyticsTracker.track(
-            AnalyticsEvent.IMPROVED_SEARCH_SUGGESTION_TERM_TAPPED,
-            properties = mapOf(
-                "term" to suggestion,
-                "source" to source.analyticsValue,
+        eventHorizon.track(
+            SearchPredictiveTermTappedEvent(
+                term = suggestion,
+                source = source.analyticsValue,
             ),
         )
 
@@ -280,70 +264,65 @@ class SearchViewModel @Inject constructor(
         uuid: String,
         type: SearchResultType,
     ) {
-        analyticsTracker.track(
-            AnalyticsEvent.SEARCH_RESULT_TAPPED,
-            AnalyticsProp.searchResultTapped(source = source, uuid = uuid, type = type),
+        eventHorizon.track(
+            SearchResultTappedEvent(
+                uuid = uuid,
+                resultType = type.analyticsValue,
+                source = source.analyticsValue,
+            ),
         )
     }
 
-    fun trackSearchShownOrDismissed(
-        event: AnalyticsEvent,
-        source: SourceView,
-    ) {
-        analyticsTracker.track(
-            event,
-            AnalyticsProp.searchShownOrDismissed(source = source),
+    fun trackSearchShown(sourceView: SourceView) {
+        eventHorizon.track(
+            SearchShownEvent(
+                source = sourceView.analyticsValue,
+            ),
         )
     }
 
-    fun trackSearchListShown(source: SourceView, type: ResultsType) {
-        analyticsTracker.track(
-            AnalyticsEvent.SEARCH_LIST_SHOWN,
-            AnalyticsProp.searchListShown(source = source, type = type),
+    fun trackSearchDismissed(sourceView: SourceView) {
+        eventHorizon.track(
+            SearchDismissedEvent(
+                source = sourceView.analyticsValue,
+            ),
         )
     }
 
     fun trackSuggestionsShown() {
-        analyticsTracker.track(
-            AnalyticsEvent.IMPROVED_SEARCH_SUGGESTIONS_SHOWN,
-            mapOf(
-                "source" to source.analyticsValue,
+        eventHorizon.track(
+            SearchPredictiveShownEvent(
+                source = source.analyticsValue,
             ),
         )
     }
 
     fun onViewAllSuggestionsClick(term: String) {
-        analyticsTracker.track(
-            AnalyticsEvent.IMPROVED_SEARCH_VIEW_ALL_TAPPED,
-            mapOf(
-                "source" to source.analyticsValue,
-                "term" to term,
+        eventHorizon.track(
+            SearchPredictiveViewAllTappedEvent(
+                term = term,
+                source = source.analyticsValue,
             ),
         )
 
         runSearchOnTerm(term)
     }
 
-    enum class SearchResultType(val value: String) {
-        PODCAST_LOCAL_RESULT("podcast_local_result"),
-        PODCAST_REMOTE_RESULT("podcast_remote_result"),
-        FOLDER("folder"),
-        EPISODE("episode"),
-    }
-
-    private object AnalyticsProp {
-        private const val SOURCE = "source"
-        private const val UUID = "uuid"
-        private const val RESULT_TYPE = "result_type"
-        private const val DISPLAYING = "displaying"
-
-        fun searchResultTapped(source: SourceView, uuid: String, type: SearchResultType) = mapOf(SOURCE to source.analyticsValue, UUID to uuid, RESULT_TYPE to type.value)
-
-        fun searchShownOrDismissed(source: SourceView) = mapOf(SOURCE to source.analyticsValue)
-
-        fun podcastSubscribed(source: SourceView, uuid: String) = mapOf(SOURCE to source.analyticsValue, UUID to uuid)
-
-        fun searchListShown(source: SourceView, type: ResultsType) = mapOf(SOURCE to source.analyticsValue, DISPLAYING to type.value)
+    enum class SearchResultType(
+        val analyticsValue: EventHorizonSearchResultType,
+    ) {
+        PODCAST_LOCAL_RESULT(
+            analyticsValue = EventHorizonSearchResultType.PodcastLocalResult,
+        ),
+        PODCAST_REMOTE_RESULT(
+            analyticsValue = EventHorizonSearchResultType.PodcastRemoteResult,
+        ),
+        FOLDER(
+            analyticsValue = EventHorizonSearchResultType.Folder,
+        ),
+        EPISODE(
+            analyticsValue = EventHorizonSearchResultType.Episode,
+        ),
     }
 }
 
@@ -369,7 +348,7 @@ sealed interface SearchResults {
         )
     }
 
-    data class ImprovedResults(
+    data class Results(
         val results: List<ImprovedSearchResultItem>,
         val filter: ResultsFilters,
     ) : SearchResults {
@@ -388,10 +367,22 @@ sealed interface SearchResults {
     }
 }
 
-enum class ResultsFilters(val resId: Int, val analyticsValue: String) {
-    TOP_RESULTS(LR.string.search_filters_top_results, "allResults"),
-    PODCASTS(LR.string.search_filters_podcasts, "podcasts"),
-    EPISODES(LR.string.search_filters_episodes, "episodes"),
+enum class ResultsFilters(
+    val resId: Int,
+    val analyticsValue: SearchResultFilterType,
+) {
+    TOP_RESULTS(
+        resId = LR.string.search_filters_top_results,
+        analyticsValue = SearchResultFilterType.AllResults,
+    ),
+    PODCASTS(
+        resId = LR.string.search_filters_podcasts,
+        analyticsValue = SearchResultFilterType.Podcasts,
+    ),
+    EPISODES(
+        resId = LR.string.search_filters_episodes,
+        analyticsValue = SearchResultFilterType.Episodes,
+    ),
 }
 
 sealed interface SearchUiState {
@@ -399,16 +390,14 @@ sealed interface SearchUiState {
     val searchTerm: String?
         get() = when (this) {
             is Suggestions -> operation.searchTerm
-            is OldResults -> operation.searchTerm
-            is ImprovedResults -> operation.searchTerm
+            is Results -> operation.searchTerm
             else -> null
         }
 
     val isLoading: Boolean
         get() = when (this) {
             is Suggestions -> operation is SearchOperation.Loading
-            is OldResults -> operation is SearchOperation.Loading
-            is ImprovedResults -> operation is SearchOperation.Loading
+            is Results -> operation is SearchOperation.Loading
             else -> false
         }
 
@@ -422,13 +411,9 @@ sealed interface SearchUiState {
 
     data object Idle : SearchUiState
     data class Suggestions(val operation: SearchOperation<List<SearchAutoCompleteItem>>) : SearchUiState
-    data class ImprovedResults(
-        val operation: SearchOperation<SearchResults.ImprovedResults>,
+    data class Results(
+        val operation: SearchOperation<SearchResults.Results>,
         val filterOptions: Set<ResultsFilters> = ResultsFilters.entries.toSet(),
         val selectedFilterIndex: Int = 0,
-    ) : SearchUiState
-
-    data class OldResults(
-        val operation: SearchOperation<SearchResults.SegregatedResults>,
     ) : SearchUiState
 }

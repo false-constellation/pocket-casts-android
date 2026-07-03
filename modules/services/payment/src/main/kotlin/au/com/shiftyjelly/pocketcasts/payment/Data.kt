@@ -2,6 +2,9 @@ package au.com.shiftyjelly.pocketcasts.payment
 
 import androidx.annotation.Keep
 import au.com.shiftyjelly.pocketcasts.payment.PricingSchedule.RecurrenceMode
+import com.automattic.eventhorizon.SubscriptionFrequencyType
+import com.automattic.eventhorizon.SubscriptionOfferType
+import com.automattic.eventhorizon.SubscriptionTierType
 import java.math.BigDecimal
 
 data class Product(
@@ -398,42 +401,42 @@ sealed interface SubscriptionPlan {
 
 @Keep
 enum class SubscriptionTier(
-    val analyticsValue: String,
+    val analyticsValue: SubscriptionTierType,
 ) {
     Plus(
-        analyticsValue = "plus",
+        analyticsValue = SubscriptionTierType.Plus,
     ),
     Patron(
-        analyticsValue = "patron",
+        analyticsValue = SubscriptionTierType.Patron,
     ),
 }
 
 @Keep
 enum class BillingCycle(
-    val analyticsValue: String,
+    val analyticsValue: SubscriptionFrequencyType,
 ) {
     Monthly(
-        analyticsValue = "monthly",
+        analyticsValue = SubscriptionFrequencyType.Monthly,
     ),
     Yearly(
-        analyticsValue = "yearly",
+        analyticsValue = SubscriptionFrequencyType.Yearly,
     ),
 }
 
 enum class SubscriptionOffer(
-    val analyticsValue: String,
+    val analyticsValue: SubscriptionOfferType,
 ) {
     IntroOffer(
-        analyticsValue = "intro_offer",
+        analyticsValue = SubscriptionOfferType.IntroOffer,
     ),
     Trial(
-        analyticsValue = "free_trial",
+        analyticsValue = SubscriptionOfferType.FreeTrial,
     ),
     Referral(
-        analyticsValue = "referral",
+        analyticsValue = SubscriptionOfferType.Referral,
     ),
     Winback(
-        analyticsValue = "winback",
+        analyticsValue = SubscriptionOfferType.Winback,
     ),
     ;
 

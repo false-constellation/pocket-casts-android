@@ -64,6 +64,7 @@ data class PodcastEpisode(
     @ColumnInfo(name = "deselected_chapters") override var deselectedChapters: ChapterIndices = ChapterIndices(),
     @ColumnInfo(name = "deselected_chapters_modified") override var deselectedChaptersModified: Date? = null,
     @ColumnInfo(name = "slug") var slug: String = "",
+    @ColumnInfo(name = "has_generated_transcript") var hasGeneratedTranscript: Boolean = false,
 ) : BaseEpisode,
     Serializable {
 
@@ -120,6 +121,16 @@ data class PodcastEpisode(
     // temporary variables
     @Ignore
     override var playing: Boolean = false
+
+    /** Parsed from the server response and persisted separately into the episode_alternate_enclosures table. */
+    @Ignore
+    var alternateEnclosures: List<EpisodeAlternateEnclosure> = emptyList()
+
+    @Ignore
+    override var overrideStreamUrl: String? = null
+
+    @Ignore
+    override var overrideStreamContentType: String? = null
 
     val playedPercentage: Int
         get() {

@@ -1,7 +1,5 @@
 package au.com.shiftyjelly.pocketcasts.repositories.bookmark
 
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.models.db.AppDatabase
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
@@ -11,21 +9,36 @@ import au.com.shiftyjelly.pocketcasts.models.type.SyncStatus
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeDefault
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeForPodcast
 import au.com.shiftyjelly.pocketcasts.preferences.model.BookmarksSortTypeForProfile
+import au.com.shiftyjelly.pocketcasts.repositories.sync.SyncManager
+import au.com.shiftyjelly.pocketcasts.repositories.transcript.TranscriptWindowExtractor
+import au.com.shiftyjelly.pocketcasts.servers.podcast.PodcastCacheServiceManager
+import au.com.shiftyjelly.pocketcasts.servers.sync.bookmark.BookmarkEnrichRequest
+import au.com.shiftyjelly.pocketcasts.servers.sync.bookmark.BookmarkEnrichResponse
+import com.automattic.eventhorizon.BookmarkCreatedEvent
+import com.automattic.eventhorizon.BookmarkSourceType
+import com.automattic.eventhorizon.BookmarkUpdateTitleEvent
+import com.automattic.eventhorizon.EventHorizon
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import timber.log.Timber
 
 class BookmarkManagerImpl @Inject constructor(
     appDatabase: AppDatabase,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
+    private val syncManager: SyncManager,
+    private val podcastCacheServiceManager: PodcastCacheServiceManager,
+    private val transcriptWindowExtractor: TranscriptWindowExtractor,
 ) : BookmarkManager,
     CoroutineScope {
 
@@ -43,7 +56,7 @@ class BookmarkManagerImpl @Inject constructor(
         episode: BaseEpisode,
         timeSecs: Int,
         title: String,
-        creationSource: BookmarkManager.CreationSource,
+        creationSource: BookmarkSourceType,
         addedAt: Instant,
     ): Bookmark {
         // Prevent adding more than one bookmark at the same place
@@ -66,13 +79,12 @@ class BookmarkManagerImpl @Inject constructor(
         )
         bookmarkDao.insert(bookmark)
         val podcastUuid = if (episode is PodcastEpisode) episode.podcastOrSubstituteUuid else "user_file"
-        analyticsTracker.track(
-            AnalyticsEvent.BOOKMARK_CREATED,
-            mapOf(
-                "source" to creationSource.analyticsValue,
-                "time" to addedAtMs,
-                "episode_uuid" to episode.uuid,
-                "podcast_uuid" to podcastUuid,
+        eventHorizon.track(
+            BookmarkCreatedEvent(
+                source = creationSource,
+                time = timeSecs.toLong(),
+                episodeUuid = episode.uuid,
+                podcastUuid = podcastUuid,
             ),
         )
         return bookmark
@@ -85,9 +97,10 @@ class BookmarkManagerImpl @Inject constructor(
             titleModified = System.currentTimeMillis(),
             syncStatus = SyncStatus.NOT_SYNCED,
         )
-        analyticsTracker.track(
-            AnalyticsEvent.BOOKMARK_UPDATE_TITLE,
-            mapOf("source" to sourceView.analyticsValue),
+        eventHorizon.track(
+            BookmarkUpdateTitleEvent(
+                source = sourceView.analyticsValue,
+            ),
         )
     }
 
@@ -223,5 +236,47 @@ class BookmarkManagerImpl @Inject constructor(
 
     override fun hasBookmarksFlow(episodeUuid: String): Flow<Boolean> {
         return bookmarkDao.hasBookmarksFlow(episodeUuid)
+    }
+
+    override fun enrichBookmark(bookmark: Bookmark) {
+        launch(Dispatchers.IO) {
+            try {
+                val snippet = transcriptWindowExtractor.extractWindow(
+                    episodeUuid = bookmark.episodeUuid,
+                    timeSecs = bookmark.timeSecs,
+                ) ?: return@launch
+
+                val response = callEnrichApi(snippet)
+                if (response.error != null) {
+                    Timber.w("Smart bookmark enrichment returned error for ${bookmark.uuid}: ${response.error}")
+                }
+                val title = response.title
+                val summary = response.summary
+                if (title != null || summary != null) {
+                    val now = System.currentTimeMillis()
+                    bookmarkDao.updateAiData(
+                        bookmarkUuid = bookmark.uuid,
+                        aiTitle = title,
+                        aiSummary = summary,
+                        aiTitleModified = now.takeIf { title != null },
+                        aiSummaryModified = now.takeIf { summary != null },
+                        syncStatus = SyncStatus.NOT_SYNCED,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.e(e, "Smart bookmark enrichment failed for ${bookmark.uuid}")
+            }
+        }
+    }
+
+    private suspend fun callEnrichApi(snippet: String): BookmarkEnrichResponse {
+        return syncManager.getCacheTokenOrLogin { token ->
+            podcastCacheServiceManager.enrichBookmark(
+                authorization = "Bearer ${token.value}",
+                request = BookmarkEnrichRequest(transcriptSnippet = snippet),
+            )
+        }
     }
 }

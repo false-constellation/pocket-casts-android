@@ -1,30 +1,31 @@
 package au.com.shiftyjelly.pocketcasts.models.type
 
+import com.automattic.eventhorizon.TrimModeType
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 enum class TrimMode(
     val serverId: Int,
-    val analyticsVale: String,
+    val analyticsValue: TrimModeType,
     val labelId: Int,
 ) {
     OFF(
         serverId = 0,
-        analyticsVale = "off",
+        analyticsValue = TrimModeType.Off,
         labelId = LR.string.off,
     ),
     LOW(
         serverId = 1,
-        analyticsVale = "mild",
+        analyticsValue = TrimModeType.Mild,
         labelId = LR.string.player_effects_trim_mild,
     ),
     MEDIUM(
         serverId = 2,
-        analyticsVale = "medium",
+        analyticsValue = TrimModeType.Medium,
         labelId = LR.string.player_effects_trim_medium,
     ),
     HIGH(
         serverId = 3,
-        analyticsVale = "mad_max",
+        analyticsValue = TrimModeType.MadMax,
         labelId = LR.string.player_effects_trim_mad_max,
     ),
     ;

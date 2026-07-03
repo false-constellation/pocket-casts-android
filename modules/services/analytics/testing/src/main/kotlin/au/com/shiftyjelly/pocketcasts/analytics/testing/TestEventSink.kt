@@ -15,4 +15,14 @@ class TestEventSink : (Trackable) -> Unit {
             "No events were found in the queue."
         }
     }
+
+    fun skipEvent(count: Int = 1) {
+        repeat(count) {
+            pollEvent()
+        }
+    }
+
+    fun isEmpty() = events.isEmpty()
+
+    val size get() = events.size
 }

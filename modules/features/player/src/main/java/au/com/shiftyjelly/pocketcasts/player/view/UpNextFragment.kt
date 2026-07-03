@@ -3,6 +3,7 @@ package au.com.shiftyjelly.pocketcasts.player.view
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
+import android.os.Parcelable
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
@@ -17,7 +18,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.activityViewModels
@@ -29,8 +29,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.extensions.setContentWithViewCompositionStrategy
@@ -50,7 +48,9 @@ import au.com.shiftyjelly.pocketcasts.ui.helper.NavigationBarColor
 import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarIconColor
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.ui.theme.ThemeColor
+import au.com.shiftyjelly.pocketcasts.utils.extensions.findParcelable
 import au.com.shiftyjelly.pocketcasts.utils.extensions.hideShadow
+import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
 import au.com.shiftyjelly.pocketcasts.views.extensions.quickScrollToTop
 import au.com.shiftyjelly.pocketcasts.views.extensions.tintIcons
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
@@ -65,6 +65,15 @@ import au.com.shiftyjelly.pocketcasts.views.swipe.SwipeActionViewModel
 import au.com.shiftyjelly.pocketcasts.views.swipe.SwipeRowActions
 import au.com.shiftyjelly.pocketcasts.views.swipe.SwipeSource
 import au.com.shiftyjelly.pocketcasts.views.swipe.handleAction
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.UpNextDiscoverButtonTappedEvent
+import com.automattic.eventhorizon.UpNextMultiSelectEnteredEvent
+import com.automattic.eventhorizon.UpNextMultiSelectExitedEvent
+import com.automattic.eventhorizon.UpNextQueueReorderedEvent
+import com.automattic.eventhorizon.UpNextReorderDirectionType.Down
+import com.automattic.eventhorizon.UpNextReorderDirectionType.Up
+import com.automattic.eventhorizon.UpNextSelectAllTappedEvent
+import com.automattic.eventhorizon.UpNextShownEvent
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
@@ -72,6 +81,7 @@ import javax.inject.Inject
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx2.asFlow
+import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
@@ -84,23 +94,25 @@ class UpNextFragment :
     UpNextTouchCallback.ItemTouchHelperAdapter,
     TopScrollable {
     companion object {
-        private const val ARG_EMBEDDED = "embedded"
-        private const val ARG_SOURCE = "source"
-        private const val SOURCE_KEY = "source"
-        private const val SELECT_ALL_KEY = "select_all"
-        private const val DIRECTION_KEY = "direction"
-        private const val SLOTS_KEY = "slots"
-        private const val IS_NEXT_KEY = "is_next"
-        private const val DOWN = "down"
-        private const val UP = "up"
+        const val NEW_INSTANCE_KEY = "new_instance_key"
+
         private const val UP_NEXT_ADAPTER_POSITION = 2
 
-        fun newInstance(embedded: Boolean = false, source: UpNextSource): UpNextFragment {
-            val fragment = UpNextFragment()
-            fragment.arguments = bundleOf(ARG_EMBEDDED to embedded, ARG_SOURCE to source.analyticsValue)
-            return fragment
+        fun newInstance(
+            source: UpNextSource,
+            embedded: Boolean = false,
+        ) = UpNextFragment().apply {
+            arguments = Bundle().apply {
+                putParcelable(NEW_INSTANCE_KEY, Args(source, embedded))
+            }
         }
     }
+
+    @Parcelize
+    class Args(
+        val source: UpNextSource,
+        val isEmbedded: Boolean,
+    ) : Parcelable
 
     @Inject
     lateinit var settings: Settings
@@ -115,7 +127,7 @@ class UpNextFragment :
     lateinit var multiSelectHelper: MultiSelectEpisodesHelper
 
     @Inject
-    lateinit var analyticsTracker: AnalyticsTracker
+    lateinit var eventHorizon: EventHorizon
 
     @Inject
     lateinit var swipeRowActionsFactory: SwipeRowActions.Factory
@@ -145,29 +157,30 @@ class UpNextFragment :
     private val upNextEpisodes: List<BaseEpisode>
         get() = upNextItems.filterIsInstance<BaseEpisode>()
 
-    val isEmbedded: Boolean
-        get() = arguments?.getBoolean(ARG_EMBEDDED) ?: false
-
-    val upNextSource: UpNextSource
-        get() = arguments?.getString(ARG_SOURCE)?.let { UpNextSource.fromString(it) } ?: UpNextSource.UNKNOWN
+    val args get() = arguments?.findParcelable<Args>(NEW_INSTANCE_KEY)
+    private val requiredArgs get() = requireArguments().requireParcelable<Args>(NEW_INSTANCE_KEY)
 
     val overrideTheme: Theme.ThemeType
-        get() = theme.getUpNextTheme(isFullScreen = upNextSource != UpNextSource.UP_NEXT_TAB)
+        get() = theme.getUpNextTheme(isFullScreen = requiredArgs.source != UpNextSource.UP_NEXT_TAB)
 
     val multiSelectListener = object : MultiSelectHelper.Listener<BaseEpisode> {
         override fun multiSelectSelectAll() {
-            trackUpNextEvent(
-                AnalyticsEvent.UP_NEXT_SELECT_ALL_TAPPED,
-                mapOf(SELECT_ALL_KEY to true),
+            eventHorizon.track(
+                UpNextSelectAllTappedEvent(
+                    selectAll = true,
+                    source = requiredArgs.source.analyticsValue,
+                ),
             )
             multiSelectHelper.selectAllInList(upNextEpisodes)
             adapter.notifyDataSetChanged()
         }
 
         override fun multiSelectSelectNone() {
-            trackUpNextEvent(
-                AnalyticsEvent.UP_NEXT_SELECT_ALL_TAPPED,
-                mapOf(SELECT_ALL_KEY to false),
+            eventHorizon.track(
+                UpNextSelectAllTappedEvent(
+                    selectAll = false,
+                    source = requiredArgs.source.analyticsValue,
+                ),
             )
             multiSelectHelper.deselectAllInList(upNextEpisodes)
             adapter.notifyDataSetChanged()
@@ -218,8 +231,12 @@ class UpNextFragment :
         val binding = FragmentUpnextBinding.inflate(themedInflater, container, false).also {
             realBinding = it
         }
-        if (upNextSource == UpNextSource.UP_NEXT_TAB) {
-            analyticsTracker.track(AnalyticsEvent.UP_NEXT_SHOWN, mapOf("source" to "tab_bar"))
+        if (requiredArgs.source == UpNextSource.UP_NEXT_TAB) {
+            eventHorizon.track(
+                UpNextShownEvent(
+                    source = requiredArgs.source.analyticsValue,
+                ),
+            )
         }
 
         binding.emptyUpNextView.setContentWithViewCompositionStrategy {
@@ -263,8 +280,8 @@ class UpNextFragment :
             listener = this,
             multiSelectHelper = multiSelectHelper,
             fragmentManager = childFragmentManager,
-            analyticsTracker = analyticsTracker,
-            upNextSource = upNextSource,
+            eventHorizon = eventHorizon,
+            upNextSource = requiredArgs.source,
             settings = settings,
             playbackManager = playbackManager,
             swipeRowActionsFactory = swipeRowActionsFactory,
@@ -278,14 +295,20 @@ class UpNextFragment :
                     )
                 }
             },
-            onSortClick = ::showSortDialog,
+            showSortTooltip = upNextViewModel.showSortDurationTooltip,
+            onSortClick = {
+                upNextViewModel.onSortClick()
+                showSortDialog()
+            },
+            onSortTooltipShown = upNextViewModel::onSortTooltipShown,
+            onSortTooltipTapped = upNextViewModel::onSortTooltipTapped,
         )
         adapter.theme = overrideTheme
     }
 
     override fun onResume() {
         super.onResume()
-        if (!isEmbedded) {
+        if (!requiredArgs.isEmbedded) {
             updateStatusAndNavColors()
         }
     }
@@ -307,7 +330,7 @@ class UpNextFragment :
             toolbar = binding.toolbar,
             title = getString(LR.string.up_next),
             menu = R.menu.upnext,
-            navigationIcon = if (upNextSource != UpNextSource.UP_NEXT_TAB) {
+            navigationIcon = if (requiredArgs.source != UpNextSource.UP_NEXT_TAB) {
                 NavigationIcon.Close
             } else {
                 NavigationIcon.None
@@ -316,10 +339,10 @@ class UpNextFragment :
             onNavigationClick = { close() },
             toolbarColors = null,
         )
-        if (upNextSource != UpNextSource.UP_NEXT_TAB) {
+        if (requiredArgs.source != UpNextSource.UP_NEXT_TAB) {
             toolbar.setNavigationIcon(IR.drawable.ic_close)
         }
-        toolbar.menu.findItem(R.id.media_route_menu_item)?.isVisible = upNextSource == UpNextSource.UP_NEXT_TAB
+        toolbar.menu.findItem(R.id.media_route_menu_item)?.isVisible = requiredArgs.source == UpNextSource.UP_NEXT_TAB
         toolbar.navigationIcon?.setTint(ThemeColor.secondaryIcon01(overrideTheme))
         toolbar.menu.tintIcons(ThemeColor.secondaryIcon01(overrideTheme))
         toolbar.setOnMenuItemClickListener {
@@ -340,6 +363,14 @@ class UpNextFragment :
 
         val recyclerView = binding.recyclerView
         recyclerView.adapter = adapter
+        // Dismiss the sort tooltip on scroll, since its anchor button can leave the viewport.
+        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    upNextViewModel.onUpNextScrolled()
+                }
+            }
+        })
         playerViewModel.upNextLive.observe(viewLifecycleOwner) {
             if (userRearrangingFrom == null) {
                 adapter.submitList(it)
@@ -382,12 +413,17 @@ class UpNextFragment :
             toolbar.isVisible = !isMultiSelecting
 
             /* Track only if not embedded. If it is an embedded fragment, then track only when in expanded state */
-            if (!isEmbedded || isEmbeddedExpanded()) {
-                if (isMultiSelecting) {
-                    trackUpNextEvent(AnalyticsEvent.UP_NEXT_MULTI_SELECT_ENTERED)
+            if (!requiredArgs.isEmbedded || isEmbeddedExpanded()) {
+                val event = if (isMultiSelecting) {
+                    UpNextMultiSelectEnteredEvent(
+                        source = requiredArgs.source.analyticsValue,
+                    )
                 } else {
-                    trackUpNextEvent(AnalyticsEvent.UP_NEXT_MULTI_SELECT_EXITED)
+                    UpNextMultiSelectExitedEvent(
+                        source = requiredArgs.source.analyticsValue,
+                    )
                 }
+                eventHorizon.track(event)
             }
 
             multiSelectToolbar.setNavigationIcon(IR.drawable.ic_arrow_back)
@@ -403,6 +439,21 @@ class UpNextFragment :
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 settings.bottomInset.collect {
                     binding.recyclerView.updatePadding(bottom = it)
+                }
+            }
+        }
+
+        // The sort tooltip is only shown on the Up Next tab, not the mini or full-screen player.
+        if (requiredArgs.source == UpNextSource.UP_NEXT_TAB) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    try {
+                        settings.playerOrUpNextBottomSheetState.collect { state ->
+                            upNextViewModel.setUpNextVisible(state == BottomSheetBehavior.STATE_COLLAPSED)
+                        }
+                    } finally {
+                        upNextViewModel.setUpNextVisible(false)
+                    }
                 }
             }
         }
@@ -424,28 +475,32 @@ class UpNextFragment :
     }
 
     private fun close() {
-        if (!isEmbedded) {
+        if (!requiredArgs.isEmbedded) {
             (activity as? FragmentHostListener)?.closeBottomSheet()
         } else {
             (parentFragment as? PlayerContainerFragment)?.upNextBottomSheetBehavior?.state = BottomSheetBehavior.STATE_COLLAPSED
         }
     }
 
-    private fun isEmbeddedExpanded() = isEmbedded &&
+    private fun isEmbeddedExpanded() = requiredArgs.isEmbedded &&
         (parentFragment as? PlayerContainerFragment)?.upNextBottomSheetBehavior?.state == BottomSheetBehavior.STATE_EXPANDED
 
     override fun onClearUpNext() {
-        playerViewModel.clearUpNext(context = requireContext(), upNextSource = upNextSource)
+        playerViewModel.clearUpNext(context = requireContext(), upNextSource = requiredArgs.source)
             .showClearUpNextConfirmationDialog(parentFragmentManager, tag = "up_next_clear_dialog")
     }
 
     override fun onDiscoverTapped() {
-        if (upNextSource == UpNextSource.NOW_PLAYING) {
+        if (requiredArgs.source == UpNextSource.NOW_PLAYING) {
             (activity as FragmentHostListener).closePlayer()
-        } else if (upNextSource == UpNextSource.MINI_PLAYER) {
+        } else if (requiredArgs.source == UpNextSource.MINI_PLAYER) {
             close()
         }
-        analyticsTracker.track(AnalyticsEvent.UP_NEXT_DISCOVER_BUTTON_TAPPED, mapOf("source" to upNextSource.analyticsValue))
+        eventHorizon.track(
+            UpNextDiscoverButtonTappedEvent(
+                source = requiredArgs.source.analyticsValue,
+            ),
+        )
         (activity as FragmentHostListener).openTab(VR.id.navigation_discover)
     }
 
@@ -517,12 +572,12 @@ class UpNextFragment :
 
         userDraggingStart?.let { dragStartPosition ->
             if (position != userDraggingStart) {
-                trackUpNextEvent(
-                    AnalyticsEvent.UP_NEXT_QUEUE_REORDERED,
-                    mapOf(
-                        SLOTS_KEY to abs(position.minus(dragStartPosition)),
-                        DIRECTION_KEY to if (position > dragStartPosition) DOWN else UP,
-                        IS_NEXT_KEY to (position == UP_NEXT_ADAPTER_POSITION),
+                eventHorizon.track(
+                    UpNextQueueReorderedEvent(
+                        slots = abs(position.minus(dragStartPosition)).toLong(),
+                        direction = if (position > dragStartPosition) Down else Up,
+                        isNext = position == UP_NEXT_ADAPTER_POSITION,
+                        source = requiredArgs.source.analyticsValue,
                     ),
                 )
             }
@@ -536,13 +591,6 @@ class UpNextFragment :
     override fun onNowPlayingClick() {
         (activity as? FragmentHostListener)?.openPlayer()
         close()
-    }
-
-    private fun trackUpNextEvent(event: AnalyticsEvent, props: Map<String, Any> = emptyMap()) {
-        val properties = HashMap<String, Any>()
-        properties[SOURCE_KEY] = upNextSource.analyticsValue
-        properties.putAll(props)
-        analyticsTracker.track(event, properties)
     }
 
     override fun scrollToTop(): Boolean {

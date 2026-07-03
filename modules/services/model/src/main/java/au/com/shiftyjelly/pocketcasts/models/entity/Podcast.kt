@@ -20,6 +20,7 @@ import au.com.shiftyjelly.pocketcasts.models.to.PodcastGrouping
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodesSortType
 import au.com.shiftyjelly.pocketcasts.models.type.TrimMode
 import au.com.shiftyjelly.pocketcasts.utils.extensions.unidecode
+import com.automattic.eventhorizon.AutoAddToUpNextType
 import java.io.Serializable
 import java.net.MalformedURLException
 import java.net.URL
@@ -100,6 +101,8 @@ data class Podcast(
     @ColumnInfo(name = "is_header_expanded", defaultValue = "1") var isHeaderExpanded: Boolean = true,
     @ColumnInfo(name = "funding_url") var fundingUrl: String? = null,
     @ColumnInfo(name = "slug") var slug: String = "",
+    @ColumnInfo(name = "explicit") var explicit: Boolean? = null,
+    @ColumnInfo(name = "web_feed", defaultValue = "0") var webFeed: Boolean = false,
     @Embedded(prefix = "bundle") var singleBundle: Bundle? = null,
     @Ignore val episodes: MutableList<PodcastEpisode> = mutableListOf(),
 ) : Serializable {
@@ -108,22 +111,22 @@ data class Podcast(
 
     enum class AutoAddUpNext(
         val databaseInt: Int,
-        val analyticsValue: String,
+        val analyticsValue: AutoAddToUpNextType,
         val labelId: Int,
     ) {
         OFF(
             databaseInt = 0,
-            analyticsValue = "off",
+            analyticsValue = AutoAddToUpNextType.Off,
             labelId = LR.string.off,
         ),
         PLAY_LAST(
             databaseInt = 1,
-            analyticsValue = "add_last",
+            analyticsValue = AutoAddToUpNextType.AddLast,
             labelId = LR.string.play_last,
         ),
         PLAY_NEXT(
             databaseInt = 2,
-            analyticsValue = "add_first",
+            analyticsValue = AutoAddToUpNextType.AddFirst,
             labelId = LR.string.play_next,
         ),
         ;

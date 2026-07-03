@@ -6,6 +6,7 @@ import au.com.shiftyjelly.pocketcasts.models.type.UpNextSortType
 import au.com.shiftyjelly.pocketcasts.preferences.model.AutoPlaySource
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
+import com.automattic.eventhorizon.UpNextSourceType
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.combineLatest
 import java.util.concurrent.TimeUnit
@@ -147,18 +148,24 @@ interface UpNextQueue {
     }
 }
 
-enum class UpNextSource(val analyticsValue: String) {
-    MINI_PLAYER("mini_player"),
-    PLAYER("player"),
-    NOW_PLAYING("now_playing"),
-    UP_NEXT_SHORTCUT("up_next_shortcut"),
-    UP_NEXT_TAB("up_next_tab"),
-    UNKNOWN("unknown"),
-    ;
-
-    companion object {
-        fun fromString(string: String) = UpNextSource.values().find { it.analyticsValue == string } ?: UNKNOWN
-    }
+enum class UpNextSource(
+    val analyticsValue: UpNextSourceType,
+) {
+    MINI_PLAYER(
+        analyticsValue = UpNextSourceType.MiniPlayer,
+    ),
+    PLAYER(
+        analyticsValue = UpNextSourceType.Player,
+    ),
+    NOW_PLAYING(
+        analyticsValue = UpNextSourceType.NowPlaying,
+    ),
+    UP_NEXT_SHORTCUT(
+        analyticsValue = UpNextSourceType.UpNextShortcut,
+    ),
+    UP_NEXT_TAB(
+        analyticsValue = UpNextSourceType.TabBar,
+    ),
 }
 
 fun Observable<UpNextQueue.State>.containsUuid(uuid: String): Observable<Boolean> {

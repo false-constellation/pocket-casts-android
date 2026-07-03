@@ -33,8 +33,10 @@ class AutomotiveSettingsActivity :
             },
         )
 
-        val settingsFragment = AutomotiveSettingsFragment()
-        supportFragmentManager.beginTransaction().replace(R.id.frameMain, settingsFragment).commitNowAllowingStateLoss()
+        if (savedInstanceState == null) {
+            val settingsFragment = AutomotiveSettingsFragment()
+            supportFragmentManager.beginTransaction().replace(R.id.frameMain, settingsFragment).commitNowAllowingStateLoss()
+        }
 
         val btnClose = findViewById<ImageView>(PR.id.btnClose)
         btnClose?.setImageResource(IR.drawable.ic_arrow_back)
@@ -170,4 +172,6 @@ class AutomotiveSettingsActivity :
 
     override fun whatsNewDismissed(fromConfirmAction: Boolean) {
     }
+
+    override fun onPlayerBackstackChanged() = Unit
 }

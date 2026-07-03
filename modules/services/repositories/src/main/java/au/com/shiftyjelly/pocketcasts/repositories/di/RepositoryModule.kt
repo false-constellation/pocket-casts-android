@@ -3,7 +3,7 @@ package au.com.shiftyjelly.pocketcasts.repositories.di
 import android.content.Context
 import androidx.work.WorkerFactory
 import au.com.shiftyjelly.pocketcasts.analytics.AccountStatusInfo
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsListener
 import au.com.shiftyjelly.pocketcasts.crashlogging.CrashReportPermissionCheck
 import au.com.shiftyjelly.pocketcasts.crashlogging.ObserveUser
 import au.com.shiftyjelly.pocketcasts.models.to.TranscriptType
@@ -12,16 +12,21 @@ import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.preferences.SettingsImpl
 import au.com.shiftyjelly.pocketcasts.repositories.ads.BlazeAdsManager
 import au.com.shiftyjelly.pocketcasts.repositories.ads.BlazeAdsManagerImpl
+import au.com.shiftyjelly.pocketcasts.repositories.analytics.AnalyticsLiveDebugListener
 import au.com.shiftyjelly.pocketcasts.repositories.appreview.AppReviewAnalyticsListener
 import au.com.shiftyjelly.pocketcasts.repositories.appreview.AppReviewManager
 import au.com.shiftyjelly.pocketcasts.repositories.appreview.AppReviewManagerImpl
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManager
 import au.com.shiftyjelly.pocketcasts.repositories.bookmark.BookmarkManagerImpl
+import au.com.shiftyjelly.pocketcasts.repositories.chat.ChatManager
+import au.com.shiftyjelly.pocketcasts.repositories.chat.ChatManagerImpl
 import au.com.shiftyjelly.pocketcasts.repositories.chromecast.CastManager
 import au.com.shiftyjelly.pocketcasts.repositories.chromecast.CastManagerImpl
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadManager
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadQueue
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadStatusObserver
+import au.com.shiftyjelly.pocketcasts.repositories.download.MediaDurationExtractor
+import au.com.shiftyjelly.pocketcasts.repositories.download.MediaDurationExtractorImpl
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearManager
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearManagerImpl
 import au.com.shiftyjelly.pocketcasts.repositories.endofyear.EndOfYearSync
@@ -44,6 +49,8 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueueImpl
 import au.com.shiftyjelly.pocketcasts.repositories.playlist.PlaylistManager
 import au.com.shiftyjelly.pocketcasts.repositories.playlist.PlaylistManagerImpl
+import au.com.shiftyjelly.pocketcasts.repositories.podcast.AlternateEnclosureManager
+import au.com.shiftyjelly.pocketcasts.repositories.podcast.AlternateEnclosureManagerImpl
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.ChapterManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.ChapterManagerImpl
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
@@ -62,6 +69,8 @@ import au.com.shiftyjelly.pocketcasts.repositories.search.ImprovedSearchManager
 import au.com.shiftyjelly.pocketcasts.repositories.search.ImprovedSearchManagerImpl
 import au.com.shiftyjelly.pocketcasts.repositories.searchhistory.SearchHistoryManager
 import au.com.shiftyjelly.pocketcasts.repositories.searchhistory.SearchHistoryManagerImpl
+import au.com.shiftyjelly.pocketcasts.repositories.stats.PersistentPlaybackStatsCollector
+import au.com.shiftyjelly.pocketcasts.repositories.stats.PlaybackStatsCollector
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.ServerPurchaseApprover
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManager
 import au.com.shiftyjelly.pocketcasts.repositories.subscription.SubscriptionManagerImpl
@@ -144,6 +153,10 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun providesChatManager(chatManagerImpl: ChatManagerImpl): ChatManager
+
+    @Binds
+    @Singleton
     abstract fun providesStatsManager(statsManagerImpl: StatsManagerImpl): StatsManager
 
     @Binds
@@ -194,6 +207,9 @@ abstract class RepositoryModule {
     abstract fun provideChapterManager(chapterManagerImpl: ChapterManagerImpl): ChapterManager
 
     @Binds
+    abstract fun provideAlternateEnclosureManager(impl: AlternateEnclosureManagerImpl): AlternateEnclosureManager
+
+    @Binds
     abstract fun provideObserveUser(observeTrackableUser: ObserveTrackableUser): ObserveUser
 
     @Binds
@@ -201,6 +217,9 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun provideExternalDataManager(externalDataManagerImpl: ExternalDataManagerImpl): ExternalDataManager
+
+    @Binds
+    abstract fun provideMediaDurationExtractor(mediaDurationExtractorImpl: MediaDurationExtractorImpl): MediaDurationExtractor
 
     @Binds
     abstract fun provideReferralManager(referralManagerImpl: ReferralManagerImpl): ReferralManager
@@ -237,13 +256,20 @@ abstract class RepositoryModule {
 
     @Binds
     @IntoSet
-    abstract fun provideAppReviewAnalyticsListener(appReviewAnalyticsListener: AppReviewAnalyticsListener): AnalyticsTracker.Listener
+    abstract fun provideAppReviewAnalyticsListener(appReviewAnalyticsListener: AppReviewAnalyticsListener): AnalyticsListener
+
+    @Binds
+    @IntoSet
+    abstract fun provideAnalyticsLiveDebugListener(listener: AnalyticsLiveDebugListener): AnalyticsListener
 
     @Binds
     abstract fun provideDownloadQueue(manager: DownloadManager): DownloadQueue
 
     @Binds
     abstract fun provideDownloadStatusObserver(manager: DownloadManager): DownloadStatusObserver
+
+    @Binds
+    abstract fun providePlaybackStatsCollector(collector: PersistentPlaybackStatsCollector): PlaybackStatsCollector
 
     companion object {
         @Provides

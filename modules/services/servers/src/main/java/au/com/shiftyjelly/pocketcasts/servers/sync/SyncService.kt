@@ -6,6 +6,10 @@ import au.com.shiftyjelly.pocketcasts.servers.sync.forgotpassword.ForgotPassword
 import au.com.shiftyjelly.pocketcasts.servers.sync.forgotpassword.ForgotPasswordResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.history.HistoryYearResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.history.HistoryYearSyncRequest
+import au.com.shiftyjelly.pocketcasts.servers.sync.login.DeviceAuthorizeRequest
+import au.com.shiftyjelly.pocketcasts.servers.sync.login.DeviceAuthorizeResponse
+import au.com.shiftyjelly.pocketcasts.servers.sync.login.DeviceTokenRequest
+import au.com.shiftyjelly.pocketcasts.servers.sync.login.DeviceTokenResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.login.ExchangeSonosResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.login.LoginGoogleRequest
 import au.com.shiftyjelly.pocketcasts.servers.sync.login.LoginPocketCastsRequest
@@ -33,6 +37,8 @@ import com.pocketcasts.service.api.UserPlaylistListRequest
 import com.pocketcasts.service.api.UserPlaylistListResponse
 import com.pocketcasts.service.api.UserPodcastListRequest
 import com.pocketcasts.service.api.UserPodcastListResponse
+import com.pocketcasts.service.api.WebFeedCreateRequest
+import com.pocketcasts.service.api.WebFeedCreateResponse
 import com.pocketcasts.service.api.WinbackResponse
 import io.reactivex.Completable
 import io.reactivex.Single
@@ -60,6 +66,12 @@ interface SyncService {
 
     @POST("/user/token")
     suspend fun loginToken(@Body request: LoginTokenRequest): LoginTokenResponse
+
+    @POST("/device/authorize")
+    suspend fun deviceAuthorize(@Body request: DeviceAuthorizeRequest): DeviceAuthorizeResponse
+
+    @POST("/user/token")
+    suspend fun deviceToken(@Body request: DeviceTokenRequest): DeviceTokenResponse
 
     @POST("/user/register_pocket_casts")
     suspend fun register(@Body request: RegisterRequest): LoginTokenResponse
@@ -218,4 +230,8 @@ interface SyncService {
     @Headers("Content-Type: application/octet-stream")
     @POST("/starred/list")
     suspend fun getStarredEpisodes(@Header("Authorization") authorization: String): StarredEpisodesResponse
+
+    @Headers("Content-Type: application/octet-stream")
+    @POST("/web-feeds/create")
+    suspend fun createWebFeedPodcast(@Header("Authorization") authorization: String, @Body request: WebFeedCreateRequest): WebFeedCreateResponse
 }

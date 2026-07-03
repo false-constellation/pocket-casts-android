@@ -88,7 +88,7 @@ internal class EpisodeSync(
         episodeToFinish.forEach { episode ->
             episodeManager.markedAsPlayedExternally(episode, playbackManager, podcastManager)
         }
-        episodeManager.updateAll(localEpisodes)
+        episodeManager.updateAllSyncFields(localEpisodes)
     }
 
     private fun PodcastEpisode.applyServerEpisode(
@@ -148,6 +148,7 @@ internal class EpisodeSync(
             ?.takeIf { !isEpisodePlaying && it >= 0 && it !in (playedUpTo - seekThresholdSecs)..(playedUpTo + 2) }
             ?.let { value ->
                 playedUpTo = value
+                playbackManager.seekIfPlayingToTimeMs(uuid, playedUpToMs)
             }
     }
 }

@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.core.net.toUri
-import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
@@ -66,6 +65,7 @@ class ChaptersFragment : BaseFragment() {
                     lazyListState = lazyListState,
                     chapters = state.chapters,
                     showHeader = state.showHeader,
+                    hasGeneratedChapters = state.hasGeneratedChapters,
                     totalChaptersCount = state.chaptersCount,
                     isTogglingChapters = state.isTogglingChapters,
                     showSubscriptionIcon = state.showSubscriptionIcon,
@@ -141,11 +141,15 @@ class ChaptersFragment : BaseFragment() {
         private const val NEW_INSTANCE_ARG = "ChaptersFragment2Arg"
 
         fun forEpisode(episodeUuid: String) = ChaptersFragment().apply {
-            arguments = bundleOf(NEW_INSTANCE_ARG to Args(episodeUuid))
+            arguments = Bundle().apply {
+                putParcelable(NEW_INSTANCE_ARG, Args(episodeUuid))
+            }
         }
 
         fun forPlayer() = ChaptersFragment().apply {
-            arguments = bundleOf(NEW_INSTANCE_ARG to Args(episodeId = null))
+            arguments = Bundle().apply {
+                putParcelable(NEW_INSTANCE_ARG, Args(episodeId = null))
+            }
         }
     }
 }

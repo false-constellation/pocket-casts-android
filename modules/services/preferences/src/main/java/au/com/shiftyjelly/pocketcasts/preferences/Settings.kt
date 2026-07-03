@@ -29,6 +29,8 @@ import au.com.shiftyjelly.pocketcasts.preferences.model.PodcastGridLayoutType
 import au.com.shiftyjelly.pocketcasts.preferences.model.SelectedPlaylist
 import au.com.shiftyjelly.pocketcasts.preferences.model.ShelfItem
 import au.com.shiftyjelly.pocketcasts.preferences.model.ThemeSetting
+import com.automattic.eventhorizon.UpNextSwipeActionType
+import com.automattic.eventhorizon.UploadedFilesSortType
 import io.reactivex.Observable
 import java.time.Instant
 import java.util.Date
@@ -49,6 +51,8 @@ interface Settings {
         const val SERVER_LIST_URL = BuildConfig.SERVER_LIST_URL
         const val SERVER_LIST_HOST = BuildConfig.SERVER_LIST_HOST
         const val SEARCH_API_URL = BuildConfig.SEARCH_API_URL
+        const val WEB_FEEDS_API_URL = BuildConfig.WEB_FEEDS_API_URL
+
         const val WP_COM_API_URL = "https://public-api.wordpress.com"
 
         const val SHARING_SERVER_SECRET = BuildConfig.SHARING_SERVER_SECRET
@@ -61,10 +65,14 @@ interface Settings {
         const val INFO_PRIVACY_URL = "https://support.pocketcasts.com/article/privacy-policy/"
         const val INFO_CANCEL_URL = "https://support.pocketcasts.com/knowledge-base/how-to-cancel-a-subscription/"
         const val INFO_FAQ_URL = "https://support.pocketcasts.com/android/?device=android"
+        const val INFO_DOWNLOAD_AND_PLAYBACK_URL = "https://support.pocketcasts.com/knowledge-base/download-errors/"
+        const val INFO_EPISODE_ACCESS_ISSUES_URL = "https://support.pocketcasts.com/knowledge-base/episode-access-issues/"
+        const val INFO_EPISODE_NOT_FOUND_URL = "https://support.pocketcasts.com/knowledge-base/episode-not-found/"
+        const val INFO_EPISODE_SERVER_PROBLEM_URL = "https://support.pocketcasts.com/knowledge-base/episode-server-problem/"
 
         const val CHROME_CAST_APP_ID = "2FA4D21B"
 
-        const val WHATS_NEW_VERSION_CODE = 9258
+        const val WHATS_NEW_VERSION_CODE = 9432
 
         const val DEFAULT_MAX_AUTO_ADD_LIMIT = 100
         const val MAX_DOWNLOAD = 100
@@ -121,6 +129,8 @@ interface Settings {
         const val AUTOMOTIVE_CONNECTED_TO_MEDIA_SESSION = "automotive_connected_to_media_session"
 
         const val SHOW_REFERRALS_TOOLTIP = "show_referrals_tooltip"
+
+        const val SHOW_UP_NEXT_SORT_DURATION_TOOLTIP = "show_up_next_sort_duration_tooltip"
     }
 
     enum class NotificationChannel(val id: String) {
@@ -160,9 +170,18 @@ interface Settings {
         OFFERS(21483663),
     }
 
-    enum class UpNextAction(val serverId: Int) {
-        PLAY_NEXT(serverId = 0),
-        PLAY_LAST(serverId = 1),
+    enum class UpNextAction(
+        val serverId: Int,
+        val analyticsValue: UpNextSwipeActionType,
+    ) {
+        PLAY_NEXT(
+            serverId = 0,
+            analyticsValue = UpNextSwipeActionType.PlayNext,
+        ),
+        PLAY_LAST(
+            serverId = 1,
+            analyticsValue = UpNextSwipeActionType.PlayLast,
+        ),
         ;
 
         companion object {
@@ -171,32 +190,32 @@ interface Settings {
     }
 
     enum class CloudSortOrder(
-        val analyticsValue: String,
         val serverId: Int,
+        val analyticsValue: UploadedFilesSortType,
     ) {
         NEWEST_OLDEST(
-            analyticsValue = "newest_to_oldest",
             serverId = 0,
+            analyticsValue = UploadedFilesSortType.NewestToOldest,
         ),
         OLDEST_NEWEST(
-            analyticsValue = "oldest_to_newest",
             serverId = 1,
+            analyticsValue = UploadedFilesSortType.OldestToNewest,
         ),
         A_TO_Z(
-            analyticsValue = "title_a_to_z",
             serverId = 2,
+            analyticsValue = UploadedFilesSortType.TitleAToZ,
         ),
         Z_TO_A(
-            analyticsValue = "title_z_to_a",
             serverId = 3,
+            analyticsValue = UploadedFilesSortType.TitleZToA,
         ),
         SHORT_LONG(
-            analyticsValue = "shortest_to_longest",
             serverId = 4,
+            analyticsValue = UploadedFilesSortType.ShortestToLongest,
         ),
         LONG_SHORT(
-            analyticsValue = "longest_to_shortest",
             serverId = 5,
+            analyticsValue = UploadedFilesSortType.LongestToShortest,
         ),
         ;
 
@@ -299,6 +318,8 @@ interface Settings {
     val podcastsSortType: UserSetting<PodcastsSortType>
     val prioritizeSeekAccuracy: UserSetting<Boolean>
     val cacheEntirePlayingEpisode: UserSetting<Boolean>
+    val liveAnalyticsUrl: UserSetting<String>
+    val collectListeningStats: ReadWriteSetting<Boolean>
 
     fun setSelectPodcastsSortType(sortType: PodcastsSortType)
     fun getSelectPodcastsSortType(): PodcastsSortType
@@ -345,6 +366,9 @@ interface Settings {
     fun isRestoreFromBackup(): Boolean
     fun setRestoreFromBackupEnded()
 
+    fun setNeedsLoginPromptAfterRestore(value: Boolean)
+    fun getNeedsLoginPromptAfterRestore(): Boolean
+
     fun clearPlusPreferences()
 
     fun setDismissLowStorageModalTime(lastUpdateTime: Long)
@@ -366,6 +390,7 @@ interface Settings {
 
     val autoDownloadUnmeteredOnly: UserSetting<Boolean>
     val autoDownloadOnlyWhenCharging: UserSetting<Boolean>
+    val autoDownloadOnlyWhenEnoughStorage: UserSetting<Boolean>
     val autoDownloadUpNext: ReadWriteSetting<Boolean>
     val autoDownloadOnFollowPodcast: UserSetting<Boolean>
     val autoDownloadNewEpisodes: ReadWriteSetting<Int>
@@ -493,9 +518,7 @@ interface Settings {
     fun setTimesToShowBatteryWarning(value: Int)
     fun getTimesToShowBatteryWarning(): Int
 
-    // Only the AnalyticsTracker object should update SendUsageState directly. Everything else
-    // should update this setting through the AnalyticsTracker.
-    val collectAnalytics: UserSetting<Boolean>
+    val collectAnalytics: ReadWriteSetting<Boolean>
     val sendCrashReports: UserSetting<Boolean>
     val linkCrashReportsToUser: UserSetting<Boolean>
 
@@ -569,6 +592,8 @@ interface Settings {
     fun setAutomotiveConnectedToMediaSession(isLoaded: Boolean)
 
     val showReferralsTooltip: UserSetting<Boolean>
+
+    val showUpNextSortDurationTooltip: UserSetting<Boolean>
 
     val playerOrUpNextBottomSheetState: Flow<Int>
     fun updatePlayerOrUpNextBottomSheetState(state: Int)

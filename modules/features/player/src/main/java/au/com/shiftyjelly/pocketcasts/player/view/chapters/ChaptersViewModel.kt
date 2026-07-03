@@ -2,13 +2,12 @@ package au.com.shiftyjelly.pocketcasts.player.view.chapters
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.Chapter
 import au.com.shiftyjelly.pocketcasts.models.to.Chapters
+import au.com.shiftyjelly.pocketcasts.models.to.toChapterOriginType
 import au.com.shiftyjelly.pocketcasts.models.type.Subscription
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.di.IoDispatcher
@@ -16,6 +15,15 @@ import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackState
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.ChapterManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
+import com.automattic.eventhorizon.ChapterLinkClickedEvent
+import com.automattic.eventhorizon.ChaptersShownEvent
+import com.automattic.eventhorizon.ChaptersShownSource
+import com.automattic.eventhorizon.DeselectChaptersChapterDeselectedEvent
+import com.automattic.eventhorizon.DeselectChaptersChapterSelectedEvent
+import com.automattic.eventhorizon.DeselectChaptersToggledOffEvent
+import com.automattic.eventhorizon.DeselectChaptersToggledOnEvent
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.PlayerChapterSelectedEvent
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -44,7 +52,7 @@ class ChaptersViewModel @AssistedInject constructor(
     private val playbackManager: PlaybackManager,
     private val episodeManager: EpisodeManager,
     private val settings: Settings,
-    private val tracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
     private val isTogglingChapters = MutableStateFlow(false)
@@ -77,7 +85,7 @@ class ChaptersViewModel @AssistedInject constructor(
     val showPlayer = _showPlayer.asSharedFlow()
 
     fun playChapter(chapter: Chapter) {
-        tracker.track(AnalyticsEvent.PLAYER_CHAPTER_SELECTED)
+        eventHorizon.track(PlayerChapterSelectedEvent(origin = chapter.origin.toChapterOriginType()))
         playChapterJob?.cancel()
         playChapterJob = viewModelScope.launch(ioDispatcher) {
             val playbackState = playbackManager.playbackStateFlow.first()
@@ -126,7 +134,7 @@ class ChaptersViewModel @AssistedInject constructor(
             }
             chapterManager.selectChapter(episodeId, chapter.index, select)
             episodeManager.findEpisodeByUuid(episodeId)?.let { episode ->
-                trackChapterSelectionToggled(episode, select)
+                trackChapterSelectionToggled(episode, chapter, select)
             }
         }
     }
@@ -138,6 +146,27 @@ class ChaptersViewModel @AssistedInject constructor(
         viewModelScope.launch { _scrollToChapter.emit(chapter) }
     }
 
+    fun trackChaptersShown(source: ChaptersShownSource) {
+        viewModelScope.launch(ioDispatcher) {
+            val episodeId = when (mode) {
+                is Mode.Episode -> mode.episodeId
+                is Mode.Player -> playbackManager.playbackStateFlow.first().episodeUuid
+            }
+
+            val episode = episodeManager.findEpisodeByUuid(episodeId) ?: return@launch
+            val chapters = chapterManager.observerChaptersForEpisode(episodeId).first()
+            if (chapters.isEmpty()) return@launch
+            eventHorizon.track(
+                ChaptersShownEvent(
+                    episodeUuid = episodeId,
+                    podcastUuid = episode.podcastOrSubstituteUuid,
+                    origin = chapters.origin.toChapterOriginType(),
+                    source = source,
+                ),
+            )
+        }
+    }
+
     fun trackChapterLinkTap(chapter: Chapter) {
         viewModelScope.launch(ioDispatcher) {
             val episodeId = when (mode) {
@@ -146,12 +175,12 @@ class ChaptersViewModel @AssistedInject constructor(
             }
 
             episodeManager.findEpisodeByUuid(episodeId)?.let { episode ->
-                tracker.track(
-                    AnalyticsEvent.CHAPTER_LINK_CLICKED,
-                    mapOf(
-                        "chapter_title" to chapter.title,
-                        "episode_uuid" to episodeId,
-                        "podcast_uuid" to episode.podcastOrSubstituteUuid,
+                eventHorizon.track(
+                    ChapterLinkClickedEvent(
+                        episodeUuid = episodeId,
+                        podcastUuid = episode.podcastOrSubstituteUuid,
+                        chapterTitle = chapter.title,
+                        origin = chapter.origin.toChapterOriginType(),
                     ),
                 )
             }
@@ -167,6 +196,7 @@ class ChaptersViewModel @AssistedInject constructor(
     ) = UiState(
         podcast = playbackState.podcast,
         allChapters = chapters.toChapterStates(playbackPosition(playbackState, episode)),
+        hasGeneratedChapters = chapters.hasGeneratedChapters,
         isTogglingChapters = isToggling,
         canSkipChapters = subscription != null,
         showHeader = episode is PodcastEpisode,
@@ -192,31 +222,38 @@ class ChaptersViewModel @AssistedInject constructor(
         }
     }
 
-    private fun trackChapterSelectionToggled(episode: BaseEpisode, selected: Boolean) {
-        tracker.track(
-            if (selected) {
-                AnalyticsEvent.DESELECT_CHAPTERS_CHAPTER_SELECTED
-            } else {
-                AnalyticsEvent.DESELECT_CHAPTERS_CHAPTER_DESELECTED
-            },
-            Analytics.chapterSelectionToggled(episode),
-        )
+    private fun trackChapterSelectionToggled(episode: BaseEpisode, chapter: Chapter, selected: Boolean) {
+        val event = if (selected) {
+            DeselectChaptersChapterSelectedEvent(
+                episodeUuid = episode.uuid,
+                podcastUuid = episode.podcastOrSubstituteUuid,
+                origin = chapter.origin.toChapterOriginType(),
+            )
+        } else {
+            DeselectChaptersChapterDeselectedEvent(
+                episodeUuid = episode.uuid,
+                podcastUuid = episode.podcastOrSubstituteUuid,
+                origin = chapter.origin.toChapterOriginType(),
+            )
+        }
+        eventHorizon.track(event)
     }
 
     private fun trackSkipChaptersToggled(checked: Boolean) {
-        if (checked) {
-            tracker.track(AnalyticsEvent.DESELECT_CHAPTERS_TOGGLED_ON)
+        val event = if (checked) {
+            DeselectChaptersToggledOnEvent
         } else {
-            tracker.track(
-                AnalyticsEvent.DESELECT_CHAPTERS_TOGGLED_OFF,
-                Analytics.skipChaptersToggled(uiState.value.deselectedChaptersCount),
+            DeselectChaptersToggledOffEvent(
+                numberOfDeselectedChapters = uiState.value.deselectedChaptersCount.toLong(),
             )
         }
+        eventHorizon.track(event)
     }
 
     data class UiState(
         val podcast: Podcast? = null,
         private val allChapters: List<ChapterState> = emptyList(),
+        val hasGeneratedChapters: Boolean = false,
         val isTogglingChapters: Boolean = false,
         val canSkipChapters: Boolean = false,
         val showHeader: Boolean = false,
@@ -238,20 +275,6 @@ class ChaptersViewModel @AssistedInject constructor(
     sealed interface Mode {
         data class Episode(val episodeId: String) : Mode
         data object Player : Mode
-    }
-
-    private object Analytics {
-        private const val EPISODE_UUID = "episode_uuid"
-        private const val PODCAST_UUID = "podcast_uuid"
-        private const val NUMBER_OF_DESELECTED_CHAPTERS = "number_of_deselected_chapters"
-        private const val UNKNOWN = "unknown"
-
-        fun chapterSelectionToggled(episode: BaseEpisode?) = mapOf(
-            EPISODE_UUID to (episode?.uuid ?: UNKNOWN),
-            PODCAST_UUID to (episode?.podcastOrSubstituteUuid ?: UNKNOWN),
-        )
-
-        fun skipChaptersToggled(count: Int) = mapOf(NUMBER_OF_DESELECTED_CHAPTERS to count)
     }
 
     @AssistedFactory

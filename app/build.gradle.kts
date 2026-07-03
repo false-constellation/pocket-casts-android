@@ -147,10 +147,12 @@ dependencies {
     testImplementation(libs.turbine)
 
     testImplementation(projects.modules.services.sharedtest)
+    testImplementation(projects.modules.services.analytics.testing)
 
     androidTestImplementation(libs.androidx.preference.ktx)
     androidTestImplementation(libs.androidx.recyclerview)
     androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.test.junit.ext)
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.runner)
@@ -175,4 +177,5 @@ dependencies {
     androidTestImplementation(libs.work.test)
 
     androidTestImplementation(projects.modules.services.sharedtest)
+    androidTestImplementation(projects.modules.services.analytics.testing)
 }

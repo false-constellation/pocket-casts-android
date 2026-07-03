@@ -4,12 +4,8 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.discover.databinding.ItemMostPopularPodcastsBinding
 import au.com.shiftyjelly.pocketcasts.discover.extensions.updateSubscribeButtonIcon
-import au.com.shiftyjelly.pocketcasts.discover.view.DiscoverFragment.Companion.LIST_ID_KEY
-import au.com.shiftyjelly.pocketcasts.discover.view.DiscoverFragment.Companion.PODCAST_UUID_KEY
 import au.com.shiftyjelly.pocketcasts.discover.view.MostPopularPodcastsAdapter.MostPopularPodcastsViewHolder
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory
 import au.com.shiftyjelly.pocketcasts.repositories.images.PocketCastsImageRequestFactory.PlaceholderType
@@ -17,11 +13,14 @@ import au.com.shiftyjelly.pocketcasts.repositories.images.loadInto
 import au.com.shiftyjelly.pocketcasts.servers.model.DiscoverPodcast
 import au.com.shiftyjelly.pocketcasts.ui.R
 import au.com.shiftyjelly.pocketcasts.ui.extensions.themed
+import com.automattic.eventhorizon.DiscoverListPodcastSubscribedEvent
+import com.automattic.eventhorizon.DiscoverListPodcastTappedEvent
+import com.automattic.eventhorizon.EventHorizon
 
 internal class MostPopularPodcastsAdapter(
     val onPodcastClicked: (DiscoverPodcast, String?) -> Unit,
     val onPodcastSubscribe: (DiscoverPodcast, String?) -> Unit,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
 ) : ListAdapter<DiscoverPodcast, MostPopularPodcastsViewHolder>(PODCASTS_FILTERED_DIFF) {
 
     private var fromListId: String? = null
@@ -49,8 +48,7 @@ internal class MostPopularPodcastsAdapter(
         fun bind(podcast: DiscoverPodcast) {
             imageRequestFactory.createForPodcast(podcast.uuid).loadInto(binding.imageView)
 
-            binding.lblTitle.text = podcast.title
-            binding.lblTitle.contentDescription = podcast.title
+            binding.lblTitle.setPodcastTitleWithExplicitBadge(podcast.title, podcast.explicit)
 
             binding.lblSubtitle.text = podcast.author
             binding.lblSubtitle.contentDescription = podcast.author
@@ -75,8 +73,13 @@ internal class MostPopularPodcastsAdapter(
             onSubscribeButtonClicked = { position ->
                 val podcast = getItem(position) as DiscoverPodcast
                 binding.btnSubscribe.updateSubscribeButtonIcon(subscribed = true, colorSubscribed = R.attr.contrast_01, colorUnsubscribed = R.attr.contrast_01)
-                fromListId?.let {
-                    analyticsTracker.track(AnalyticsEvent.DISCOVER_LIST_PODCAST_SUBSCRIBED, mapOf(LIST_ID_KEY to it, PODCAST_UUID_KEY to podcast.uuid))
+                fromListId?.let { listId ->
+                    eventHorizon.track(
+                        DiscoverListPodcastSubscribedEvent(
+                            listId = listId,
+                            podcastUuid = podcast.uuid,
+                        ),
+                    )
                 }
                 onPodcastSubscribe(podcast, fromListId)
             },
@@ -102,10 +105,12 @@ internal class MostPopularPodcastsAdapter(
     }
 
     private fun trackImpression(podcast: DiscoverPodcast) {
-        fromListId?.let {
-            analyticsTracker.track(
-                AnalyticsEvent.DISCOVER_LIST_PODCAST_TAPPED,
-                mapOf(LIST_ID_KEY to it, PODCAST_UUID_KEY to podcast.uuid),
+        fromListId?.let { listId ->
+            eventHorizon.track(
+                DiscoverListPodcastTappedEvent(
+                    listId = listId,
+                    podcastUuid = podcast.uuid,
+                ),
             )
         }
     }

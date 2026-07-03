@@ -2,24 +2,42 @@ package au.com.shiftyjelly.pocketcasts.views.swipe
 
 import android.content.Context
 import android.graphics.Color
-import au.com.shiftyjelly.pocketcasts.models.to.PlaylistEpisode
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
+import com.automattic.eventhorizon.SwipeActionType
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 import au.com.shiftyjelly.pocketcasts.ui.R as UR
 
 enum class SwipeAction(
-    val analyticsValue: String,
+    val analyticsValue: SwipeActionType,
 ) : SwipeButton.UiState {
-    AddToUpNextTop("up_next_add_top"),
-    AddToUpNextBottom("up_next_add_bottom"),
-    RemoveFromUpNext("up_next_remove"),
-    Share("share"),
-    Archive("archive"),
-    Unarchive("unarchive"),
-    RemoveFromPlaylist("remove_from_playlist"),
-    DeleteUserEpisode("delete"),
-    AddToPlaylist("add_to_playlist"),
+    AddToUpNextTop(
+        analyticsValue = SwipeActionType.UpNextAddTop,
+    ),
+    AddToUpNextBottom(
+        analyticsValue = SwipeActionType.UpNextAddBottom,
+    ),
+    RemoveFromUpNext(
+        analyticsValue = SwipeActionType.UpNextRemove,
+    ),
+    Share(
+        analyticsValue = SwipeActionType.Share,
+    ),
+    Archive(
+        analyticsValue = SwipeActionType.Archive,
+    ),
+    Unarchive(
+        analyticsValue = SwipeActionType.Unarchive,
+    ),
+    RemoveFromPlaylist(
+        analyticsValue = SwipeActionType.RemoveFromPlaylist,
+    ),
+    DeleteUserEpisode(
+        analyticsValue = SwipeActionType.Delete,
+    ),
+    AddToPlaylist(
+        analyticsValue = SwipeActionType.AddToPlaylist,
+    ),
     ;
 
     override fun contentDescription(context: Context) = when (this) {

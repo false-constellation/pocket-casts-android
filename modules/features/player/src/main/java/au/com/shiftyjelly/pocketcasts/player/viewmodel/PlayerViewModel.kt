@@ -8,9 +8,6 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.toLiveData
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
-import au.com.shiftyjelly.pocketcasts.analytics.EpisodeAnalytics
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.PodcastColors
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
@@ -22,6 +19,7 @@ import au.com.shiftyjelly.pocketcasts.models.to.Chapter
 import au.com.shiftyjelly.pocketcasts.models.to.ChapterSummaryData
 import au.com.shiftyjelly.pocketcasts.models.to.Chapters
 import au.com.shiftyjelly.pocketcasts.models.to.PlaybackEffects
+import au.com.shiftyjelly.pocketcasts.models.to.toChapterOriginType
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeViewSource
 import au.com.shiftyjelly.pocketcasts.player.view.UpNextPlaying
 import au.com.shiftyjelly.pocketcasts.player.view.bookmark.BookmarkArguments
@@ -34,9 +32,11 @@ import au.com.shiftyjelly.pocketcasts.repositories.di.IoDispatcher
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadQueue
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadType
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
+import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackNoticeManager
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackState
 import au.com.shiftyjelly.pocketcasts.repositories.playback.SleepTimer
 import au.com.shiftyjelly.pocketcasts.repositories.playback.SleepTimerState
+import au.com.shiftyjelly.pocketcasts.repositories.playback.StreamVideoState
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextQueue
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextSource
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
@@ -44,6 +44,18 @@ import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
+import com.automattic.eventhorizon.BannerAdImpressionEvent
+import com.automattic.eventhorizon.BannerAdTappedEvent
+import com.automattic.eventhorizon.EpisodeArchivedEvent
+import com.automattic.eventhorizon.EpisodeDetailPodcastNameTappedEvent
+import com.automattic.eventhorizon.EpisodeMarkedAsPlayedEvent
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.PlaybackContentType
+import com.automattic.eventhorizon.PlaybackEffectSettingsChangedEvent
+import com.automattic.eventhorizon.PlayerNextChapterTappedEvent
+import com.automattic.eventhorizon.PlayerPreviousChapterTappedEvent
+import com.automattic.eventhorizon.SettingType
+import com.automattic.eventhorizon.Trackable
 import com.jakewharton.rxrelay2.BehaviorRelay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -80,6 +92,7 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackManager: PlaybackManager,
+    private val playbackNoticeManager: PlaybackNoticeManager,
     private val episodeManager: EpisodeManager,
     private val podcastManager: PodcastManager,
     private val bookmarkManager: BookmarkManager,
@@ -87,8 +100,7 @@ class PlayerViewModel @Inject constructor(
     private val sleepTimer: SleepTimer,
     private val settings: Settings,
     private val theme: Theme,
-    private val analyticsTracker: AnalyticsTracker,
-    private val episodeAnalytics: EpisodeAnalytics,
+    private val eventHorizon: EventHorizon,
     blazeAdsManager: BlazeAdsManager,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -105,6 +117,8 @@ class PlayerViewModel @Inject constructor(
         val isPlaying: Boolean = false,
         val isPrepared: Boolean = false,
         val episode: BaseEpisode? = null,
+        val streamVideoState: StreamVideoState = StreamVideoState.NotVideo,
+        val videoRenderingEnabled: Boolean = true,
         val podcastTitle: String? = null,
         val isPlaybackRemote: Boolean = false,
         val chapters: Chapters = Chapters(),
@@ -124,7 +138,12 @@ class PlayerViewModel @Inject constructor(
         val podcastUuid = (episode as? PodcastEpisode)?.podcastUuid
         val episodeUuid = episode?.uuid.orEmpty()
         val episodeTitle = episode?.title.orEmpty()
-        val isVideo = episode?.isVideo == true
+
+        val isVideo = videoRenderingEnabled && when (streamVideoState) {
+            StreamVideoState.HasVideo -> true
+            StreamVideoState.Unknown, StreamVideoState.AudioOnly -> false
+            StreamVideoState.NotVideo -> episode?.isVideo == true
+        }
         val isStarred = (episode as? PodcastEpisode)?.isStarred == true
         val isUserEpisode = episode is UserEpisode
 
@@ -166,6 +185,7 @@ class PlayerViewModel @Inject constructor(
         var upNextEpisodes: List<BaseEpisode>,
         var upNextSummary: UpNextSummary,
     )
+
     private val source = SourceView.PLAYER
 
     var upNextExpanded = settings.getBooleanForKey(Settings.PREFERENCE_UPNEXT_EXPANDED, true)
@@ -175,14 +195,21 @@ class PlayerViewModel @Inject constructor(
 
     private val playbackStateObservable: Observable<PlaybackState> = playbackManager.playbackStateRelay
         .observeOn(Schedulers.io())
-    val upNextStateObservable: Observable<UpNextQueue.State> = playbackManager.upNextQueue.getChangesObservableWithLiveCurrentEpisode(episodeManager, podcastManager)
-        .observeOn(Schedulers.io())
+    val upNextStateObservable: Observable<UpNextQueue.State> =
+        playbackManager.upNextQueue.getChangesObservableWithLiveCurrentEpisode(episodeManager, podcastManager)
+            .observeOn(Schedulers.io())
 
     private val upNextExpandedObservable = BehaviorRelay.create<Boolean>().apply { accept(upNextExpanded) }
     private val chaptersExpandedObservable = BehaviorRelay.create<Boolean>().apply { accept(chaptersExpanded) }
 
-    val listDataRx = Observables.combineLatest(
+    private val upNextAndStreamVideoObservable = Observables.combineLatest(
         upNextStateObservable,
+        playbackManager.videoRenderingEnabled.asObservable(coroutineContext),
+        playbackManager.streamVideoState.asObservable(coroutineContext),
+    )
+
+    val listDataRx = Observables.combineLatest(
+        upNextAndStreamVideoObservable,
         playbackStateObservable,
         settings.skipBackInSecs.flow.asObservable(coroutineContext),
         settings.skipForwardInSecs.flow.asObservable(coroutineContext),
@@ -229,7 +256,8 @@ class PlayerViewModel @Inject constructor(
             null
         }
 
-        val upNextSummary = UpNextSummary(episodeCount = episodeCount, totalTimeSecs = totalTime, episodePlaying = upNextState is UpNextQueue.State.Loaded)
+        val upNextSummary =
+            UpNextSummary(episodeCount = episodeCount, totalTimeSecs = totalTime, episodePlaying = upNextState is UpNextQueue.State.Loaded)
 
         return@map listOfNotNull(nowPlayingInfo, upNextSummary) + upNextEpisodes
     }
@@ -266,7 +294,6 @@ class PlayerViewModel @Inject constructor(
     val snackbarMessages = _snackbarMessages.asSharedFlow()
 
     private val _episodeFlow = MutableStateFlow<BaseEpisode?>(null)
-    val episodeFlow = _episodeFlow.asStateFlow()
     var episode: BaseEpisode?
         get() = _episodeFlow.value
         set(value) {
@@ -306,6 +333,9 @@ class PlayerViewModel @Inject constructor(
         get() {
             return settings.getSleepTimerCustomMins()
         }
+    val playbackNotice = playbackNoticeManager.playbackNotice
+        .stateIn(viewModelScope, started = SharingStarted.WhileSubscribed(5_000), initialValue = null)
+
     val playerFlow = playbackManager.playerFlow
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -357,7 +387,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun mergeListData(
-        upNextState: UpNextQueue.State,
+        upNextAndStreamVideo: Triple<UpNextQueue.State, Boolean, StreamVideoState>,
         playbackState: PlaybackState,
         skipBackwardInSecs: Int,
         skipForwardInSecs: Int,
@@ -367,6 +397,7 @@ class PlayerViewModel @Inject constructor(
         artworkConfiguration: ArtworkConfiguration,
         sleepTimerState: SleepTimerState,
     ): ListData {
+        val (upNextState, videoRenderingEnabled, streamVideoState) = upNextAndStreamVideo
         val podcast: Podcast? = (upNextState as? UpNextQueue.State.Loaded)?.podcast
         val episode = (upNextState as? UpNextQueue.State.Loaded)?.episode
 
@@ -393,6 +424,8 @@ class PlayerViewModel @Inject constructor(
                 isPlaying = playbackState.isPlaying,
                 isPrepared = playbackState.isPrepared,
                 episode = episode,
+                streamVideoState = streamVideoState,
+                videoRenderingEnabled = videoRenderingEnabled,
                 isPlaybackRemote = playbackManager.isPlaybackRemote(),
                 chapters = playbackState.chapters,
                 backgroundColor = playerBackground,
@@ -426,7 +459,8 @@ class PlayerViewModel @Inject constructor(
                 }
             }
         }
-        val upNextFooter = UpNextSummary(episodeCount = episodeCount, totalTimeSecs = totalTime, episodePlaying = upNextState is UpNextQueue.State.Loaded)
+        val upNextFooter =
+            UpNextSummary(episodeCount = episodeCount, totalTimeSecs = totalTime, episodePlaying = upNextState is UpNextQueue.State.Loaded)
 
         return ListData(
             podcastHeader = podcastHeader,
@@ -510,14 +544,24 @@ class PlayerViewModel @Inject constructor(
     fun markAsPlayedConfirmed(episode: BaseEpisode, shouldShuffleUpNext: Boolean = false) {
         launch {
             episodeManager.markAsPlayedBlocking(episode, playbackManager, podcastManager, shouldShuffleUpNext)
-            episodeAnalytics.trackEvent(AnalyticsEvent.EPISODE_MARKED_AS_PLAYED, source, episode.uuid)
+            eventHorizon.track(
+                EpisodeMarkedAsPlayedEvent(
+                    episodeUuid = episode.uuid,
+                    source = source.analyticsValue,
+                ),
+            )
         }
     }
 
     fun archiveConfirmed(episode: PodcastEpisode) {
         launch {
             episodeManager.archiveBlocking(episode, playbackManager, sync = true, shouldShuffleUpNext = settings.upNextShuffle.value)
-            episodeAnalytics.trackEvent(AnalyticsEvent.EPISODE_ARCHIVED, source, episode.uuid)
+            eventHorizon.track(
+                EpisodeArchivedEvent(
+                    episodeUuid = episode.uuid,
+                    source = source.analyticsValue,
+                ),
+            )
         }
     }
 
@@ -684,7 +728,13 @@ class PlayerViewModel @Inject constructor(
             podcast.overrideGlobalEffects = override
             saveEffects(effects, podcast)
         }
-        trackPlaybackEffectsEvent(AnalyticsEvent.PLAYBACK_EFFECT_SETTINGS_CHANGED)
+        trackPlaybackEffectsEvent { sourceView, contentType, settingType ->
+            PlaybackEffectSettingsChangedEvent(
+                source = sourceView.analyticsValue,
+                contentType = contentType,
+                settings = settingType,
+            )
+        }
     }
 
     fun clearUpNext(context: Context, upNextSource: UpNextSource): ClearUpNextDialog {
@@ -692,7 +742,7 @@ class PlayerViewModel @Inject constructor(
             source = upNextSource,
             removeNowPlaying = false,
             playbackManager = playbackManager,
-            analyticsTracker = analyticsTracker,
+            eventHorizon = eventHorizon,
             context = context,
         )
         val forceDarkTheme = settings.useDarkUpNextTheme.value && upNextSource != UpNextSource.UP_NEXT_TAB
@@ -707,14 +757,16 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun onNextChapterClick() {
-        analyticsTracker.track(AnalyticsEvent.PLAYER_NEXT_CHAPTER_TAPPED)
+        eventHorizon.track(PlayerNextChapterTappedEvent(origin = currentChapterOrigin()))
         playbackManager.skipToNextSelectedOrLastChapter()
     }
 
     fun onPreviousChapterClick() {
-        analyticsTracker.track(AnalyticsEvent.PLAYER_PREVIOUS_CHAPTER_TAPPED)
+        eventHorizon.track(PlayerPreviousChapterTappedEvent(origin = currentChapterOrigin()))
         playbackManager.skipToPreviousSelectedOrLastChapter()
     }
+
+    private fun currentChapterOrigin() = listDataLive.value?.podcastHeader?.chapters?.origin?.toChapterOriginType()
 
     fun onChapterTitleClick(chapter: Chapter) {
         viewModelScope.launch {
@@ -724,11 +776,10 @@ class PlayerViewModel @Inject constructor(
 
     fun onPodcastTitleClick(episodeUuid: String, podcastUuid: String?) {
         if (podcastUuid == null) return
-        analyticsTracker.track(
-            AnalyticsEvent.EPISODE_DETAIL_PODCAST_NAME_TAPPED,
-            mapOf(
-                ShelfViewModel.Companion.AnalyticsProp.Key.EPISODE_UUID to episodeUuid,
-                ShelfViewModel.Companion.AnalyticsProp.Key.SOURCE to EpisodeViewSource.NOW_PLAYING.value,
+        eventHorizon.track(
+            EpisodeDetailPodcastNameTappedEvent(
+                episodeUuid = episodeUuid,
+                source = EpisodeViewSource.NOW_PLAYING.analyticsValue,
             ),
         )
         viewModelScope.launch {
@@ -737,30 +788,34 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun trackPlaybackEffectsEvent(
-        event: AnalyticsEvent,
-        properties: Map<String, Any> = emptyMap(),
+        event: (SourceView, PlaybackContentType, SettingType) -> Trackable,
     ) {
-        playbackManager.trackPlaybackEffectsEvent(
-            event = event,
-            props = buildMap {
-                putAll(properties)
-                val settings = if (effectsLive.value?.podcast?.overrideGlobalEffects == true) {
-                    PlaybackEffectsSettingsTab.ThisPodcast.analyticsValue
-                } else {
-                    PlaybackEffectsSettingsTab.AllPodcasts.analyticsValue
-                }
-                put(AnalyticsProp.SETTINGS, settings)
-            },
-            sourceView = SourceView.PLAYER_PLAYBACK_EFFECTS,
-        )
+        playbackManager.trackPlaybackEvent(SourceView.PLAYER_PLAYBACK_EFFECTS) { source, contentType ->
+            val settingTab = if (effectsLive.value?.podcast?.overrideGlobalEffects == true) {
+                PlaybackEffectsSettingsTab.ThisPodcast
+            } else {
+                PlaybackEffectsSettingsTab.AllPodcasts
+            }
+            event(source, contentType, settingTab.analyticsValue)
+        }
     }
 
     fun trackAdImpression(ad: BlazeAd) {
-        analyticsTracker.trackBannerAdImpression(id = ad.id, location = ad.location.value)
+        eventHorizon.track(
+            BannerAdImpressionEvent(
+                id = ad.id,
+                location = ad.location.analyticsValue,
+            ),
+        )
     }
 
     fun trackAdTapped(ad: BlazeAd) {
-        analyticsTracker.trackBannerAdTapped(id = ad.id, location = ad.location.value)
+        eventHorizon.track(
+            BannerAdTappedEvent(
+                id = ad.id,
+                location = ad.location.analyticsValue,
+            ),
+        )
     }
 
     sealed interface NavigationState {
@@ -775,12 +830,17 @@ class PlayerViewModel @Inject constructor(
         data object ShowBatteryWarningIfAppropriate : SnackbarMessage
     }
 
-    private object AnalyticsProp {
-        const val SETTINGS = "settings"
-    }
-
-    enum class PlaybackEffectsSettingsTab(@StringRes val labelResId: Int, val analyticsValue: String) {
-        AllPodcasts(LR.string.podcasts_all, "global"),
-        ThisPodcast(LR.string.podcast_this, "local"),
+    enum class PlaybackEffectsSettingsTab(
+        @StringRes val labelResId: Int,
+        val analyticsValue: SettingType,
+    ) {
+        AllPodcasts(
+            labelResId = LR.string.podcasts_all,
+            analyticsValue = SettingType.Global,
+        ),
+        ThisPodcast(
+            labelResId = LR.string.podcast_this,
+            analyticsValue = SettingType.Local,
+        ),
     }
 }

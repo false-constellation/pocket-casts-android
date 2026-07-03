@@ -95,11 +95,20 @@ class PackageValidator(context: Context, @XmlRes xmlResId: Int) {
 
         // Build the caller info for the rest of the checks here.
         val callerPackageInfo = buildCallerInfo(callingPackage)
-            ?: throw IllegalStateException("Caller wasn't found in the system?")
+        if (callerPackageInfo == null) {
+            Timber.w("PackageValidator: package $callingPackage not found in the system. Treating as unknown caller.")
+            callerChecked[callingPackage] = Pair(callingUid, false)
+            return false
+        }
 
-        // Verify that things aren't ... broken. (This test should always pass.)
+        // Verify that the UID from PackageManager matches the Binder caller UID.
+        // This can legitimately fail for cross-profile controllers (work profile,
+        // Secure Folder) where getPackageInfo() returns the primary-user UID but the
+        // Binder caller has a different user-offset UID.
         if (callerPackageInfo.uid != callingUid) {
-            throw IllegalStateException("Caller's package UID doesn't match caller's actual UID?")
+            Timber.w("PackageValidator: UID mismatch for $callingPackage (package=${callerPackageInfo.uid}, caller=$callingUid). Treating as unknown caller.")
+            callerChecked[callingPackage] = Pair(callingUid, false)
+            return false
         }
 
         val callerSignature = callerPackageInfo.signature
@@ -122,7 +131,7 @@ class PackageValidator(context: Context, @XmlRes xmlResId: Int) {
 
             // [MEDIA_CONTENT_CONTROL] permission is only available to system applications, and
             // while it isn't required to allow these apps to connect to a
-            // [MediaBrowserServiceCompat], allowing this ensures optimal compatability with apps
+            // [MediaBrowserServiceCompat], allowing this ensures optimal compatibility with apps
             // such as Android TV and the Google Assistant.
             callerPackageInfo.permissions.contains(MEDIA_CONTENT_CONTROL) -> true
 

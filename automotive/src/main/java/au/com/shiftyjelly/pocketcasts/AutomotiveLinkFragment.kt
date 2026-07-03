@@ -2,7 +2,6 @@ package au.com.shiftyjelly.pocketcasts
 
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
@@ -17,14 +16,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import au.com.shiftyjelly.pocketcasts.compose.AutomotiveTheme
-import au.com.shiftyjelly.pocketcasts.compose.rememberQrPainter
+import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
+import au.com.shiftyjelly.pocketcasts.qr.rememberQrPainter
 
 /**
  * Fallback for when the Automotive platform doesn't have a web browser.
@@ -36,19 +34,20 @@ class AutomotiveLinkFragment : Fragment() {
 
         fun newInstance(url: String): AutomotiveLinkFragment {
             return AutomotiveLinkFragment().apply {
-                arguments = bundleOf(ARGUMENT_URL to url)
+                arguments = Bundle().apply {
+                    putString(ARGUMENT_URL, url)
+                }
             }
         }
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        val url = arguments?.getString(ARGUMENT_URL).orEmpty()
-        return ComposeView(requireContext()).apply {
-            setContent {
-                AutomotiveTheme {
-                    LinkPage(url = url)
-                }
-            }
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ) = contentWithoutConsumedInsets {
+        AutomotiveTheme {
+            LinkPage(url = arguments?.getString(ARGUMENT_URL).orEmpty())
         }
     }
 
@@ -61,6 +60,7 @@ class AutomotiveLinkFragment : Fragment() {
             Text(
                 text = url,
                 fontSize = 32.sp,
+                lineHeight = 40.sp,
                 textAlign = TextAlign.Center,
                 color = Color.White,
             )

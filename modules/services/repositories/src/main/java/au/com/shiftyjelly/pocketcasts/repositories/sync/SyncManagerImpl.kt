@@ -2,9 +2,7 @@ package au.com.shiftyjelly.pocketcasts.repositories.sync
 
 import android.accounts.Account
 import android.content.Context
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
-import au.com.shiftyjelly.pocketcasts.analytics.Tracker
 import au.com.shiftyjelly.pocketcasts.models.entity.Bookmark
 import au.com.shiftyjelly.pocketcasts.models.entity.PlaylistEntity
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
@@ -41,11 +39,25 @@ import au.com.shiftyjelly.pocketcasts.servers.sync.UserChangeResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.bookmark.toBookmark
 import au.com.shiftyjelly.pocketcasts.servers.sync.exception.RefreshTokenExpiredException
 import au.com.shiftyjelly.pocketcasts.servers.sync.history.HistoryYearResponse
+import au.com.shiftyjelly.pocketcasts.servers.sync.login.DeviceAuthorizeResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.login.ExchangeSonosResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.login.LoginTokenResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.parseErrorResponse
+import au.com.shiftyjelly.pocketcasts.servers.sync.parseTokenErrorResponse
 import au.com.shiftyjelly.pocketcasts.utils.Optional
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.LoginIdentityType
+import com.automattic.eventhorizon.UserAccountCreatedEvent
+import com.automattic.eventhorizon.UserAccountCreationFailedEvent
+import com.automattic.eventhorizon.UserAccountDeletedEvent
+import com.automattic.eventhorizon.UserEmailUpdatedEvent
+import com.automattic.eventhorizon.UserPasswordResetEvent
+import com.automattic.eventhorizon.UserPasswordUpdatedEvent
+import com.automattic.eventhorizon.UserSignedInEvent
+import com.automattic.eventhorizon.UserSignedInWatchFromPhoneEvent
+import com.automattic.eventhorizon.UserSigninFailedEvent
+import com.automattic.eventhorizon.UserSigninWatchFromPhoneFailedEvent
 import com.jakewharton.rxrelay2.BehaviorRelay
 import com.pocketcasts.service.api.BookmarksResponse
 import com.pocketcasts.service.api.EpisodesResponse
@@ -61,6 +73,7 @@ import com.pocketcasts.service.api.SyncUpdateResponse
 import com.pocketcasts.service.api.UpNextResponse
 import com.pocketcasts.service.api.UserPlaylistListResponse
 import com.pocketcasts.service.api.UserPodcastListResponse
+import com.pocketcasts.service.api.WebFeedCreateResponse
 import com.pocketcasts.service.api.WinbackResponse
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -72,6 +85,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.rx2.rxSingle
 import retrofit2.HttpException
@@ -82,7 +96,7 @@ import com.pocketcasts.service.api.UpNextSyncRequest as UpNextSyncRequestProtobu
 
 @Singleton
 class SyncManagerImpl @Inject constructor(
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
     @ApplicationContext private val context: Context,
     private val settings: Settings,
     private val syncAccountManager: SyncAccountManager,
@@ -92,14 +106,12 @@ class SyncManagerImpl @Inject constructor(
 ) : NamedSettingsCaller,
     SyncManager {
 
-    override val isLoggedInObservable = BehaviorRelay.create<Boolean>().apply {
-        accept(isLoggedIn())
+    private companion object {
+        const val MAX_POLL_ATTEMPTS = 20
     }
 
-    companion object {
-        private const val TRACKS_KEY_SOURCE_IN_CODE = "source_in_code"
-        private const val TRACKS_KEY_SOURCE = "source"
-        private const val TRACKS_KEY_ERROR_CODE = "error_code"
+    override val isLoggedInObservable = BehaviorRelay.create<Boolean>().apply {
+        accept(isLoggedIn())
     }
 
 // Account
@@ -110,7 +122,7 @@ class SyncManagerImpl @Inject constructor(
         }
         if (result.success == true) {
             syncAccountManager.setEmail(newEmail)
-            analyticsTracker.track(AnalyticsEvent.USER_EMAIL_UPDATED)
+            eventHorizon.track(UserEmailUpdatedEvent)
         }
         return result
     }
@@ -119,14 +131,14 @@ class SyncManagerImpl @Inject constructor(
         syncServiceManager.deleteAccount(token)
     }.doOnSuccess {
         if (it.success == true) {
-            analyticsTracker.track(AnalyticsEvent.USER_ACCOUNT_DELETED)
+            eventHorizon.track(UserAccountDeletedEvent)
         }
     }
 
     override suspend fun updatePassword(newPassword: String, oldPassword: String) {
         val response = getCacheTokenOrLogin { token ->
             val response = syncServiceManager.updatePassword(newPassword, oldPassword, token)
-            analyticsTracker.track(AnalyticsEvent.USER_PASSWORD_UPDATED)
+            eventHorizon.track(UserPasswordUpdatedEvent)
             response
         }
         syncAccountManager.setRefreshToken(response.refreshToken)
@@ -206,6 +218,53 @@ class SyncManagerImpl @Inject constructor(
         syncServiceManager.login(email = email, password = password)
     }
 
+    override suspend fun deviceAuthorize(): DeviceAuthorizeResponse {
+        return syncServiceManager.deviceAuthorize()
+    }
+
+    override suspend fun loginWithDeviceAuth(
+        deviceCode: String,
+        signInSource: SignInSource,
+    ): LoginResult {
+        return try {
+            val response = syncServiceManager.deviceToken(deviceCode)
+            val email = response.email.orEmpty()
+            val uuid = response.uuid.orEmpty()
+            syncAccountManager.addAccount(
+                email = email,
+                uuid = uuid,
+                refreshToken = response.refreshToken,
+                accessToken = response.accessToken,
+                loginIdentity = LoginIdentity.PocketCasts,
+            )
+            isLoggedInObservable.accept(true)
+            settings.setFullySignedOut(false)
+            settings.setLastModified(null)
+            val result = AuthResultModel(
+                token = response.accessToken,
+                uuid = uuid,
+                isNewAccount = false,
+            )
+            trackSignIn(LoginResult.Success(result), signInSource, LoginIdentity.PocketCasts)
+            LoginResult.Success(result)
+        } catch (ex: HttpException) {
+            val tokenError = ex.parseTokenErrorResponse(moshi)
+            val result = LoginResult.Failed(
+                message = tokenError?.errorDescription ?: context.resources.getString(LR.string.error_login_failed),
+                messageId = tokenError?.error,
+            )
+            if (tokenError?.error != "authorization_pending") {
+                trackSignIn(result, signInSource, LoginIdentity.PocketCasts)
+            }
+            result
+        } catch (ex: Exception) {
+            Timber.e(ex, "Device auth failed")
+            val result = exceptionToAuthResult(exception = ex, fallbackMessage = LR.string.error_login_failed)
+            trackSignIn(result, signInSource, LoginIdentity.PocketCasts)
+            result
+        }
+    }
+
     private suspend fun handleLogin(
         signInSource: SignInSource,
         loginIdentity: LoginIdentity,
@@ -225,7 +284,11 @@ class SyncManagerImpl @Inject constructor(
         return loginResult
     }
 
-    override suspend fun createUserWithEmailAndPassword(email: String, password: String): LoginResult {
+    override suspend fun createUserWithEmailAndPassword(
+        email: String,
+        password: String,
+        signInSource: SignInSource.UserInitiated,
+    ): LoginResult {
         val loginResult = try {
             val response = syncServiceManager.register(email = email, password = password)
             val result = handleTokenResponse(loginIdentity = LoginIdentity.PocketCasts, response = response)
@@ -234,7 +297,7 @@ class SyncManagerImpl @Inject constructor(
             Timber.e(ex, "Failed to create a Pocket Casts account")
             exceptionToAuthResult(exception = ex, fallbackMessage = LR.string.server_login_unable_to_create_account)
         }
-        trackRegister(loginResult)
+        trackRegister(loginResult, signInSource)
         return loginResult
     }
 
@@ -242,7 +305,7 @@ class SyncManagerImpl @Inject constructor(
         try {
             val response = syncServiceManager.forgotPassword(email = email)
             if (response.success) {
-                analyticsTracker.track(AnalyticsEvent.USER_PASSWORD_RESET)
+                eventHorizon.track(UserPasswordResetEvent)
                 onSuccess()
             } else {
                 onError(response.message)
@@ -387,6 +450,22 @@ class SyncManagerImpl @Inject constructor(
         syncServiceManager.getStarredEpisodes(token)
     }
 
+    override suspend fun createWebFeedPodcast(url: String): WebFeedCreateResponse {
+        var response = getCacheTokenOrLogin { token ->
+            syncServiceManager.createWebFeedPodcast(token = token, url = url)
+        }
+        var pollCount = 0
+        while (response.hasPollUuid() && pollCount < MAX_POLL_ATTEMPTS) {
+            delay((pollCount + 1) * 1_000L)
+            val pollUuid = response.pollUuid
+            response = getCacheTokenOrLogin { token ->
+                syncServiceManager.pollWebFeedPodcast(token = token, pollUuid = pollUuid, url = url)
+            }
+            pollCount++
+        }
+        return response
+    }
+
     // Rating
 
     override suspend fun addPodcastRating(podcastUuid: String, rate: Int): PodcastRatingResponse = getCacheTokenOrLogin { token ->
@@ -488,80 +567,73 @@ class SyncManagerImpl @Inject constructor(
         signInSource: SignInSource,
         loginIdentity: LoginIdentity,
     ) {
-        val source = when (loginIdentity) {
-            LoginIdentity.Google -> "google"
-            LoginIdentity.PocketCasts -> "password"
-        }
-        when (loginResult) {
+        val event = when (loginResult) {
             is LoginResult.Success -> {
                 when (signInSource) {
-                    SignInSource.WatchPhoneSync ->
-                        analyticsTracker.track(AnalyticsEvent.USER_SIGNED_IN_WATCH_FROM_PHONE)
+                    SignInSource.WatchPhoneSync -> {
+                        UserSignedInWatchFromPhoneEvent
+                    }
 
                     is SignInSource.UserInitiated -> {
-                        analyticsTracker.track(
-                            event = if (loginResult.result.isNewAccount) {
-                                AnalyticsEvent.USER_ACCOUNT_CREATED
-                            } else {
-                                AnalyticsEvent.USER_SIGNED_IN
-                            },
-                            properties = mapOf(
-                                TRACKS_KEY_SOURCE to source,
-                                TRACKS_KEY_SOURCE_IN_CODE to signInSource.analyticsValue,
-                            ),
-                        )
                         if (loginResult.result.isNewAccount) {
                             notificationManager.updateUserFeatureInteraction(OnboardingNotificationType.Sync)
+                            UserAccountCreatedEvent(
+                                source = loginIdentity.analyticsValue,
+                                sourceInCode = signInSource.analyticsValue,
+                            )
+                        } else {
+                            UserSignedInEvent(
+                                source = loginIdentity.analyticsValue,
+                                sourceInCode = signInSource.analyticsValue,
+                            )
                         }
                     }
                 }
             }
 
             is LoginResult.Failed -> {
-                val errorCodeValue = loginResult.messageId ?: Tracker.INVALID_OR_NULL_VALUE
+                val errorCodeValue = loginResult.messageId ?: AnalyticsTracker.INVALID_OR_NULL_VALUE
                 when (signInSource) {
-                    SignInSource.WatchPhoneSync ->
-                        analyticsTracker.track(
-                            AnalyticsEvent.USER_SIGNIN_WATCH_FROM_PHONE_FAILED,
-                            mapOf(
-                                TRACKS_KEY_ERROR_CODE to errorCodeValue,
-                            ),
+                    SignInSource.WatchPhoneSync -> {
+                        UserSigninWatchFromPhoneFailedEvent(
+                            errorCode = errorCodeValue,
                         )
+                    }
 
-                    is SignInSource.UserInitiated ->
-                        analyticsTracker.track(
-                            AnalyticsEvent.USER_SIGNIN_FAILED,
-                            mapOf(
-                                TRACKS_KEY_SOURCE to source,
-                                TRACKS_KEY_SOURCE_IN_CODE to signInSource.analyticsValue,
-                                TRACKS_KEY_ERROR_CODE to errorCodeValue,
-                            ),
+                    is SignInSource.UserInitiated -> {
+                        UserSigninFailedEvent(
+                            source = loginIdentity.analyticsValue,
+                            sourceInCode = signInSource.analyticsValue,
+                            errorCode = errorCodeValue,
                         )
+                    }
                 }
             }
         }
+        eventHorizon.track(event)
     }
 
-    private suspend fun trackRegister(loginResult: LoginResult) {
-        when (loginResult) {
+    private suspend fun trackRegister(
+        loginResult: LoginResult,
+        signInSource: SignInSource.UserInitiated,
+    ) {
+        val event = when (loginResult) {
             is LoginResult.Success -> {
-                analyticsTracker.track(
-                    AnalyticsEvent.USER_ACCOUNT_CREATED,
-                    mapOf(TRACKS_KEY_SOURCE to "password"), // This method is only used when creating an account with a password
-                )
                 notificationManager.updateUserFeatureInteraction(OnboardingNotificationType.Sync)
+                UserAccountCreatedEvent(
+                    source = LoginIdentityType.Password,
+                    sourceInCode = signInSource.analyticsValue,
+                )
             }
 
             is LoginResult.Failed -> {
-                val errorCodeValue = loginResult.messageId ?: Tracker.INVALID_OR_NULL_VALUE
-                analyticsTracker.track(
-                    AnalyticsEvent.USER_ACCOUNT_CREATION_FAILED,
-                    mapOf(
-                        TRACKS_KEY_ERROR_CODE to errorCodeValue,
-                    ),
+                val errorCodeValue = loginResult.messageId ?: AnalyticsTracker.INVALID_OR_NULL_VALUE
+                UserAccountCreationFailedEvent(
+                    errorCode = errorCodeValue,
                 )
             }
         }
+        eventHorizon.track(event)
     }
 
     private suspend fun downloadTokens(
@@ -643,11 +715,10 @@ class SyncManagerImpl @Inject constructor(
     }
 
     private fun handleTokenResponse(loginIdentity: LoginIdentity, response: LoginTokenResponse): AuthResultModel {
-        val email = response.email
-        LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Signed in successfully to $email")
+        LogBuffer.i(LogBuffer.TAG_BACKGROUND_TASKS, "Signed in successfully")
         // Store details in android account manager
         syncAccountManager.addAccount(
-            email = email,
+            email = response.email,
             uuid = response.uuid,
             refreshToken = response.refreshToken,
             accessToken = response.accessToken,

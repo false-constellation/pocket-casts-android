@@ -1,21 +1,143 @@
+8.16
+-----
+
+8.15
+-----
+*   New Features
+    *   Up Next sort by duration
+        ([#5399](https://github.com/Automattic/pocket-casts-android/pull/5399))
+
+8.15
+-----
+*   Bug Fixes
+    *   Fix crash when scrolling to the top of a long Up Next queue
+        ([#5320](https://github.com/Automattic/pocket-casts-android/pull/5320))
+    *   Improve handling of search results where the podcast title is missing
+        ([#5451](https://github.com/Automattic/pocket-casts-android/pull/5451))
+    *   Wear OS performance improvements
+        ([#5446](https://github.com/Automattic/pocket-casts-android/pull/5446))
+    *   Improved Automotive sign up screen
+        ([#5487](https://github.com/Automattic/pocket-casts-android/pull/5487))
+    *   Fix broken Login with Phone flow on Wear OS
+        ([#5492](https://github.com/Automattic/pocket-casts-android/pull/5492))
+    *   Fix overlapping text issue on Automotive after orientation change
+        ([#5477](https://github.com/Automattic/pocket-casts-android/pull/5477))
+    *   Fix link screen's text overlap on Automotive
+        ([#5475](https://github.com/Automattic/pocket-casts-android/pull/5475))
+*   Updates
+    *   Reset player after playback finished on Automotive
+        ([#5488](https://github.com/Automattic/pocket-casts-android/pull/5488))
+
+8.14
+-----
+
+*   New Features
+    *   Synced episode transcripts
+        ([#5324](https://github.com/Automattic/pocket-casts-android/pull/5324))
+    *   Add the explicit badge to the Discover section
+        ([#5370](https://github.com/Automattic/pocket-casts-android/pull/5370))
+*   Bug Fixes
+    *   Fix Profile settings gear being unreachable in landscape
+        ([#5371](https://github.com/Automattic/pocket-casts-android/pull/5371))
+    *   Fix missing episode dates and durations in Android Auto and Wear OS
+        ([#5388](https://github.com/Automattic/pocket-casts-android/pull/5388))
+
+8.13
+-----
+*   New Features
+    *   Show episode summaries where possible
+        ([#5276](https://github.com/Automattic/pocket-casts-android/pull/5276))
+    *   Show episode summary on fullscreen player
+        ([#5278](https://github.com/Automattic/pocket-casts-android/pull/5278))
+    *   Use generated chapters when author didn't provide them
+        ([#5277](https://github.com/Automattic/pocket-casts-android/pull/5277))
+    *   Add an explicit podcast badge to search results
+        ([#5351](https://github.com/Automattic/pocket-casts-android/pull/5351)) 
+
+8.12
+-----
+*   Bug Fixes
+    *   Restore episode duration after download for feeds without an RSS length attribute
+        ([#5258](https://github.com/Automattic/pocket-casts-android/pull/5258))
+
+8.11
+-----
+*   New Features
+    *   Added explicit indicator to podcast page
+        ([#5243](https://github.com/Automattic/pocket-casts-android/pull/5243))
+*   Updates
+    *   Make sure archived episode status is preserved across sync
+        ([#5227](https://github.com/Automattic/pocket-casts-android/pull/5227))
+    *   Display dedicated error message for retryable playback errors
+        ([#5244](https://github.com/Automattic/pocket-casts-android/pull/5244))
+
+8.10
+-----
+*   Updates
+    *   Make sure users with new accounts land on the Podcasts tab when they followed some recommended podcasts
+        ([#5197](https://github.com/Automattic/pocket-casts-android/pull/5197))
+*   Bug Fixes
+    *   Fix active episode not syncing its playback position
+        ([#5213](https://github.com/Automattic/pocket-casts-android/pull/5213))
+
+8.9
+-----
+*   New Features
+    *   Display playback errors on bottom bar
+        ([#5188](https://github.com/Automattic/pocket-casts-android/pull/5188))
+*   Updates
+    *   Show progress while mini player is buffering
+        ([#5165](https://github.com/Automattic/pocket-casts-android/pull/5165))
+    *   Enhance error handling around sharing a downloaded episode
+        ([#5168](https://github.com/Automattic/pocket-casts-android/pull/5168))
+*   Bug Fixes
+    *   Fix crash with stale experiment cache
+        ([#5196](https://github.com/Automattic/pocket-casts-android/pull/5196))
+
+8.8
+-----
+*   Updates
+    *   Improve detection of generated transcripts.
+        ([#5097](https://github.com/Automattic/pocket-casts-android/pull/5097))
+    *   Add a setting to control if auto downloads should wait for enough internal storage.
+        ([#5163](https://github.com/Automattic/pocket-casts-android/pull/5163))
+*   Bug Fixes
+    *   Fix multi-selection counter indicator showing wrong count.
+        ([#5127](https://github.com/Automattic/pocket-casts-android/pull/5127))
+
 8.7
 -----
 *   New Features
     *   Support predictive back navigation
         ([#5014](https://github.com/Automattic/pocket-casts-android/pull/5014))
+    *   Show offline indicator next to time on wear
+        ([#5036](https://github.com/Automattic/pocket-casts-android/pull/5036))
+    *   Add pull to refresh on wear main screen
+        ([#5037](https://github.com/Automattic/pocket-casts-android/pull/5037))
 *   Updates
     *   Improve the design of podcasts missing artwork on the podcasts tab
         ([#4976](https://github.com/Automattic/pocket-casts-android/pull/4976))
     *   This release includes a rewrite of the download system, making downloads more reliable and surfacing issues with additional details; if you manually queued any downloads before this update and they did not complete, you will need to queue them again. Auto downloads will resume as usual after you refresh the app from the Profile page or when the app refreshes automatically.
         ([#5017](https://github.com/Automattic/pocket-casts-android/pull/5017))
+    *   Retry playing streamed episodes in case of failures.
+        ([#5060](https://github.com/Automattic/pocket-casts-android/pull/5060))
 *   Bug Fixes
     *   Respect global auto download setting
         ([#5013](https://github.com/Automattic/pocket-casts-android/pull/5013))
     *   Fix user file status not updating
         ([#4998](https://github.com/Automattic/pocket-casts-android/pull/4998))
+    *   Prevent category duplication in the Discover section
+        ([#5064](https://github.com/Automattic/pocket-casts-android/pull/5064))
+    *   Skip metered network data warnings during Android Auto and Android Automotive playback to prevent interruptions while driving, as the option explains
+        ([#5047](https://github.com/Automattic/pocket-casts-android/pull/5047))
+    *   Fix onboarding page status bar icon color
+        ([#5073](https://github.com/Automattic/pocket-casts-android/pull/5073))
 
 8.6
 -----
+*   Updates
+    *   Move playlist toolbar action to be in the overflow menu by default
+        ([#5020](https://github.com/Automattic/pocket-casts-android/pull/5020))
 *   Bug Fixes
     *   Fix up next queue episode ordering on the large widget
         ([#4957](https://github.com/Automattic/pocket-casts-android/pull/4957))

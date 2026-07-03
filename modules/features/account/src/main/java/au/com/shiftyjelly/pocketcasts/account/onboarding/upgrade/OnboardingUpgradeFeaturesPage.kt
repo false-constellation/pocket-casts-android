@@ -1,8 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade
 
 import androidx.activity.SystemBarStyle
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -35,7 +33,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.pager.PageSize
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Card
@@ -61,7 +58,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -76,9 +72,12 @@ import au.com.shiftyjelly.pocketcasts.account.onboarding.components.UpgradeFeatu
 import au.com.shiftyjelly.pocketcasts.account.onboarding.upgrade.OnboardingUpgradeHelper.UpgradeRowButton
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeFeaturesState
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.OnboardingUpgradeFeaturesViewModel
+import au.com.shiftyjelly.pocketcasts.analytics.experiments.TrialCtaCopyTreatment
 import au.com.shiftyjelly.pocketcasts.compose.CallOnce
 import au.com.shiftyjelly.pocketcasts.compose.bars.NavigationIconButton
 import au.com.shiftyjelly.pocketcasts.compose.bars.SystemBarsStyles
+import au.com.shiftyjelly.pocketcasts.compose.bars.custom
+import au.com.shiftyjelly.pocketcasts.compose.bars.transparent
 import au.com.shiftyjelly.pocketcasts.compose.components.AutoResizeText
 import au.com.shiftyjelly.pocketcasts.compose.components.HorizontalPagerWrapper
 import au.com.shiftyjelly.pocketcasts.compose.components.NoContentBanner
@@ -93,8 +92,6 @@ import au.com.shiftyjelly.pocketcasts.payment.SubscriptionTier
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingFlow
 import au.com.shiftyjelly.pocketcasts.settings.onboarding.OnboardingUpgradeSource
 import au.com.shiftyjelly.pocketcasts.utils.extensions.pxToDp
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
@@ -128,45 +125,34 @@ internal fun OnboardingUpgradeFeaturesPage(
         viewModel.onShown(flow, source)
     }
 
-    val scrollState = rememberScrollState()
-    SetStatusBarBackground(scrollState, onUpdateSystemBars)
+    val pocketCastsTheme = MaterialTheme.theme
+    LaunchedEffect(onUpdateSystemBars) {
+        val statusBar = SystemBarStyle.custom(Color.Transparent, pocketCastsTheme.isDark)
+        val navigationBar = SystemBarStyle.transparent { pocketCastsTheme.isDark }
+        onUpdateSystemBars(SystemBarsStyles(statusBar, navigationBar))
+    }
 
     when (state) {
         is OnboardingUpgradeFeaturesState.Loading -> Unit
 
         // Do Nothing
         is OnboardingUpgradeFeaturesState.Loaded -> {
-            if (FeatureFlag.isEnabled(Feature.NEW_ONBOARDING_UPGRADE)) {
-                OnboardingUpgradeScreen(
-                    onClosePress = {
-                        if (source == OnboardingUpgradeSource.RECOMMENDATIONS) {
-                            onNotNowPress()
-                        } else {
-                            onBackPress()
-                        }
-                    },
-                    state = state,
-                    source = source,
-                    onChangeSelectedPlan = { viewModel.changeBillingCycle(it.billingCycle, source) },
-                    onSubscribePress = { onClickSubscribe(false) },
-                    onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed(source) },
-                    onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed(source) },
-                    onClickSeeAllFeatures = { viewModel.onReportSeeAllFeaturesPressed(it, source) },
-                )
-            } else {
-                UpgradeLayout(
-                    state = state,
-                    source = source,
-                    scrollState = scrollState,
-                    onBackPress = onBackPress,
-                    onNotNowPress = onNotNowPress,
-                    onChangeBillingCycle = { viewModel.changeBillingCycle(it) },
-                    onChangeSubscriptionTier = { viewModel.changeSubscriptionTier(it) },
-                    onClickSubscribe = { onClickSubscribe(false) },
-                    onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed(source) },
-                    onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed(source) },
-                )
-            }
+            OnboardingUpgradeScreen(
+                onClosePress = {
+                    if (source == OnboardingUpgradeSource.RECOMMENDATIONS) {
+                        onNotNowPress()
+                    } else {
+                        onBackPress()
+                    }
+                },
+                state = state,
+                source = source,
+                onChangeSelectedPlan = { viewModel.changeBillingCycle(it.billingCycle, source) },
+                onSubscribePress = { onClickSubscribe(false) },
+                onClickPrivacyPolicy = { viewModel.onPrivacyPolicyPressed(source) },
+                onClickTermsAndConditions = { viewModel.onTermsAndConditionsPressed(source) },
+                onClickSeeAllFeatures = { viewModel.onReportSeeAllFeaturesPressed(source) },
+            )
         }
 
         is OnboardingUpgradeFeaturesState.NoSubscriptions -> {
@@ -303,6 +289,7 @@ private fun UpgradeLayout(
 
         UpgradeButton(
             selectedPlan = state.selectedPlan,
+            trialCtaCopyTreatment = state.trialCtaCopyTreatment,
             upFocusRequester = focusPager,
             onClickSubscribe = onClickSubscribe,
         )
@@ -500,6 +487,7 @@ internal fun UpgradeButton(
     selectedPlan: OnboardingSubscriptionPlan,
     onClickSubscribe: () -> Unit,
     upFocusRequester: FocusRequester,
+    trialCtaCopyTreatment: TrialCtaCopyTreatment? = null,
 ) {
     Box(
         contentAlignment = Alignment.BottomCenter,
@@ -514,7 +502,7 @@ internal fun UpgradeButton(
     ) {
         Column {
             UpgradeRowButton(
-                primaryText = selectedPlan.ctaButtonText(isRenewingSubscription = false),
+                primaryText = selectedPlan.ctaButtonText(isRenewingSubscription = false, trialCtaCopyTreatment = trialCtaCopyTreatment),
                 backgroundColor = selectedPlan.ctaButtonBackgroundColor,
                 textColor = selectedPlan.ctaButtonTextColor,
                 fontWeight = FontWeight.W500,
@@ -528,32 +516,6 @@ internal fun UpgradeButton(
                 modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars),
             )
         }
-    }
-}
-
-@Composable
-private fun SetStatusBarBackground(
-    scrollState: ScrollState,
-    onUpdateSystemBars: (SystemBarsStyles) -> Unit,
-) {
-    val hasScrolled = scrollState.value > 0
-
-    val scrimAlpha: Float by animateFloatAsState(
-        targetValue = if (hasScrolled) 0.6f else 0f,
-        animationSpec = tween(durationMillis = 400),
-        label = "scrimAlpha",
-    )
-
-    val statusBarBackground = if (scrimAlpha > 0) {
-        OnboardingUpgradeHelper.backgroundColor.copy(alpha = scrimAlpha).toArgb()
-    } else {
-        Color.Transparent.toArgb()
-    }
-
-    LaunchedEffect(statusBarBackground, onUpdateSystemBars) {
-        val statusBar = SystemBarStyle.dark(statusBarBackground)
-        val navigationBar = SystemBarStyle.dark(Color.Transparent.toArgb())
-        onUpdateSystemBars(SystemBarsStyles(statusBar, navigationBar))
     }
 }
 

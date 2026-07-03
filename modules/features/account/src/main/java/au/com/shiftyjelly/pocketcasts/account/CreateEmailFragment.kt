@@ -1,10 +1,13 @@
 package au.com.shiftyjelly.pocketcasts.account
 
+import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.findNavController
 import au.com.shiftyjelly.pocketcasts.account.databinding.FragmentCreateEmailBinding
@@ -12,8 +15,6 @@ import au.com.shiftyjelly.pocketcasts.account.viewmodel.CreateAccountError
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.CreateAccountState
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.CreateAccountViewModel
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.SubscriptionType
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getThemeColor
 import au.com.shiftyjelly.pocketcasts.ui.extensions.getTintedDrawable
 import au.com.shiftyjelly.pocketcasts.utils.extensions.dpToPx
@@ -21,6 +22,8 @@ import au.com.shiftyjelly.pocketcasts.views.extensions.addOnTextChanged
 import au.com.shiftyjelly.pocketcasts.views.extensions.showKeyboard
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import au.com.shiftyjelly.pocketcasts.views.helper.UiUtil
+import com.automattic.eventhorizon.CreateAccountNextButtonTappedEvent
+import com.automattic.eventhorizon.EventHorizon
 import com.google.android.material.textfield.TextInputEditText
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -30,7 +33,7 @@ import au.com.shiftyjelly.pocketcasts.ui.R as UR
 
 @AndroidEntryPoint
 class CreateEmailFragment : BaseFragment() {
-    @Inject lateinit var analyticsTracker: AnalyticsTracker
+    @Inject lateinit var eventHorizon: EventHorizon
 
     private val viewModel: CreateAccountViewModel by activityViewModels()
     private var currentEditText: TextInputEditText? = null
@@ -67,6 +70,9 @@ class CreateEmailFragment : BaseFragment() {
 
         txtEmail.showKeyboard()
         currentEditText = txtEmail
+
+        scalePasswordToggleWithFontSize()
+        scaleProgressWithFontSize()
 
         txtEmail.setOnFocusChangeListener { _, _ ->
             currentEditText = txtEmail
@@ -128,7 +134,7 @@ class CreateEmailFragment : BaseFragment() {
             ) {
                 txtError.text = ""
                 UiUtil.hideKeyboard(v)
-                analyticsTracker.track(AnalyticsEvent.CREATE_ACCOUNT_NEXT_BUTTON_TAPPED)
+                eventHorizon.track(CreateAccountNextButtonTappedEvent)
                 viewModel.sendCreateAccount()
             }
         }
@@ -139,6 +145,30 @@ class CreateEmailFragment : BaseFragment() {
 
         val binding = binding ?: return
         UiUtil.hideKeyboard(binding.root)
+    }
+
+    private fun scalePasswordToggleWithFontSize() {
+        val binding = binding ?: return
+        val passwordLayout = binding.passwordLayout
+        val eyeDrawable = passwordLayout.endIconDrawable ?: return
+        val context = passwordLayout.context
+        val fontScale = context.resources.configuration.fontScale
+        val size = (32.dpToPx(context) * fontScale).toInt()
+        passwordLayout.endIconDrawable = LayerDrawable(arrayOf(eyeDrawable)).apply {
+            setLayerSize(0, size, size)
+            setLayerGravity(0, Gravity.CENTER)
+        }
+    }
+
+    private fun scaleProgressWithFontSize() {
+        val binding = binding ?: return
+        val progress = binding.progress
+        val fontScale = progress.context.resources.configuration.fontScale
+        val size = (24.dpToPx(progress.context) * fontScale).toInt()
+        progress.updateLayoutParams {
+            width = size
+            height = size
+        }
     }
 
     private fun updateForm(invalidEmail: Boolean, invalidPassword: Boolean) {
@@ -160,8 +190,9 @@ class CreateEmailFragment : BaseFragment() {
         val passwordColor = if (currentEditText == txtPassword) context.getThemeColor(UR.attr.primary_icon_03_active) else context.getThemeColor(UR.attr.primary_icon_03)
         val passwordDrawable = context.getTintedDrawable(IR.drawable.ic_password, passwordColor)
 
-        val iconSize = 32.dpToPx(context)
-        val tickSize = 24.dpToPx(context)
+        val fontScale = context.resources.configuration.fontScale
+        val iconSize = (32.dpToPx(context) * fontScale).toInt()
+        val tickSize = (24.dpToPx(context) * fontScale).toInt()
         emailDrawable?.setBounds(0, 0, iconSize, iconSize)
         tickDrawable?.setBounds(0, 0, tickSize, tickSize)
         passwordDrawable?.setBounds(0, 0, iconSize, iconSize)

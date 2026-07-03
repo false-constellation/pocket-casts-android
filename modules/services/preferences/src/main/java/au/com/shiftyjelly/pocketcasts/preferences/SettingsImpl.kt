@@ -89,6 +89,7 @@ class SettingsImpl @Inject constructor(
         private const val END_OF_YEAR_SHOW_MODAL_2025_KEY = "EndOfYearModalShowModal2025Key"
         private const val DONE_INITIAL_ONBOARDING_KEY = "CompletedOnboardingKey"
         private const val PROCESSED_SIGNOUT_KEY = "ProcessedSignout"
+        private const val NEEDS_LOGIN_PROMPT_AFTER_RESTORE_KEY = "NeedsLoginPromptAfterRestore"
     }
 
     private var languageCode: String? = null
@@ -183,6 +184,18 @@ class SettingsImpl @Inject constructor(
     override val freeGiftAcknowledged = UserSetting.BoolPref(
         sharedPrefKey = "freeGiftAck",
         defaultValue = false,
+        sharedPrefs = sharedPreferences,
+    )
+
+    override val liveAnalyticsUrl = UserSetting.StringPref(
+        sharedPrefKey = "liveAnalyticsUrl",
+        defaultValue = "",
+        sharedPrefs = sharedPreferences,
+    )
+
+    override val collectListeningStats = UserSetting.BoolPref(
+        sharedPrefKey = "collectListeningStats",
+        defaultValue = true,
         sharedPrefs = sharedPreferences,
     )
 
@@ -501,6 +514,14 @@ class SettingsImpl @Inject constructor(
         setString("deviceUuid", getUniqueDeviceId())
     }
 
+    override fun setNeedsLoginPromptAfterRestore(value: Boolean) {
+        sharedPreferences.edit().putBoolean(NEEDS_LOGIN_PROMPT_AFTER_RESTORE_KEY, value).apply()
+    }
+
+    override fun getNeedsLoginPromptAfterRestore(): Boolean {
+        return sharedPreferences.getBoolean(NEEDS_LOGIN_PROMPT_AFTER_RESTORE_KEY, false)
+    }
+
     @SuppressLint("HardwareIds")
     @Suppress("DEPRECATION")
     private fun encrypt(value: String?): String {
@@ -662,6 +683,12 @@ class SettingsImpl @Inject constructor(
     override val autoDownloadOnlyWhenCharging = UserSetting.BoolPref(
         sharedPrefKey = "autoDownloadOnlyDownloadWhenCharging",
         defaultValue = false,
+        sharedPrefs = sharedPreferences,
+    )
+
+    override val autoDownloadOnlyWhenEnoughStorage = UserSetting.BoolPref(
+        sharedPrefKey = "autoDownloadOnlyWhenEnoughStorage",
+        defaultValue = true,
         sharedPrefs = sharedPreferences,
     )
 
@@ -1542,6 +1569,13 @@ class SettingsImpl @Inject constructor(
     override val showReferralsTooltip: UserSetting<Boolean> = UserSetting.BoolPref(
         sharedPrefKey = Settings.SHOW_REFERRALS_TOOLTIP,
         defaultValue = true,
+        sharedPrefs = sharedPreferences,
+    )
+
+    override val showUpNextSortDurationTooltip: UserSetting<Boolean> = UserSetting.BoolPref(
+        sharedPrefKey = Settings.SHOW_UP_NEXT_SORT_DURATION_TOOLTIP,
+        // Defaults to false so fresh installs never see the tooltip, VersionMigrationsWorker enables it for upgrading users.
+        defaultValue = false,
         sharedPrefs = sharedPreferences,
     )
 

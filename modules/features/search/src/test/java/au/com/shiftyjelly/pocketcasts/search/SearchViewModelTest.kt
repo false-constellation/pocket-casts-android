@@ -1,10 +1,11 @@
 package au.com.shiftyjelly.pocketcasts.search
 
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.testing.TestEventSink
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.repositories.searchhistory.SearchHistoryManager
 import au.com.shiftyjelly.pocketcasts.sharedtest.MainCoroutineRule
+import com.automattic.eventhorizon.EventHorizon
 import java.util.UUID
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.junit.Before
@@ -35,8 +36,12 @@ class SearchViewModelTest {
 
     @Before
     fun setUp() {
-        viewModel =
-            SearchViewModel(searchHandler, searchHistoryManager, podcastManager, AnalyticsTracker.test())
+        viewModel = SearchViewModel(
+            searchHandler = searchHandler,
+            searchHistoryManager = searchHistoryManager,
+            podcastManager = podcastManager,
+            eventHorizon = EventHorizon(TestEventSink()),
+        )
     }
 
     @Test

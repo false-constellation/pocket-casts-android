@@ -13,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
-import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
 import androidx.fragment.compose.content
 import androidx.navigation.NavType
@@ -36,6 +35,8 @@ import au.com.shiftyjelly.pocketcasts.utils.extensions.requireParcelable
 import au.com.shiftyjelly.pocketcasts.utils.extensions.requireString
 import au.com.shiftyjelly.pocketcasts.views.dialog.ConfirmationDialog
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseDialogFragment
+import com.automattic.eventhorizon.CreateFolderSourceType
+import com.automattic.eventhorizon.SuggestedFolderSourceType
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import kotlinx.parcelize.Parcelize
@@ -54,9 +55,9 @@ class SuggestedFoldersFragment : BaseDialogFragment() {
             source: Source,
         ): SuggestedFoldersFragment {
             return SuggestedFoldersFragment().apply {
-                arguments = bundleOf(
-                    ARGS_KEY to Args(source),
-                )
+                arguments = Bundle().apply {
+                    putParcelable(ARGS_KEY, Args(source))
+                }
             }
         }
     }
@@ -182,7 +183,7 @@ class SuggestedFoldersFragment : BaseDialogFragment() {
         viewModel.trackCreateCustomFolderTapped()
         if (isUserPlusOrPatreon) {
             FolderCreateFragment
-                .newInstance(source = "suggested_folders")
+                .newInstance(source = CreateFolderSourceType.SuggestedFolders)
                 .show(parentFragmentManager, "create_folder_card")
             finalizeAndDismiss()
         } else {
@@ -247,16 +248,16 @@ class SuggestedFoldersFragment : BaseDialogFragment() {
     }
 
     enum class Source(
-        val analyticsValue: String,
+        val analyticsValue: SuggestedFolderSourceType,
     ) {
         Popup(
-            analyticsValue = "popup",
+            analyticsValue = SuggestedFolderSourceType.Popup,
         ),
         ToolbarButton(
-            analyticsValue = "podcasts_list",
+            analyticsValue = SuggestedFolderSourceType.PodcastsList,
         ),
         DEEPLINK(
-            analyticsValue = "deeplink",
+            analyticsValue = SuggestedFolderSourceType.Deeplink,
         ),
     }
 

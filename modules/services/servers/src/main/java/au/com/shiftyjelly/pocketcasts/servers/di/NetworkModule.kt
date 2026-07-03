@@ -15,6 +15,9 @@ import au.com.shiftyjelly.pocketcasts.servers.OkHttpInterceptor
 import au.com.shiftyjelly.pocketcasts.servers.adapters.ExecutorEnqueueAdapterFactory
 import au.com.shiftyjelly.pocketcasts.servers.adapters.InstantAdapter
 import au.com.shiftyjelly.pocketcasts.servers.addInterceptors
+import au.com.shiftyjelly.pocketcasts.servers.analytics.AnalyticsLiveService
+import au.com.shiftyjelly.pocketcasts.servers.analytics.EventProperties
+import au.com.shiftyjelly.pocketcasts.servers.analytics.EventPropertiesJsonAdapter
 import au.com.shiftyjelly.pocketcasts.servers.bumpstats.WpComService
 import au.com.shiftyjelly.pocketcasts.servers.cdn.StaticService
 import au.com.shiftyjelly.pocketcasts.servers.list.ListDownloadService
@@ -31,6 +34,7 @@ import au.com.shiftyjelly.pocketcasts.servers.search.CombinedResult
 import au.com.shiftyjelly.pocketcasts.servers.server.ListWebService
 import au.com.shiftyjelly.pocketcasts.servers.sync.LoginIdentity
 import au.com.shiftyjelly.pocketcasts.servers.sync.SyncService
+import au.com.shiftyjelly.pocketcasts.servers.webfeeds.WebFeedsService
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.adapters.Rfc3339DateJsonAdapter
 import dagger.Lazy
@@ -101,6 +105,7 @@ class NetworkModule {
             .add(ListTypeMoshiAdapter())
             .add(DisplayStyleMoshiAdapter())
             .add(ExpandedStyleMoshiAdapter())
+            .add(EventProperties::class.java, EventPropertiesJsonAdapter())
             .build()
     }
 
@@ -361,6 +366,23 @@ class NetworkModule {
 
     @Provides
     @Singleton
+    @WebFeedsServiceRetrofit
+    fun provideWebFeedsRetrofit(
+        builder: Retrofit.Builder,
+        @Cached httpClient: Lazy<OkHttpClient>,
+    ): Retrofit {
+        return builder
+            .baseUrl(Settings.WEB_FEEDS_API_URL)
+            .callFactory { request -> httpClient.get().newCall(request) }
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideWebFeedsService(@WebFeedsServiceRetrofit retrofit: Retrofit): WebFeedsService = retrofit.create()
+
+    @Provides
+    @Singleton
     fun provideListWebService(@DiscoverServiceRetrofit retrofit: Retrofit): ListWebService = retrofit.create()
 
     @Singleton
@@ -398,6 +420,23 @@ class NetworkModule {
     @Provides
     @Singleton
     fun provideSyncService(@SyncServiceRetrofit retrofit: Retrofit): SyncService = retrofit.create()
+
+    @Provides
+    @AnalyticsLiveRetrofit
+    @Singleton
+    fun provideAnalyticsLiveRetrofit(
+        builder: Retrofit.Builder,
+        @NoCache httpClient: Lazy<OkHttpClient>,
+    ): Retrofit {
+        return builder
+            .baseUrl("http://localhost/") // Base URL is required but will be set using the annotation @Url
+            .callFactory { request -> httpClient.get().newCall(request) }
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAnalyticsLiveService(@AnalyticsLiveRetrofit retrofit: Retrofit): AnalyticsLiveService = retrofit.create()
 }
 
 @Qualifier
@@ -479,3 +518,11 @@ annotation class TranscriptRetrofit
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class SearchRetrofit
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class AnalyticsLiveRetrofit
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class WebFeedsServiceRetrofit

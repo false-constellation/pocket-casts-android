@@ -2,8 +2,6 @@ package au.com.shiftyjelly.pocketcasts.settings.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.coroutines.flow.combine
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
@@ -17,6 +15,24 @@ import au.com.shiftyjelly.pocketcasts.repositories.playlist.SmartPlaylistPreview
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.EpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.settings.AutoDownloadSettingsRoute
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.SelectPodcastsSourceType
+import com.automattic.eventhorizon.SettingsAutoDownloadClearDownloadErrorsEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadFiltersChangedEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadLimitDownloadsChangedEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadNewEpisodesToggledEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadOnFollowPodcastToggledEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadOnlyOnWifiToggledEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadOnlyWhenChargingToggledEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadOnlyWhenEnoughStorageToggledEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadPodcastsChangedEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadShownEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadStopAllDownloadsEvent
+import com.automattic.eventhorizon.SettingsAutoDownloadUpNextToggledEvent
+import com.automattic.eventhorizon.SettingsSelectPodcastsPodcastToggledEvent
+import com.automattic.eventhorizon.SettingsSelectPodcastsSelectAllTappedEvent
+import com.automattic.eventhorizon.SettingsSelectPodcastsSelectNoneTappedEvent
+import com.automattic.eventhorizon.SettingsSelectPodcastsShownEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +53,7 @@ class AutoDownloadSettingsViewModel @Inject constructor(
     private val episodeManager: EpisodeManager,
     private val downloadQueue: DownloadQueue,
     private val settings: Settings,
-    private val tracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
 ) : ViewModel() {
     private val podcastsFlow = MutableStateFlow<List<Podcast>?>(null)
     private val playlistsFlow = MutableStateFlow<List<PlaylistPreview>?>(null)
@@ -58,9 +74,10 @@ class AutoDownloadSettingsViewModel @Inject constructor(
         settings.autoDownloadLimit.flow,
         settings.autoDownloadUnmeteredOnly.flow,
         settings.autoDownloadOnlyWhenCharging.flow,
+        settings.autoDownloadOnlyWhenEnoughStorage.flow,
         podcastsFlow,
         playlistsFlow,
-        transform = { upNext, newEpisodes, onFollow, limit, unmetered, whenCharging, podcasts, playlists ->
+        transform = { upNext, newEpisodes, onFollow, limit, unmetered, whenCharging, whenStorage, podcasts, playlists ->
             if (podcasts != null && playlists != null) {
                 UiState(
                     isUpNextDownloadEnabled = upNext,
@@ -69,6 +86,7 @@ class AutoDownloadSettingsViewModel @Inject constructor(
                     autoDownloadLimit = limit,
                     isOnUnmeteredDownloadEnabled = unmetered,
                     isOnlyWhenChargingDownloadEnabled = whenCharging,
+                    isOnlyWhenEnoughStorageDownloadEnabled = whenStorage,
                     podcasts = podcasts,
                     playlists = playlists,
                 )
@@ -87,18 +105,20 @@ class AutoDownloadSettingsViewModel @Inject constructor(
     }
 
     fun changeUpNextDownload(enable: Boolean) {
-        tracker.track(
-            AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_UP_NEXT_TOGGLED,
-            mapOf("enabled" to enable),
+        eventHorizon.track(
+            SettingsAutoDownloadUpNextToggledEvent(
+                enabled = enable,
+            ),
         )
 
         settings.autoDownloadUpNext.set(enable, updateModifiedAt = true)
     }
 
     fun changeNewEpisodesDownload(enable: Boolean) {
-        tracker.track(
-            AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_NEW_EPISODES_TOGGLED,
-            mapOf("enabled" to enable),
+        eventHorizon.track(
+            SettingsAutoDownloadNewEpisodesToggledEvent(
+                enabled = enable,
+            ),
         )
 
         val newValue = if (enable) Podcast.AUTO_DOWNLOAD_NEW_EPISODES else Podcast.AUTO_DOWNLOAD_OFF
@@ -106,52 +126,62 @@ class AutoDownloadSettingsViewModel @Inject constructor(
     }
 
     fun changeOnFollowDownload(enable: Boolean) {
-        tracker.track(
-            AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_ON_FOLLOW_PODCAST_TOGGLED,
-            mapOf("enabled" to enable),
+        eventHorizon.track(
+            SettingsAutoDownloadOnFollowPodcastToggledEvent(
+                enabled = enable,
+            ),
         )
 
         settings.autoDownloadOnFollowPodcast.set(enable, updateModifiedAt = true)
     }
 
     fun changePodcastDownloadLimit(limit: AutoDownloadLimitSetting) {
-        tracker.track(
-            AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_LIMIT_DOWNLOADS_CHANGED,
-            mapOf("value" to limit.episodeCount),
+        eventHorizon.track(
+            SettingsAutoDownloadLimitDownloadsChangedEvent(
+                value = limit.episodeCount.toLong(),
+            ),
         )
 
         settings.autoDownloadLimit.set(limit, updateModifiedAt = true)
     }
 
     fun changeOnUnmeteredDownload(enable: Boolean) {
-        tracker.track(
-            AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_ONLY_ON_WIFI_TOGGLED,
-            mapOf("enabled" to enable),
+        eventHorizon.track(
+            SettingsAutoDownloadOnlyOnWifiToggledEvent(
+                enabled = enable,
+            ),
         )
 
         settings.autoDownloadUnmeteredOnly.set(enable, updateModifiedAt = true)
     }
 
     fun changeOnlyWhenChargingDownload(enable: Boolean) {
-        tracker.track(
-            AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_ONLY_WHEN_CHARGING_TOGGLED,
-            mapOf("enabled" to enable),
+        eventHorizon.track(
+            SettingsAutoDownloadOnlyWhenChargingToggledEvent(
+                enabled = enable,
+            ),
         )
 
         settings.autoDownloadOnlyWhenCharging.set(enable, updateModifiedAt = true)
     }
 
-    fun changePodcastAutoDownload(podcastUuid: String, enable: Boolean) {
-        tracker.track(
-            AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_PODCASTS_CHANGED,
-            mapOf("source" to "downloads"),
+    fun changeOnlyWhenEnoughStorage(enable: Boolean) {
+        eventHorizon.track(
+            SettingsAutoDownloadOnlyWhenEnoughStorageToggledEvent(
+                enabled = enable,
+            ),
         )
-        tracker.track(
-            AnalyticsEvent.SETTINGS_SELECT_PODCASTS_PODCAST_TOGGLED,
-            mapOf(
-                "source" to "downloads",
-                "uuid" to podcastUuid,
-                "enabled" to enable,
+
+        settings.autoDownloadOnlyWhenEnoughStorage.set(enable, updateModifiedAt = true)
+    }
+
+    fun changePodcastAutoDownload(podcastUuid: String, enable: Boolean) {
+        eventHorizon.track(SettingsAutoDownloadPodcastsChangedEvent)
+        eventHorizon.track(
+            SettingsSelectPodcastsPodcastToggledEvent(
+                uuid = podcastUuid,
+                enabled = enable,
+                source = SelectPodcastsSourceType.Downloads,
             ),
         )
 
@@ -165,21 +195,23 @@ class AutoDownloadSettingsViewModel @Inject constructor(
     }
 
     fun changeAllPodcastsAutoDownload(enable: Boolean) {
-        tracker.track(
-            if (enable) {
-                AnalyticsEvent.SETTINGS_SELECT_PODCASTS_SELECT_ALL_TAPPED
-            } else {
-                AnalyticsEvent.SETTINGS_SELECT_PODCASTS_SELECT_NONE_TAPPED
-            },
-            mapOf("source" to "downloads"),
-        )
+        val event = if (enable) {
+            SettingsSelectPodcastsSelectAllTappedEvent(
+                source = SelectPodcastsSourceType.Downloads,
+            )
+        } else {
+            SettingsSelectPodcastsSelectNoneTappedEvent(
+                source = SelectPodcastsSourceType.Downloads,
+            )
+        }
+        eventHorizon.track(event)
 
         viewModelScope.launch {
             val podcastUuids = withContext(Dispatchers.Default) {
                 updatePodcastAutoDownloadStatus(enable)
                 podcastsFlow.value?.map(Podcast::uuid)
             }
-            if (podcastUuids != null && podcastUuids.isNotEmpty()) {
+            if (!podcastUuids.isNullOrEmpty()) {
                 podcastManager.updateAutoDownload(podcastUuids, isEnabled = enable)
             }
         }
@@ -202,7 +234,7 @@ class AutoDownloadSettingsViewModel @Inject constructor(
     }
 
     fun changePlaylistAutoDownload(playlistUuid: String, enable: Boolean) {
-        tracker.track(AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_FILTERS_CHANGED)
+        eventHorizon.track(SettingsAutoDownloadFiltersChangedEvent)
 
         viewModelScope.launch {
             withContext(Dispatchers.Default) {
@@ -245,7 +277,7 @@ class AutoDownloadSettingsViewModel @Inject constructor(
     }
 
     fun stopAllDownloads() {
-        tracker.track(AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_STOP_ALL_DOWNLOADS)
+        eventHorizon.track(SettingsAutoDownloadStopAllDownloadsEvent)
         viewModelScope.launch {
             val cancelledDownloads = downloadQueue.cancelAll(SourceView.DOWNLOADS).await()
             episodeManager.disableAutoDownload(cancelledDownloads)
@@ -253,7 +285,7 @@ class AutoDownloadSettingsViewModel @Inject constructor(
     }
 
     fun clearDownloadErrors() {
-        tracker.track(AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_CLEAR_DOWNLOAD_ERRORS)
+        eventHorizon.track(SettingsAutoDownloadClearDownloadErrorsEvent)
 
         viewModelScope.launch(Dispatchers.IO) {
             podcastManager.clearAllDownloadErrorsBlocking()
@@ -263,13 +295,14 @@ class AutoDownloadSettingsViewModel @Inject constructor(
     internal fun trackPageShown(route: AutoDownloadSettingsRoute) {
         when (route) {
             AutoDownloadSettingsRoute.Home -> {
-                tracker.track(AnalyticsEvent.SETTINGS_AUTO_DOWNLOAD_SHOWN)
+                eventHorizon.track(SettingsAutoDownloadShownEvent)
             }
 
             AutoDownloadSettingsRoute.Podcasts -> {
-                tracker.track(
-                    AnalyticsEvent.SETTINGS_SELECT_PODCASTS_SHOWN,
-                    mapOf("source" to "downloads"),
+                eventHorizon.track(
+                    SettingsSelectPodcastsShownEvent(
+                        source = SelectPodcastsSourceType.Downloads,
+                    ),
                 )
             }
 
@@ -285,6 +318,7 @@ class AutoDownloadSettingsViewModel @Inject constructor(
         val autoDownloadLimit: AutoDownloadLimitSetting,
         val isOnUnmeteredDownloadEnabled: Boolean,
         val isOnlyWhenChargingDownloadEnabled: Boolean,
+        val isOnlyWhenEnoughStorageDownloadEnabled: Boolean,
         val podcasts: List<Podcast>,
         val playlists: List<PlaylistPreview>,
     )

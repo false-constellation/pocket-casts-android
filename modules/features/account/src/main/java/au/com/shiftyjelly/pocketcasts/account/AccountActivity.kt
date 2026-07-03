@@ -7,10 +7,15 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.IntentCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
+import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
@@ -19,11 +24,21 @@ import au.com.shiftyjelly.pocketcasts.account.databinding.AccountActivityBinding
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.CreateAccountState
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.CreateAccountViewModel
 import au.com.shiftyjelly.pocketcasts.account.viewmodel.SubscriptionType
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
 import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import au.com.shiftyjelly.pocketcasts.utils.Util
 import au.com.shiftyjelly.pocketcasts.views.helper.UiUtil
+import com.automattic.eventhorizon.AccountUpdatedDismissedEvent
+import com.automattic.eventhorizon.AccountUpdatedShownEvent
+import com.automattic.eventhorizon.CreateAccountDismissedLegacyEvent
+import com.automattic.eventhorizon.CreateAccountShownLegacyEvent
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.ForgotPasswordDismissedEvent
+import com.automattic.eventhorizon.ForgotPasswordShownEvent
+import com.automattic.eventhorizon.SetupAccountDismissedLegacyEvent
+import com.automattic.eventhorizon.SetupAccountShownLegacyEvent
+import com.automattic.eventhorizon.SigninDismissedEvent
+import com.automattic.eventhorizon.SigninShownEvent
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -33,26 +48,30 @@ class AccountActivity : AppCompatActivity() {
 
     @Inject lateinit var theme: Theme
 
-    @Inject lateinit var analyticsTracker: AnalyticsTracker
+    @Inject lateinit var eventHorizon: EventHorizon
+
     private val viewModel: CreateAccountViewModel by viewModels()
+
     private lateinit var binding: AccountActivityBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         theme.setupThemeForConfig(this, resources.configuration)
+        enableEdgeToEdge(navigationBarStyle = theme.getNavigationBarStyle(this))
 
         binding = AccountActivityBinding.inflate(layoutInflater)
         val view = binding.root
         setContentView(view)
-
-        onBackPressedDispatcher.addCallback(
-            this,
-            object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    handleBackPressed()
-                }
-            },
-        )
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            binding.root.updatePadding(
+                left = insets.left,
+                right = insets.right,
+                bottom = insets.bottom,
+                top = insets.top,
+            )
+            windowInsets
+        }
 
         val navController = findNavController(R.id.nav_host_fragment)
         binding.carHeader?.btnClose?.setOnClickListener {
@@ -60,6 +79,15 @@ class AccountActivity : AppCompatActivity() {
                 finish()
             }
         }
+
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    handleBackNavigation(navController)
+                }
+            },
+        )
 
         if (savedInstanceState == null) {
             val navInflater = navController.navInflater
@@ -87,7 +115,9 @@ class AccountActivity : AppCompatActivity() {
 
             val navConfiguration = AppBarConfiguration(navController.graph)
             binding.toolbar?.setupWithNavController(navController, navConfiguration)
-            binding.toolbar?.setNavigationOnClickListener { _ -> handleBackPressed() }
+            binding.toolbar?.setNavigationOnClickListener { _ ->
+                handleBackNavigation(navController)
+            }
 
             navController.addOnDestinationChangedListener { _, destination, _ ->
                 destination.trackShown()
@@ -117,61 +147,53 @@ class AccountActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleBackPressed() {
-        val currentFragment = findNavController(R.id.nav_host_fragment).currentDestination
+    private fun handleBackNavigation(navController: NavController) {
+        val currentFragment = navController.currentDestination
         currentFragment?.trackDismissed()
 
-        if (currentFragment?.id == R.id.createDoneFragment) {
-            finish()
-            return
-        }
-
         UiUtil.hideKeyboard(binding.root)
-        onBackPressedDispatcher.onBackPressed()
+        if (currentFragment?.id == R.id.createDoneFragment || !navController.popBackStack()) {
+            finish()
+        }
     }
 
     private fun NavDestination.trackShown() {
         val analyticsEvent = when (id) {
-            R.id.accountFragment -> AnalyticsEvent.SETUP_ACCOUNT_SHOWN
-            R.id.signInFragment -> AnalyticsEvent.SIGNIN_SHOWN
-            R.id.createEmailFragment -> AnalyticsEvent.CREATE_ACCOUNT_SHOWN
-            R.id.resetPasswordFragment -> AnalyticsEvent.FORGOT_PASSWORD_SHOWN
-            R.id.createDoneFragment -> AnalyticsEvent.ACCOUNT_UPDATED_SHOWN
-            else -> null
-        }
-        val properties = when (id) {
-            R.id.createDoneFragment -> {
-                val source = when (viewModel.createAccountState.value) {
+            R.id.accountFragment -> SetupAccountShownLegacyEvent
+
+            R.id.signInFragment -> SigninShownEvent
+
+            R.id.createEmailFragment -> CreateAccountShownLegacyEvent
+
+            R.id.resetPasswordFragment -> ForgotPasswordShownEvent
+
+            R.id.createDoneFragment -> AccountUpdatedShownEvent(
+                source = when (viewModel.createAccountState.value) {
                     CreateAccountState.AccountCreated -> AccountUpdatedSource.CREATE_ACCOUNT.analyticsValue
                     CreateAccountState.SubscriptionCreated -> AccountUpdatedSource.CONFIRM_PAYMENT.analyticsValue
-                    else -> null
-                }
-                source?.let { mapOf(SOURCE_KEY to source) }
-            }
-
-            R.id.accountFragment -> mapOf(SOURCE_KEY to ACCOUNT_PROP_VALUE)
+                    else -> AnalyticsTracker.INVALID_OR_NULL_VALUE
+                },
+            )
 
             else -> null
-        } ?: emptyMap()
-        analyticsEvent?.let { analyticsTracker.track(it, properties) }
+        }
+        if (analyticsEvent != null) {
+            eventHorizon.track(analyticsEvent)
+        }
     }
 
     private fun NavDestination.trackDismissed() {
         val analyticsEvent = when (id) {
-            R.id.accountFragment -> AnalyticsEvent.SETUP_ACCOUNT_DISMISSED
-            R.id.signInFragment -> AnalyticsEvent.SIGNIN_DISMISSED
-            R.id.createEmailFragment -> AnalyticsEvent.CREATE_ACCOUNT_DISMISSED
-            R.id.resetPasswordFragment -> AnalyticsEvent.FORGOT_PASSWORD_DISMISSED
-            R.id.createDoneFragment -> AnalyticsEvent.ACCOUNT_UPDATED_DISMISSED
+            R.id.accountFragment -> SetupAccountDismissedLegacyEvent
+            R.id.signInFragment -> SigninDismissedEvent
+            R.id.createEmailFragment -> CreateAccountDismissedLegacyEvent
+            R.id.resetPasswordFragment -> ForgotPasswordDismissedEvent
+            R.id.createDoneFragment -> AccountUpdatedDismissedEvent
             else -> null
         }
-
-        val properties = when (id) {
-            R.id.accountFragment -> mapOf(SOURCE_KEY to ACCOUNT_PROP_VALUE)
-            else -> emptyMap()
+        if (analyticsEvent != null) {
+            eventHorizon.track(analyticsEvent)
         }
-
-        analyticsEvent?.let { analyticsTracker.track(it, properties) }
     }
 
     companion object {
@@ -180,9 +202,6 @@ class AccountActivity : AppCompatActivity() {
             val intent = Intent(context, AccountActivity::class.java)
             intent.putExtra(SKIP_FIRST, true)
             return intent
-        }
-        fun isNewUpgradeInstance(intent: Intent): Boolean {
-            return intent.getBooleanExtra(SKIP_FIRST, false)
         }
 
         const val AUTO_SELECT_PLUS = "account_activity.autoSelectPlus"
@@ -194,9 +213,6 @@ class AccountActivity : AppCompatActivity() {
         fun isNewAutoSelectPlusInstance(intent: Intent): Boolean {
             return intent.getBooleanExtra(AUTO_SELECT_PLUS, false)
         }
-        private const val PRODUCT_KEY = "product"
-        private const val SOURCE_KEY = "source"
-        private const val ACCOUNT_PROP_VALUE = "account"
         private const val IS_PROMO_CODE = "account_activity.is_promo_code"
         const val PROMO_CODE_VALUE = "account_activity.promo_code"
         const val PROMO_CODE_RETURN_DESCRIPTION = "account_activity.promo_code_return_description"

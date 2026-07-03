@@ -5,12 +5,11 @@ import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.Color
+import androidx.core.text.parseAsHtml
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.palette.graphics.Palette
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.EpisodeAnalytics
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.coroutines.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.coroutines.flow.combine
@@ -21,6 +20,7 @@ import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodeDownloadStatus
 import au.com.shiftyjelly.pocketcasts.models.type.EpisodePlayingStatus
 import au.com.shiftyjelly.pocketcasts.profile.cloud.AddFileActivity
+import au.com.shiftyjelly.pocketcasts.repositories.di.DefaultDispatcher
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadProgressCache
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadQueue
 import au.com.shiftyjelly.pocketcasts.repositories.download.DownloadType
@@ -42,11 +42,17 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
+import com.automattic.eventhorizon.EpisodeArchivedEvent
+import com.automattic.eventhorizon.EpisodeMarkedAsPlayedEvent
+import com.automattic.eventhorizon.EpisodeMarkedAsUnplayedEvent
+import com.automattic.eventhorizon.EpisodeUnarchivedEvent
+import com.automattic.eventhorizon.EventHorizon
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,11 +66,13 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx2.asFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
@@ -76,7 +84,7 @@ class EpisodeViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val downloadQueue: DownloadQueue,
     private val downloadProgressCache: DownloadProgressCache,
-    private val episodeAnalytics: EpisodeAnalytics,
+    private val eventHorizon: EventHorizon,
     private val episodeManager: EpisodeManager,
     private val playbackManager: PlaybackManager,
     private val podcastManager: PodcastManager,
@@ -86,6 +94,7 @@ class EpisodeViewModel @Inject constructor(
     @ApplicationScope private val applicationScope: CoroutineScope,
     private val audioOutputSelectorHelper: AudioOutputSelectorHelper,
     private val userEpisodeManager: UserEpisodeManager,
+    @DefaultDispatcher private val backgroundDispatcher: CoroutineDispatcher,
 ) : AndroidViewModel(appContext as Application) {
     private var playAttempt: Job? = null
     private val sourceView = SourceView.EPISODE_DETAILS
@@ -98,7 +107,7 @@ class EpisodeViewModel @Inject constructor(
             val inUpNext: Boolean,
             val tintColor: Color?,
             val downloadProgress: Float? = null,
-            val showNotesState: ShowNotesState,
+            val showNotesText: String?,
             val errorData: ErrorData?,
         ) : State() {
             data class ErrorData(
@@ -157,7 +166,7 @@ class EpisodeViewModel @Inject constructor(
             .map { progress -> (progress?.percentage?.toFloat() ?: 0f) / 100 }
             .distinctUntilChanged()
 
-        val showNotesFlow = episodeFlow
+        val showNotesTextFlow = episodeFlow
             .flatMapLatest {
                 when (it) {
                     is PodcastEpisode -> showNotesManager.loadShowNotesFlow(
@@ -169,6 +178,9 @@ class EpisodeViewModel @Inject constructor(
                     is UserEpisode -> flowOf(ShowNotesState.NotFound)
                 }
             }
+            // Parse the show notes HTML off the main thread, and only when the notes change, to avoid blocking the UI.
+            .map { showNotesState -> parseShowNotes(showNotesState) }
+            .flowOn(backgroundDispatcher)
 
         stateFlow = combine(
             episodeFlow,
@@ -177,8 +189,8 @@ class EpisodeViewModel @Inject constructor(
             isPlayingEpisodeFlow.onStart { emit(false) },
             inUpNextFlow,
             downloadProgressFlow,
-            showNotesFlow,
-        ) { episode, podcast, isPlayingEpisode, upNext, downloadProgress, showNotesState ->
+            showNotesTextFlow,
+        ) { episode, podcast, isPlayingEpisode, upNext, downloadProgress, showNotesText ->
 
             State.Loaded(
                 episode = episode,
@@ -187,10 +199,14 @@ class EpisodeViewModel @Inject constructor(
                 downloadProgress = downloadProgress,
                 inUpNext = isInUpNext(upNext, episode),
                 tintColor = getTintColor(episode, podcast, theme),
-                showNotesState = showNotesState,
+                showNotesText = showNotesText,
                 errorData = getErrorData(episode),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), State.Empty)
+    }
+
+    private fun parseShowNotes(showNotesState: ShowNotesState): String? {
+        return (showNotesState as? ShowNotesState.Loaded)?.showNotes?.parseAsHtml()?.toString()
     }
 
     private fun getErrorData(episode: BaseEpisode): State.Loaded.ErrorData? {
@@ -315,7 +331,9 @@ class EpisodeViewModel @Inject constructor(
         val episode = (stateFlow.value as? State.Loaded)?.episode ?: return
         viewModelScope.launch {
             if (episode.playErrorDetails != null) {
-                episodeManager.clearPlaybackErrorBlocking(episode)
+                withContext(Dispatchers.IO) {
+                    episodeManager.clearPlaybackErrorBlocking(episode)
+                }
             }
             playbackManager.playNowSync(
                 episode = episode,
@@ -382,21 +400,20 @@ class EpisodeViewModel @Inject constructor(
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            if (episode.isArchived) {
+            val event = if (episode.isArchived) {
                 episodeManager.unarchiveBlocking(episode)
-                episodeAnalytics.trackEvent(
-                    AnalyticsEvent.EPISODE_UNARCHIVED,
-                    sourceView,
-                    episode.uuid,
+                EpisodeUnarchivedEvent(
+                    episodeUuid = episode.uuid,
+                    source = sourceView.analyticsValue,
                 )
             } else {
                 episodeManager.archiveBlocking(episode, playbackManager)
-                episodeAnalytics.trackEvent(
-                    AnalyticsEvent.EPISODE_ARCHIVED,
-                    sourceView,
-                    episode.uuid,
+                EpisodeArchivedEvent(
+                    episodeUuid = episode.uuid,
+                    source = sourceView.analyticsValue,
                 )
             }
+            eventHorizon.track(event)
         }
     }
 
@@ -418,12 +435,18 @@ class EpisodeViewModel @Inject constructor(
             (stateFlow.value as? State.Loaded)?.episode?.let { episode ->
                 val event = if (episode.playingStatus == EpisodePlayingStatus.COMPLETED) {
                     episodeManager.markAsNotPlayedBlocking(episode)
-                    AnalyticsEvent.EPISODE_MARKED_AS_UNPLAYED
+                    EpisodeMarkedAsUnplayedEvent(
+                        episodeUuid = episode.uuid,
+                        source = sourceView.analyticsValue,
+                    )
                 } else {
                     episodeManager.markAsPlayedBlocking(episode, playbackManager, podcastManager)
-                    AnalyticsEvent.EPISODE_MARKED_AS_PLAYED
+                    EpisodeMarkedAsPlayedEvent(
+                        episodeUuid = episode.uuid,
+                        source = sourceView.analyticsValue,
+                    )
                 }
-                episodeAnalytics.trackEvent(event, sourceView, episode.uuid)
+                eventHorizon.track(event)
             }
         }
     }

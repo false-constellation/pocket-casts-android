@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.player.view
 
+import android.annotation.SuppressLint
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -20,11 +21,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.compose.PlayerColors
 import au.com.shiftyjelly.pocketcasts.compose.PodcastColors
+import au.com.shiftyjelly.pocketcasts.models.entity.PodcastEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.Chapter
 import au.com.shiftyjelly.pocketcasts.player.R
 import au.com.shiftyjelly.pocketcasts.player.databinding.FragmentPlayerContainerBinding
@@ -35,14 +35,26 @@ import au.com.shiftyjelly.pocketcasts.player.view.chapters.ChaptersViewModel.Mod
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.BookmarksViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.ShelfSharedViewModel
+import au.com.shiftyjelly.pocketcasts.player.viewmodel.SummaryViewModel
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.repositories.playback.UpNextSource
 import au.com.shiftyjelly.pocketcasts.ui.helper.FragmentHostListener
 import au.com.shiftyjelly.pocketcasts.ui.helper.NavigationBarColor
 import au.com.shiftyjelly.pocketcasts.ui.helper.StatusBarIconColor
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
 import au.com.shiftyjelly.pocketcasts.views.helper.HasBackstack
 import au.com.shiftyjelly.pocketcasts.views.helper.OffsettingBottomSheetCallback
+import com.automattic.eventhorizon.ChaptersShownSource
+import com.automattic.eventhorizon.EpisodeSummarySourceType
+import com.automattic.eventhorizon.EpisodeSummaryTappedEvent
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.PlayerTabSelectedEvent
+import com.automattic.eventhorizon.PlayerTabType
+import com.automattic.eventhorizon.UpNextDismissedEvent
+import com.automattic.eventhorizon.UpNextShownEvent
+import com.automattic.eventhorizon.UpNextSourceType
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
@@ -54,7 +66,6 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import au.com.shiftyjelly.pocketcasts.images.R as IR
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
-import au.com.shiftyjelly.pocketcasts.views.R as VR
 
 @AndroidEntryPoint
 class PlayerContainerFragment :
@@ -64,10 +75,14 @@ class PlayerContainerFragment :
     lateinit var settings: Settings
 
     @Inject
-    lateinit var analyticsTracker: AnalyticsTracker
+    lateinit var eventHorizon: EventHorizon
+
     private val bookmarksViewModel: BookmarksViewModel by viewModels()
+    private val summaryViewModel: SummaryViewModel by viewModels()
 
     var upNextBottomSheetBehavior: BottomSheetBehavior<View>? = null
+
+    private var upNextExpandedSource: UpNextSource? = null
 
     private lateinit var adapter: ViewPagerAdapter
     private val viewModel: PlayerViewModel by activityViewModels()
@@ -140,10 +155,14 @@ class PlayerContainerFragment :
 
             override fun onStateChanged(bottomSheet: View, newState: Int) {
                 updateUpNextVisibility(newState != BottomSheetBehavior.STATE_COLLAPSED)
-                notifyBackstackChanged()
+                notifyBackstackChangedToHost()
 
                 if (newState == BottomSheetBehavior.STATE_EXPANDED) {
-                    analyticsTracker.track(AnalyticsEvent.UP_NEXT_SHOWN, mapOf(SOURCE_KEY to UpNextSource.NOW_PLAYING.analyticsValue))
+                    eventHorizon.track(
+                        UpNextShownEvent(
+                            source = upNextExpandedSource?.analyticsValue ?: UpNextSourceType.Unknown,
+                        ),
+                    )
 
                     activity?.let {
                         theme.updateWindowNavigationBarColor(window = it.window, navigationBarColor = NavigationBarColor.UpNext(isFullScreen = true))
@@ -152,7 +171,11 @@ class PlayerContainerFragment :
 
                     upNextFragment.onExpanded()
                 } else if (newState == BottomSheetBehavior.STATE_COLLAPSED) {
-                    analyticsTracker.track(AnalyticsEvent.UP_NEXT_DISMISSED)
+                    eventHorizon.track(
+                        UpNextDismissedEvent(
+                            source = upNextExpandedSource?.analyticsValue ?: UpNextSourceType.Unknown,
+                        ),
+                    )
 
                     (activity as? FragmentHostListener)?.updateSystemColors()
                     upNextFragment.onCollapsed()
@@ -172,27 +195,54 @@ class PlayerContainerFragment :
 
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
-                when {
+                val tab = when {
                     adapter.isPlayerTab(position) -> {
-                        if (previousPosition == INVALID_TAB_POSITION) return
-                        analyticsTracker.track(AnalyticsEvent.PLAYER_TAB_SELECTED, mapOf(TAB_KEY to "now_playing"))
+                        if (previousPosition == INVALID_TAB_POSITION) {
+                            return
+                        }
+                        PlayerTabType.NowPlaying
                     }
 
                     adapter.isNotesTab(position) -> {
-                        analyticsTracker.track(AnalyticsEvent.PLAYER_TAB_SELECTED, mapOf(TAB_KEY to "show_notes"))
+                        PlayerTabType.ShowNotes
                     }
 
                     adapter.isBookmarksTab(position) -> {
-                        analyticsTracker.track(AnalyticsEvent.PLAYER_TAB_SELECTED, mapOf(TAB_KEY to "bookmarks"))
+                        PlayerTabType.Bookmarks
                     }
 
                     adapter.isChaptersTab(position) -> {
-                        analyticsTracker.track(AnalyticsEvent.PLAYER_TAB_SELECTED, mapOf(TAB_KEY to "chapters"))
+                        if (previousPosition != INVALID_TAB_POSITION) {
+                            chaptersViewModel.trackChaptersShown(ChaptersShownSource.FullscreenPlayer)
+                        }
+                        PlayerTabType.Chapters
+                    }
+
+                    adapter.isSummaryTab(position) -> {
+                        val episode = viewModel.listDataLive.value?.podcastHeader?.episode as? PodcastEpisode
+                        if (episode != null) {
+                            eventHorizon.track(
+                                EpisodeSummaryTappedEvent(
+                                    source = EpisodeSummarySourceType.FullscreenPlayer,
+                                    episodeUuid = episode.uuid,
+                                    podcastUuid = episode.podcastUuid,
+                                ),
+                            )
+                        }
+                        null
                     }
 
                     else -> {
                         Timber.e("Invalid tab selected")
+                        null
                     }
+                }
+                tab?.let { tab ->
+                    eventHorizon.track(
+                        PlayerTabSelectedEvent(
+                            tab = tab,
+                        ),
+                    )
                 }
                 previousPosition = position
             }
@@ -207,6 +257,13 @@ class PlayerContainerFragment :
 
         viewModel.listDataLive.observe(viewLifecycleOwner) {
             adapter.updateNotes(addNotes = !it.podcastHeader.isUserEpisode)
+            val isSummaryOrChaptersEnabled =
+                FeatureFlag.isEnabled(Feature.AI_SUMMARIES) || FeatureFlag.isEnabled(Feature.GENERATED_CHAPTERS)
+            if (isSummaryOrChaptersEnabled && !it.podcastHeader.isUserEpisode) {
+                summaryViewModel.loadSummary(it.podcastHeader.episodeUuid)
+            } else {
+                summaryViewModel.clearSummary()
+            }
             val upNextCount = it.upNextEpisodes.size
             val drawableId = when {
                 upNextCount == 0 -> R.drawable.mini_player_upnext
@@ -218,8 +275,7 @@ class PlayerContainerFragment :
             binding.countText.text = if (upNextCount == 0) "" else upNextCount.coerceAtMost(Settings.UP_NEXT_BADGE_MAX_COUNT).toString()
 
             binding.upNextButton.setOnClickListener {
-                analyticsTracker.track(AnalyticsEvent.UP_NEXT_SHOWN, mapOf(SOURCE_KEY to UpNextSource.PLAYER.analyticsValue))
-                openUpNext()
+                openUpNext(UpNextSource.PLAYER)
             }
         }
 
@@ -240,12 +296,23 @@ class PlayerContainerFragment :
             }
         }
 
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                summaryViewModel.state.collect { state ->
+                    adapter.updateSummary(
+                        addSummary = state is SummaryViewModel.SummaryState.Loaded ||
+                            state is SummaryViewModel.SummaryState.Upsell,
+                    )
+                }
+            }
+        }
+
         binding.btnClosePlayer.setOnClickListener { (activity as? FragmentHostListener)?.closePlayer() }
 
         bookmarksViewModel.multiSelectHelper.isMultiSelectingLive.observe(viewLifecycleOwner) { isMultiSelecting ->
             binding.multiSelectToolbar.isVisible = isMultiSelecting
             binding.multiSelectToolbar.setNavigationIcon(IR.drawable.ic_arrow_back)
-            notifyBackstackChanged()
+            notifyBackstackChangedToHost()
         }
         bookmarksViewModel.multiSelectHelper.context = context
         binding.multiSelectToolbar.setup(
@@ -257,7 +324,8 @@ class PlayerContainerFragment :
         )
     }
 
-    fun openUpNext() {
+    fun openUpNext(source: UpNextSource) {
+        this.upNextExpandedSource = source
         updateUpNextVisibility(true)
         upNextBottomSheetBehavior?.state = BottomSheetBehavior.STATE_EXPANDED
     }
@@ -265,7 +333,7 @@ class PlayerContainerFragment :
     fun updateTabsVisibility(show: Boolean) {
         binding?.tabHolder?.isVisible = show
         binding?.viewPager?.isUserInputEnabled = show
-        notifyBackstackChanged()
+        notifyBackstackChangedToHost()
     }
 
     fun onPlayerOpen() {
@@ -316,6 +384,11 @@ class PlayerContainerFragment :
     fun updateUpNextVisibility(show: Boolean) {
         binding?.upNextFrameBottomSheet?.isVisible = show
         (activity as? FragmentHostListener)?.lockPlayerBottomSheet(show)
+    }
+
+    private fun notifyBackstackChangedToHost() {
+        notifyBackstackChanged()
+        (activity as? FragmentHostListener)?.onPlayerBackstackChanged()
     }
 
     override fun getBackstackCount(): Int {
@@ -372,6 +445,7 @@ private class ViewPagerAdapter(fragmentManager: FragmentManager, lifecycle: Life
     private sealed class Section(@StringRes val titleRes: Int) {
         data object Player : Section(LR.string.player_tab_playing)
         data object Notes : Section(LR.string.player_tab_notes)
+        data object Summary : Section(LR.string.player_tab_summary)
         data object Bookmarks : Section(LR.string.player_tab_bookmarks)
         data object Chapters : Section(LR.string.player_tab_chapters)
     }
@@ -388,55 +462,35 @@ private class ViewPagerAdapter(fragmentManager: FragmentManager, lifecycle: Life
         get() = sections.indexOf(Section.Bookmarks)
 
     fun updateNotes(addNotes: Boolean) {
-        val currentSections = sections
-        val hasChapters = sections.contains(Section.Chapters)
+        updateSections(hasNotes = addNotes)
+    }
 
-        val newSections = buildList {
-            add(Section.Player)
-            if (addNotes) {
-                add(Section.Notes)
-            }
-
-            if (hasChapters) {
-                add(Section.Chapters)
-            }
-            add(Section.Bookmarks)
-        }
-
-        if (currentSections != newSections) {
-            sections = newSections
-            if (addNotes) {
-                notifyItemInserted(1)
-            } else {
-                notifyItemRemoved(1)
-            }
-        }
+    fun updateSummary(addSummary: Boolean) {
+        updateSections(hasSummary = addSummary)
     }
 
     fun updateChapters(addChapters: Boolean) {
-        val currentSections = sections
-        val hasNotes = sections.contains(Section.Notes)
+        updateSections(hasChapters = addChapters)
+    }
 
+    // Stable IDs via getItemId/containsItem allow FragmentStateAdapter to efficiently diff fragments
+    @SuppressLint("NotifyDataSetChanged")
+    private fun updateSections(
+        hasNotes: Boolean = sections.contains(Section.Notes),
+        hasSummary: Boolean = sections.contains(Section.Summary),
+        hasChapters: Boolean = sections.contains(Section.Chapters),
+    ) {
+        val currentSections = sections
         val newSections = buildList {
             add(Section.Player)
-            if (hasNotes) {
-                add(Section.Notes)
-            }
-
-            if (addChapters) {
-                add(Section.Chapters)
-            }
+            if (hasNotes) add(Section.Notes)
+            if (hasSummary) add(Section.Summary)
+            if (hasChapters) add(Section.Chapters)
             add(Section.Bookmarks)
         }
-
         if (currentSections != newSections) {
             sections = newSections
-            val position = if (hasNotes) 2 else 1
-            if (addChapters) {
-                notifyItemInserted(position)
-            } else {
-                notifyItemRemoved(position)
-            }
+            notifyDataSetChanged()
         }
     }
 
@@ -456,6 +510,7 @@ private class ViewPagerAdapter(fragmentManager: FragmentManager, lifecycle: Life
         return when (sections[position]) {
             is Section.Player -> PlayerHeaderFragment()
             is Section.Notes -> NotesFragment()
+            is Section.Summary -> SummaryFragment()
             is Section.Bookmarks -> BookmarksFragment.newInstance(SourceView.PLAYER)
             is Section.Chapters -> ChaptersFragment.forPlayer()
         }
@@ -468,6 +523,7 @@ private class ViewPagerAdapter(fragmentManager: FragmentManager, lifecycle: Life
 
     fun isPlayerTab(position: Int) = sections[position] is Section.Player
     fun isNotesTab(position: Int) = sections[position] is Section.Notes
+    fun isSummaryTab(position: Int) = sections[position] is Section.Summary
     fun isBookmarksTab(position: Int) = sections[position] is Section.Bookmarks
     fun isChaptersTab(position: Int) = sections[position] is Section.Chapters
 }

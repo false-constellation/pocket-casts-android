@@ -24,6 +24,7 @@ import au.com.shiftyjelly.pocketcasts.servers.sync.UpNextSyncRequest
 import au.com.shiftyjelly.pocketcasts.servers.sync.UpNextSyncResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.UserChangeResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.history.HistoryYearResponse
+import au.com.shiftyjelly.pocketcasts.servers.sync.login.DeviceAuthorizeResponse
 import au.com.shiftyjelly.pocketcasts.servers.sync.login.ExchangeSonosResponse
 import au.com.shiftyjelly.pocketcasts.utils.Optional
 import com.jakewharton.rxrelay2.BehaviorRelay
@@ -41,6 +42,7 @@ import com.pocketcasts.service.api.SyncUpdateResponse
 import com.pocketcasts.service.api.UpNextResponse
 import com.pocketcasts.service.api.UserPlaylistListResponse
 import com.pocketcasts.service.api.UserPodcastListResponse
+import com.pocketcasts.service.api.WebFeedCreateResponse
 import com.pocketcasts.service.api.WinbackResponse
 import io.reactivex.Completable
 import io.reactivex.Flowable
@@ -65,7 +67,9 @@ interface SyncManager : NamedSettingsCaller {
     suspend fun loginWithGoogle(idToken: String, signInSource: SignInSource): LoginResult
     suspend fun loginWithEmailAndPassword(email: String, password: String, signInSource: SignInSource): LoginResult
     suspend fun loginWithToken(token: RefreshToken, loginIdentity: LoginIdentity, signInSource: SignInSource): LoginResult
-    suspend fun createUserWithEmailAndPassword(email: String, password: String): LoginResult
+    suspend fun deviceAuthorize(): DeviceAuthorizeResponse
+    suspend fun loginWithDeviceAuth(deviceCode: String, signInSource: SignInSource): LoginResult
+    suspend fun createUserWithEmailAndPassword(email: String, password: String, signInSource: SignInSource.UserInitiated): LoginResult
     suspend fun forgotPassword(email: String, onSuccess: () -> Unit, onError: (String) -> Unit)
     suspend fun getAccessToken(account: Account): AccessToken
     fun getRefreshToken(): RefreshToken?
@@ -105,6 +109,7 @@ interface SyncManager : NamedSettingsCaller {
     suspend fun getEpisodesOrThrow(request: PodcastsEpisodesRequest): EpisodesResponse
     fun getPodcastEpisodesRxSingle(podcastUuid: String): Single<PodcastEpisodesResponse>
     suspend fun getStarredEpisodesOrThrow(): StarredEpisodesResponse
+    suspend fun createWebFeedPodcast(url: String): WebFeedCreateResponse
 
     suspend fun syncUpdateOrThrow(request: SyncUpdateRequest): SyncUpdateResponse
 

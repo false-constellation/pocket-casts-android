@@ -24,8 +24,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.bars.ThemedTopAppBar
 import au.com.shiftyjelly.pocketcasts.compose.components.SettingRow
@@ -37,7 +35,12 @@ import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.ui.extensions.startActivityViewUrl
 import au.com.shiftyjelly.pocketcasts.utils.extensions.pxToDp
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.views.fragments.BaseFragment
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.PrivacyShownEvent
+import com.automattic.eventhorizon.SettingsShowPrivacyPolicyEvent
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
@@ -46,7 +49,7 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 class PrivacyFragment : BaseFragment() {
 
     @Inject
-    lateinit var analyticsTracker: AnalyticsTracker
+    lateinit var eventHorizon: EventHorizon
 
     @Inject
     lateinit var settings: Settings
@@ -59,7 +62,7 @@ class PrivacyFragment : BaseFragment() {
     ) = contentWithoutConsumedInsets {
         LaunchedEffect(Unit) {
             if (!viewModel.isFragmentChangingConfigurations) {
-                analyticsTracker.track(AnalyticsEvent.PRIVACY_SHOWN)
+                eventHorizon.track(PrivacyShownEvent)
             }
         }
         val bottomInset = settings.bottomInset.collectAsStateWithLifecycle(initialValue = 0)
@@ -71,6 +74,9 @@ class PrivacyFragment : BaseFragment() {
                 onAnalyticsClick = {
                     viewModel.updateAnalyticsSetting(it)
                 },
+                onStatsClick = {
+                    viewModel.updateListeningStatsSetting(it)
+                },
                 onCrashReportsClick = {
                     viewModel.updateCrashReportsSetting(it)
                 },
@@ -78,7 +84,7 @@ class PrivacyFragment : BaseFragment() {
                     viewModel.updateLinkAccountSetting(it)
                 },
                 onPrivacyPolicyClick = {
-                    analyticsTracker.track(AnalyticsEvent.SETTINGS_SHOW_PRIVACY_POLICY)
+                    eventHorizon.track(SettingsShowPrivacyPolicyEvent)
                     context.startActivityViewUrl(Settings.INFO_PRIVACY_URL)
                 },
                 onBackPress = {
@@ -98,6 +104,7 @@ class PrivacyFragment : BaseFragment() {
     private fun PrivacySettings(
         state: PrivacyViewModel.UiState,
         onAnalyticsClick: (Boolean) -> Unit,
+        onStatsClick: (Boolean) -> Unit,
         onCrashReportsClick: (Boolean) -> Unit,
         onLinkAccountClick: (Boolean) -> Unit,
         onPrivacyPolicyClick: () -> Unit,
@@ -137,6 +144,20 @@ class PrivacyFragment : BaseFragment() {
                             ) { onAnalyticsClick(!state.analytics) },
                             indent = false,
                         )
+                    }
+                    if (FeatureFlag.isEnabled(Feature.IMPROVED_LISTENING_STATS)) {
+                        item {
+                            SettingRow(
+                                primaryText = stringResource(LR.string.settings_privacy_listening_stats),
+                                secondaryText = stringResource(LR.string.settings_privacy_listening_stats_summary),
+                                toggle = SettingRowToggle.Switch(checked = state.listeningStats),
+                                modifier = Modifier.toggleable(
+                                    value = state.listeningStats,
+                                    role = Role.Switch,
+                                ) { onStatsClick(!state.listeningStats) },
+                                indent = false,
+                            )
+                        }
                     }
                     item {
                         SettingRow(

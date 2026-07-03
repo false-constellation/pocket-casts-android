@@ -1,16 +1,13 @@
 package au.com.shiftyjelly.pocketcasts.podcasts.view.folders
 
-import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
 import au.com.shiftyjelly.pocketcasts.compose.bars.NavigationButton
 import au.com.shiftyjelly.pocketcasts.compose.extensions.contentWithoutConsumedInsets
@@ -24,7 +21,6 @@ class FolderChooserFragment : BaseDialogFragment() {
 
     @Inject lateinit var settings: Settings
 
-    @Inject lateinit var analyticsTracker: AnalyticsTracker
     private val viewModel: FolderEditViewModel by viewModels()
     private var navHostController: NavHostController? = null
     private var podcastUuid: String? = null
@@ -41,9 +37,9 @@ class FolderChooserFragment : BaseDialogFragment() {
 
         fun newInstance(podcastUuid: String): FolderChooserFragment {
             return FolderChooserFragment().apply {
-                arguments = bundleOf(
-                    ARG_PODCAST_UUID to podcastUuid,
-                )
+                arguments = Bundle().apply {
+                    putString(ARG_PODCAST_UUID, podcastUuid)
+                }
             }
         }
     }

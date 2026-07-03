@@ -4,16 +4,18 @@ import android.content.Context
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsEvent
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.to.FolderItem
-import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.search.SearchHandler
 import au.com.shiftyjelly.pocketcasts.search.SearchUiState
 import au.com.shiftyjelly.pocketcasts.utils.Network
+import com.automattic.eventhorizon.EventHorizon
+import com.automattic.eventhorizon.PodcastSubscribedEvent
+import com.automattic.eventhorizon.PodcastUnsubscribedEvent
+import com.automattic.eventhorizon.SearchDismissedEvent
+import com.automattic.eventhorizon.SearchShownEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,9 +31,8 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 @HiltViewModel
 class OnboardingRecommendationsSearchViewModel @Inject constructor(
     private val podcastManager: PodcastManager,
-    private val playbackManager: PlaybackManager,
     private val searchHandler: SearchHandler,
-    private val analyticsTracker: AnalyticsTracker,
+    private val eventHorizon: EventHorizon,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
@@ -98,9 +99,10 @@ class OnboardingRecommendationsSearchViewModel @Inject constructor(
                 _state.value = it
             }
         }
-        analyticsTracker.track(
-            AnalyticsEvent.SEARCH_SHOWN,
-            mapOf(AnalyticsProp.SOURCE to SourceView.ONBOARDING_RECOMMENDATIONS.analyticsValue),
+        eventHorizon.track(
+            SearchShownEvent(
+                source = SourceView.ONBOARDING_RECOMMENDATIONS.analyticsValue,
+            ),
         )
     }
 
@@ -122,16 +124,21 @@ class OnboardingRecommendationsSearchViewModel @Inject constructor(
     }
 
     fun toggleSubscribed(podcastResult: PodcastResult) {
-        val event: AnalyticsEvent
         val uuid = podcastResult.podcast.uuid
-        if (podcastResult.isSubscribed) {
-            event = AnalyticsEvent.PODCAST_UNSUBSCRIBED
+        val event = if (podcastResult.isSubscribed) {
             podcastManager.unsubscribeAsync(podcastUuid = uuid, SourceView.ONBOARDING_RECOMMENDATIONS_SEARCH)
+            PodcastUnsubscribedEvent(
+                uuid = uuid,
+                source = SourceView.ONBOARDING_RECOMMENDATIONS_SEARCH.analyticsValue,
+            )
         } else {
-            event = AnalyticsEvent.PODCAST_SUBSCRIBED
             podcastManager.subscribeToPodcast(podcastUuid = uuid, sync = true)
+            PodcastSubscribedEvent(
+                uuid = uuid,
+                source = SourceView.ONBOARDING_RECOMMENDATIONS_SEARCH.analyticsValue,
+            )
         }
-        analyticsTracker.track(event, AnalyticsProp.podcastSubscribeToggled(uuid))
+        eventHorizon.track(event)
 
         _state.update {
             it.copy(
@@ -147,17 +154,10 @@ class OnboardingRecommendationsSearchViewModel @Inject constructor(
     }
 
     fun onBackPressed() {
-        analyticsTracker.track(
-            AnalyticsEvent.SEARCH_DISMISSED,
-            mapOf(AnalyticsProp.SOURCE to SourceView.ONBOARDING_RECOMMENDATIONS.analyticsValue),
+        eventHorizon.track(
+            SearchDismissedEvent(
+                source = SourceView.ONBOARDING_RECOMMENDATIONS.analyticsValue,
+            ),
         )
-    }
-
-    companion object {
-        private object AnalyticsProp {
-            const val UUID = "uuid"
-            const val SOURCE = "source"
-            fun podcastSubscribeToggled(uuid: String) = mapOf(UUID to uuid, SOURCE to SourceView.ONBOARDING_RECOMMENDATIONS_SEARCH)
-        }
     }
 }

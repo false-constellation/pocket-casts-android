@@ -7,7 +7,7 @@ import android.util.Log
 import androidx.core.content.getSystemService
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsTracker
+import au.com.shiftyjelly.pocketcasts.analytics.AnalyticsController
 import au.com.shiftyjelly.pocketcasts.analytics.experiments.ExperimentProvider
 import au.com.shiftyjelly.pocketcasts.coroutines.di.ApplicationScope
 import au.com.shiftyjelly.pocketcasts.crashlogging.InitializeRemoteLogging
@@ -17,8 +17,13 @@ import au.com.shiftyjelly.pocketcasts.repositories.jobs.VersionMigrationsWorker
 import au.com.shiftyjelly.pocketcasts.repositories.playback.PlaybackManager
 import au.com.shiftyjelly.pocketcasts.repositories.podcast.UserEpisodeManager
 import au.com.shiftyjelly.pocketcasts.repositories.refresh.RefreshPodcastsTask
+import au.com.shiftyjelly.pocketcasts.repositories.stats.PlaybackStatsSyncWorker
 import au.com.shiftyjelly.pocketcasts.repositories.user.UserManager
 import au.com.shiftyjelly.pocketcasts.utils.TimberDebugTree
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.providers.DefaultReleaseFeatureProvider
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.providers.FirebaseRemoteFeatureProvider
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.providers.PreferencesFeatureProvider
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import au.com.shiftyjelly.pocketcasts.utils.log.RxJavaUncaughtExceptionHandling
 import com.google.android.gms.common.ConnectionResult
@@ -56,15 +61,23 @@ class AutomotiveApplication :
 
     @Inject lateinit var initializeRemoteLogging: InitializeRemoteLogging
 
-    @Inject lateinit var analyticsTracker: AnalyticsTracker
+    @Inject lateinit var analyticsController: AnalyticsController
 
     @Inject lateinit var experimentProvider: ExperimentProvider
+
+    @Inject lateinit var defaultReleaseFeatureProvider: DefaultReleaseFeatureProvider
+
+    @Inject lateinit var firebaseRemoteFeatureProvider: FirebaseRemoteFeatureProvider
+
+    @Inject lateinit var preferencesFeatureProvider: PreferencesFeatureProvider
 
     @Inject @ApplicationScope
     lateinit var applicationScope: CoroutineScope
 
     override fun onCreate() {
         super.onCreate()
+
+        setupFeatureFlags()
 
         RxJavaUncaughtExceptionHandling.setUp()
         setupRemoteLogging()
@@ -105,6 +118,9 @@ class AutomotiveApplication :
 
         // force the Automotive app into car mode as some car companies send the UI mode as normal, this makes sure the car resources such as layout-car are used.
         this.getSystemService<UiModeManager>()?.enableCarMode(0)
+
+        PlaybackStatsSyncWorker.scheduleOneTimeWork(this)
+        PlaybackStatsSyncWorker.schedulePeriodicWork(this)
     }
 
     override fun onTerminate() {
@@ -123,8 +139,20 @@ class AutomotiveApplication :
         }
     }
 
+    private fun setupFeatureFlags() {
+        val providers = if (BuildConfig.DEBUG || BuildConfig.IS_PROTOTYPE) {
+            listOf(preferencesFeatureProvider)
+        } else {
+            listOf(
+                firebaseRemoteFeatureProvider,
+                defaultReleaseFeatureProvider,
+            )
+        }
+        FeatureFlag.initialize(providers)
+    }
+
     private fun setupAnalytics() {
-        analyticsTracker.clearAllData()
+        analyticsController.clearAllData()
         experimentProvider.initialize()
     }
 }

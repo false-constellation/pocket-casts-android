@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.repositories.playback
 
+import androidx.annotation.StringRes
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.to.Chapters
@@ -20,6 +21,7 @@ data class PlaybackState(
     val showNotesImageUrl: String? = null,
     val chapters: Chapters = Chapters(),
     val lastChangeFrom: String? = null,
+    val playbackIssue: PlaybackIssue? = null,
     val lastErrorMessage: String? = null,
     val playbackSpeed: Double = 1.0,
     val trimMode: TrimMode = TrimMode.OFF,
@@ -84,4 +86,11 @@ data class PlaybackState(
             )
         }
     }
+}
+
+sealed class PlaybackIssue {
+    data object ConnectionError : PlaybackIssue()
+    data object TransientFailure : PlaybackIssue()
+    data class HttpError(val statusCode: Int) : PlaybackIssue()
+    data class StuckPlayer(@StringRes val messageResId: Int) : PlaybackIssue()
 }

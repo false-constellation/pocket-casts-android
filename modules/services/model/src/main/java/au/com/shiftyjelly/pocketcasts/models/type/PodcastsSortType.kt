@@ -4,9 +4,8 @@ import au.com.shiftyjelly.pocketcasts.localization.R
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.to.FolderItem
 import au.com.shiftyjelly.pocketcasts.utils.extensions.removeAccents
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
-import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
+import com.automattic.eventhorizon.PodcastListSortType
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.JsonReader
 import com.squareup.moshi.JsonWriter
@@ -24,7 +23,7 @@ enum class PodcastsSortType(
     val labelId: Int,
     val podcastComparator: Comparator<Podcast>,
     val folderComparator: Comparator<FolderItem>,
-    val analyticsValue: String,
+    val analyticsValue: PodcastListSortType,
 ) {
     DATE_ADDED_NEWEST_TO_OLDEST(
         clientId = 0,
@@ -32,7 +31,7 @@ enum class PodcastsSortType(
         labelId = R.string.podcasts_sort_by_date_added,
         podcastComparator = compareByDescending { it.addedDate },
         folderComparator = compareByDescending { it.addedDate },
-        analyticsValue = "date_added",
+        analyticsValue = PodcastListSortType.DateAdded,
     ),
     EPISODE_DATE_NEWEST_TO_OLDEST(
         clientId = 5,
@@ -41,7 +40,7 @@ enum class PodcastsSortType(
         // use a query to get the podcasts ordered by episode release date
         podcastComparator = Comparator { _, _ -> 0 },
         folderComparator = Comparator { _, _ -> 0 },
-        analyticsValue = "episode_release_date",
+        analyticsValue = PodcastListSortType.EpisodeReleaseDate,
     ),
     RECENTLY_PLAYED(
         clientId = 7,
@@ -50,7 +49,7 @@ enum class PodcastsSortType(
         // use a query to get the podcasts ordered by recently played episodes
         podcastComparator = Comparator { _, _ -> 0 },
         folderComparator = Comparator { _, _ -> 0 },
-        analyticsValue = "episode_recently_played",
+        analyticsValue = PodcastListSortType.EpisodeRecentlyPlayed,
     ),
     NAME_A_TO_Z(
         clientId = 2,
@@ -58,7 +57,7 @@ enum class PodcastsSortType(
         labelId = R.string.name,
         podcastComparator = compareBy { cleanStringForSortInternal(it.title) },
         folderComparator = compareBy { cleanStringForSortInternal(it.title) },
-        analyticsValue = "name",
+        analyticsValue = PodcastListSortType.Name,
     ),
     DRAG_DROP(
         clientId = 6,
@@ -66,7 +65,7 @@ enum class PodcastsSortType(
         labelId = R.string.podcasts_sort_by_drag_drop,
         podcastComparator = compareBy { it.sortPosition },
         folderComparator = compareBy { it.sortPosition },
-        analyticsValue = "drag_and_drop",
+        analyticsValue = PodcastListSortType.DragAndDrop,
     ),
     ;
 
@@ -77,9 +76,7 @@ enum class PodcastsSortType(
             if (serverId == null) {
                 return default
             }
-            val sortType = entries
-                .filter { FeatureFlag.isEnabled(Feature.PODCASTS_SORT_CHANGES) || it.serverId != RECENTLY_PLAYED.serverId }
-                .firstOrNull { it.serverId == serverId }
+            val sortType = entries.firstOrNull { it.serverId == serverId }
             if (sortType == null) {
                 LogBuffer.e(LogBuffer.TAG_INVALID_STATE, "Invalid server ID for PodcastsSortType: $serverId")
                 return default
@@ -89,9 +86,7 @@ enum class PodcastsSortType(
 
         fun fromClientIdString(clientIdString: String): PodcastsSortType {
             val clientId = clientIdString.toIntOrNull()
-            val sortType = entries
-                .filter { FeatureFlag.isEnabled(Feature.PODCASTS_SORT_CHANGES) || it.clientId != RECENTLY_PLAYED.clientId }
-                .firstOrNull { it.clientId == clientId }
+            val sortType = entries.firstOrNull { it.clientId == clientId }
             if (sortType == null) {
                 LogBuffer.e(LogBuffer.TAG_INVALID_STATE, "Invalid client ID for PodcastsSortType: $clientIdString")
                 return default

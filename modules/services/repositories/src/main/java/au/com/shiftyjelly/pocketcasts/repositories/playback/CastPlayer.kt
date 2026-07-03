@@ -1,15 +1,18 @@
 package au.com.shiftyjelly.pocketcasts.repositories.playback
 
-import android.content.Context
 import android.net.Uri
-import android.support.v4.media.session.PlaybackStateCompat
 import android.text.TextUtils
+import androidx.annotation.OptIn
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.util.UnstableApi
 import au.com.shiftyjelly.pocketcasts.models.entity.BaseEpisode
 import au.com.shiftyjelly.pocketcasts.models.entity.Podcast
 import au.com.shiftyjelly.pocketcasts.models.entity.UserEpisode
 import au.com.shiftyjelly.pocketcasts.models.to.PlaybackEffects
 import au.com.shiftyjelly.pocketcasts.models.type.UserEpisodeServerStatus
 import au.com.shiftyjelly.pocketcasts.repositories.extensions.getArtworkUrl
+import au.com.shiftyjelly.pocketcasts.repositories.stats.PlaybackStatsCollector
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadOptions
 import com.google.android.gms.cast.MediaMetadata
@@ -26,16 +29,22 @@ import org.json.JSONException
 import org.json.JSONObject
 import timber.log.Timber
 
-class CastPlayer(val context: Context, override val onPlayerEvent: (Player, PlayerEvent) -> Unit) : Player {
+class CastPlayer(
+    private val playbackStatsCollector: PlaybackStatsCollector,
+    override val onPlayerEvent: (Player, PlayerEvent) -> Unit,
+) : Player {
+
+    private enum class CastPlaybackState { NONE, STOPPED, BUFFERING, PLAYING, PAUSED }
 
     private var customData: JSONObject? = null
     private var podcast: Podcast? = null
-    private var state: Int = 0
+    private var state: CastPlaybackState = CastPlaybackState.NONE
     private var remoteListenerAdded: Boolean = false
     private var localEpisodeUuid: String? = null
     private var remoteEpisodeUuid: String? = null
     private var playbackEffects: PlaybackEffects? = null
     private val remoteMediaClientListener = RemoteMediaClientListener()
+    private val playPauseCallback = PlayPauseCallback(playbackStatsCollector, currentClient = { remoteMediaClient })
 
     override var isPip: Boolean = false
 
@@ -52,8 +61,8 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
         get() = isConnected &&
             (remoteMediaClient?.hasMediaSession() ?: false) &&
             TextUtils.equals(localEpisodeUuid, remoteEpisodeUuid) &&
-            state != PlaybackStateCompat.STATE_NONE &&
-            state != PlaybackStateCompat.STATE_STOPPED
+            state != CastPlaybackState.NONE &&
+            state != CastPlaybackState.STOPPED
 
     private var episodeLocation: EpisodeLocation? = null
 
@@ -116,7 +125,7 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
     }
 
     override suspend fun isBuffering(): Boolean {
-        return state == PlaybackStateCompat.STATE_BUFFERING
+        return state == CastPlaybackState.BUFFERING
     }
 
     override suspend fun getCurrentPositionMs(): Int {
@@ -141,7 +150,7 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
     override suspend fun play(currentPositionMs: Int) {
         withContext(Dispatchers.Main) {
             episode?.let {
-                state = PlaybackStateCompat.STATE_BUFFERING
+                state = CastPlaybackState.BUFFERING
                 loadEpisode(it.uuid, currentPositionMs, true)
             }
         }
@@ -157,9 +166,11 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
 
     override suspend fun stop() {
         withContext(Dispatchers.Main) {
-            state = PlaybackStateCompat.STATE_STOPPED
+            state = CastPlaybackState.STOPPED
             remoteListenerAdded = false
             remoteMediaClient?.unregisterCallback(remoteMediaClientListener)
+            remoteMediaClient?.unregisterCallback(playPauseCallback)
+            playbackStatsCollector.onStop()
         }
     }
 
@@ -227,7 +238,7 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
     }
 
     override fun setEpisode(episode: BaseEpisode) {
-        this.episodeLocation = EpisodeLocation.Stream(episode, episode.downloadUrl)
+        this.episodeLocation = EpisodeLocation.Stream(episode, episode.streamUrl, episode.isStreamUrlHls)
         localEpisodeUuid = episode.uuid
         buildCustomData()
     }
@@ -238,6 +249,7 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
         }
         remoteListenerAdded = true
         remoteMediaClient?.registerCallback(remoteMediaClientListener)
+        remoteMediaClient?.registerCallback(playPauseCallback)
     }
 
     private fun loadEpisode(episodeUuid: String, currentPositionMs: Int, autoPlay: Boolean) {
@@ -251,7 +263,7 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
         if (episode == null || podcast == null || episodeUuid != episode.uuid) {
             return
         }
-        val url = episode.downloadUrl ?: return
+        val url = episodeLocation?.uri ?: return
         if (episode is UserEpisode && (episode.serverStatus != UserEpisodeServerStatus.UPLOADED || episode.downloadUrl == null)) {
             onPlayerEvent(this, PlayerEvent.PlayerError("Unable to cast local file"))
             return
@@ -275,8 +287,15 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
             putString(MediaMetadata.KEY_ALBUM_TITLE, podcast.title)
             addImage(WebImage(Uri.parse(podcast.getArtworkUrl(960))))
         }
+        // STREAM_TYPE_BUFFERED is correct for VOD podcasts (including VOD HLS). Live HLS would
+        // need STREAM_TYPE_LIVE, but we don't currently serve live streams.
         var mediaInfo = MediaInfo.Builder(url).setStreamType(MediaInfo.STREAM_TYPE_BUFFERED).setMetadata(mediaMetadata)
-        episode.fileType?.let {
+        val contentType = if (episodeLocation.isHlsStream) {
+            MimeTypes.APPLICATION_M3U8
+        } else {
+            episode.fileType
+        }
+        contentType?.let {
             mediaInfo = mediaInfo.setContentType(it)
         }
         customData?.let {
@@ -317,6 +336,7 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
         return null
     }
 
+    @OptIn(UnstableApi::class)
     private fun updatePlaybackState() {
         val remoteMediaClient = remoteMediaClient
         if (remoteMediaClient == null) {
@@ -336,23 +356,35 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
 
         // Convert the remote playback states to media playback states.
         when (status) {
-            MediaStatus.PLAYER_STATE_IDLE -> if (idleReason == MediaStatus.IDLE_REASON_FINISHED) {
-                onPlayerEvent(this, PlayerEvent.Completion(episodeUuid))
+            MediaStatus.PLAYER_STATE_IDLE -> when (idleReason) {
+                MediaStatus.IDLE_REASON_FINISHED -> onPlayerEvent(this, PlayerEvent.Completion(episodeUuid))
+
+                MediaStatus.IDLE_REASON_ERROR -> {
+                    Timber.e("Cast player error for episode $episodeUuid")
+                    val error = PlaybackException("Cast playback error", null, PlaybackException.ERROR_CODE_REMOTE_ERROR)
+                    onPlayerEvent(this, PlayerEvent.PlayerError("Cast playback error", error))
+                }
+
+                MediaStatus.IDLE_REASON_CANCELED -> onPlayerEvent(this, PlayerEvent.PlayerPaused)
+
+                MediaStatus.IDLE_REASON_INTERRUPTED -> Timber.i("Cast playback interrupted for episode $episodeUuid")
+
+                else -> Timber.w("Unknown Cast idle reason $idleReason for episode $episodeUuid")
             }
 
             MediaStatus.PLAYER_STATE_BUFFERING, MediaStatus.PLAYER_STATE_LOADING -> {
-                state = PlaybackStateCompat.STATE_BUFFERING
+                state = CastPlaybackState.BUFFERING
                 onPlayerEvent(this, PlayerEvent.BufferingStateChanged)
             }
 
             MediaStatus.PLAYER_STATE_PLAYING -> {
-                state = PlaybackStateCompat.STATE_PLAYING
+                state = CastPlaybackState.PLAYING
                 setMetadataFromRemote()
                 onPlayerEvent(this, PlayerEvent.PlayerPlaying)
             }
 
             MediaStatus.PLAYER_STATE_PAUSED -> {
-                state = PlaybackStateCompat.STATE_PAUSED
+                state = CastPlaybackState.PAUSED
                 setMetadataFromRemote()
                 onPlayerEvent(this, PlayerEvent.PlayerPaused)
             }
@@ -403,5 +435,19 @@ class CastPlayer(val context: Context, override val onPlayerEvent: (Player, Play
 
     companion object {
         private const val CUSTOM_DATA_EPISODE_UUID = "EPISODE_UUID"
+    }
+}
+
+private class PlayPauseCallback(
+    private val statsCollector: PlaybackStatsCollector,
+    private val currentClient: () -> RemoteMediaClient?,
+) : RemoteMediaClient.Callback() {
+    override fun onStatusUpdated() {
+        val playerState = currentClient()?.playerState ?: return
+        if (playerState == MediaStatus.PLAYER_STATE_PLAYING) {
+            statsCollector.onStart()
+        } else {
+            statsCollector.onStop()
+        }
     }
 }
